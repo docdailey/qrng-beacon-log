@@ -1,0 +1,39 @@
+{
+  "core": {
+    "v": "0.5",
+    "type": "skip",
+    "seq": 392,
+    "prev_hash": "1a4912ceded82f68605c0ef721aa4223c226a96d2bcf7c99a64bbb5888e02320",
+    "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+    "statements": {},
+    "derived": {
+      "reason": "recover failed: e/aggregator/qrng-beacon/hosts/rpc.py\", line 80, in call\n    if not resp.get(\"ok\"): raise RuntimeError(f\"{host} agentd: {resp.get('error', 'refused')}\")\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: protectli agentd: refused: ValueError",
+      "refused_by": "entropy",
+      "attempted_unix_s": 18124,
+      "attempted_utc": "1970-01-01T05:02:04Z",
+      "drand_round_seen": null,
+      "published_head_confirmed": true,
+      "head_type_before": "skip",
+      "meaning": "No commit was minted this cycle. Nothing was selected and nothing was withheld: no commitment existed. This pulse only makes the gap, and the operator's stated cause, public at a timestamped moment."
+    },
+    "tooling": {},
+    "aggregator_host": "k3"
+  },
+  "pulse_hash": "5627c27a05a54730c064ed7668e72a6a5b77ffa2c8cfcdbb20d52d03dbc26cac",
+  "signatures": {
+    "aggregator": {
+      "alg": "ed25519",
+      "key_id": "56c30593534ad116",
+      "public_key_b64": "q/Mx1IKvtgU56iq+JZKQba/R93qcleWdZp7xLl7eSIE=",
+      "signer": "k3",
+      "role": "aggregator",
+      "sig_b64": "X2irNzW8sdMWayTpQY0EdhGR+TYsDzHt0hpsNgramRtEchs70HohD2wuEuT11+4uymjOBu2I/SEb5QlHv0NDCw==",
+      "over": "pulse_hash bytes",
+      "attests": "assembly only; each host's facts are attested by that host's own signature inside core.statements"
+    }
+  },
+  "disclosure": {
+    "protocol": "PROTOCOL.md v0.5",
+    "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md."
+  }
+}
