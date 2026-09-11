@@ -1,0 +1,222 @@
+{
+  "core": {
+    "version": "0.2",
+    "seq": 5,
+    "prev_hash": "060892b2fd3c8f25b5b9895db3f0561c6a153bfed22044590c3cae55f7a9321e",
+    "entropy": {
+      "hex": "d15785459f89fb0debcbcd6ef256343551915d5a75dd3f5aa1ea0beb1e6749a3",
+      "len_bytes": 32,
+      "sha256": "d12cbc3601613d6d6528bd75bfa7e0ed1f0bb8daa318382090d130d04ecc142e",
+      "source": {
+        "device": "ID Quantique Quantis USB",
+        "serial": "246578A410",
+        "host": "protectli",
+        "endpoint": "http://192.168.70.1:8080/api/v1/random/bytes",
+        "correction": "none"
+      }
+    },
+    "time": {
+      "utc": "2026-09-11T23:00:47.378487679Z",
+      "tai": "2026-09-11T23:01:24.378487679Z",
+      "tai_minus_utc_s": 37,
+      "tai_source": "adjtimex ret=0 status=0x2000",
+      "unix_ns": 1789167647378487679,
+      "authoritative": "primary",
+      "primary": {
+        "host": "p550",
+        "role": "authoritative time base",
+        "hardware": "Intel I210 Gigabit (PCI 01:00.0), PHC /dev/ptp0",
+        "reference_chain": "GPS -> u-blox ZED-F9T TP1 PPS (falling edge) -> i210 SDP0 -> ts2phc -> PHC -> chrony -> CLOCK_REALTIME",
+        "stamp": {
+          "clock": "CLOCK_REALTIME",
+          "utc_ns": 1789167647378487679,
+          "chosen_read_cost_ns": 9999,
+          "read_cost": {
+            "n": 41,
+            "min_ns": 9999,
+            "p50_ns": 11000,
+            "p99_ns": 53000,
+            "max_ns": 53000,
+            "stdev_ns": 6781.5
+          },
+          "why": "CLOCK_REALTIME is disciplined to the PHC by chrony; reading it costs far less than reading the PHC, and the discipline error is orders of magnitude below the read cost."
+        },
+        "phc_crosscheck": {
+          "device": "/dev/ptp0",
+          "clock_name": "a0369f37b8e7",
+          "phc_minus_realtime_median_ns": 36999998313,
+          "phc_minus_realtime_spread_ns": 4017,
+          "phc_read_roundtrip": {
+            "n": 21,
+            "min_ns": 24000,
+            "p50_ns": 25000,
+            "p99_ns": 36000,
+            "max_ns": 36000,
+            "stdev_ns": 2441.2
+          }
+        },
+        "discipline": {
+          "servo": "ts2phc",
+          "reference": "u-blox ZED-F9T TP1 PPS -> i210 SDP0",
+          "last_offset_ns": -12,
+          "state": "s2",
+          "freq_ppb": -52810
+        },
+        "chrony": {
+          "reference_id": "49504843 (IPHC)",
+          "stratum": "1",
+          "rms_offset": "0.000000007 seconds",
+          "root_delay": "0.000000001 seconds",
+          "root_dispersion": "0.000001889 seconds",
+          "leap_status": "Normal"
+        },
+        "kernel_error_bounds": {
+          "maxerror_us": 1,
+          "esterror_us": 0
+        },
+        "mesh_crosscheck": {
+          "what": "i210 PHC continuously measures the P550-BMC PHC (ptp4l free_running=1, slaveOnly=1 -> read-only instrument; it never steers the i210)",
+          "monitor": "bmc-phc-monitor.service",
+          "samples": 5,
+          "window_s": 20,
+          "offset_ns_min": -11,
+          "offset_ns_max": 41,
+          "offset_ns_rms": 29.2,
+          "offset_ns_stdev": 17.9,
+          "path_delay_ns": 445,
+          "servo_states": [
+            "s0"
+          ],
+          "bmc_announced_health": "clockClass 6 (GPS-locked), accuracy 100ns, source GPS, UTC 37"
+        },
+        "acquisition": {
+          "local_pre_ns": 1789167646152658000,
+          "local_post_ns": 1789167667445714000,
+          "acquisition_window_ns": 21293056000
+        }
+      },
+      "witness": {
+        "host": "k3",
+        "role": "monitored peer (NOT an independent reference)",
+        "hardware": "SpacemiT K3 Pico ITX, stmmac PHC /dev/ptp1",
+        "reference_chain": "GPS -> LEA-6T -> P550-BMC GPS grandmaster (PTP domain 44, UDPv4) -> ptp4l -> PHC -> chrony -> CLOCK_REALTIME",
+        "why_not_independent": "The witness's grandmaster (the P550-BMC PHC) is CONTINUOUSLY MEASURED by the same i210 that carries the primary time base \u2014 see primary.mesh_crosscheck. The two chains meet at a monitored junction, so this is a watched peer inside one mesh, not a second opinion from outside it.",
+        "stamp": {
+          "clock": "CLOCK_REALTIME",
+          "utc_ns": 1789167647763922622,
+          "chosen_read_cost_ns": 5084,
+          "read_cost": {
+            "n": 41,
+            "min_ns": 5084,
+            "p50_ns": 5624,
+            "p99_ns": 17499,
+            "max_ns": 17499,
+            "stdev_ns": 2223.9
+          },
+          "why": "CLOCK_REALTIME is disciplined to the PHC by chrony; reading it costs far less than reading the PHC, and the discipline error is orders of magnitude below the read cost."
+        },
+        "phc_crosscheck": {
+          "device": "/dev/ptp1",
+          "clock_name": "stmmac ptp",
+          "phc_minus_realtime_median_ns": 37000000014,
+          "phc_minus_realtime_spread_ns": 812,
+          "phc_read_roundtrip": {
+            "n": 21,
+            "min_ns": 10166,
+            "p50_ns": 10500,
+            "p99_ns": 23123,
+            "max_ns": 23123,
+            "stdev_ns": 2710.3
+          }
+        },
+        "discipline": {
+          "servo": "ptp4l",
+          "reference": "P550-BMC GPS GM (domain 44, UDPv4)",
+          "samples": 60,
+          "offset_ns_min": -100,
+          "offset_ns_max": 89,
+          "offset_ns_rms": 45.1,
+          "offset_ns_stdev": 45.1,
+          "path_delay_ns_last": 881,
+          "states": [
+            "s2"
+          ]
+        },
+        "chrony": {
+          "reference_id": "50484300 (PHC)",
+          "stratum": "1",
+          "rms_offset": "0.000000031 seconds",
+          "root_delay": "0.000000001 seconds",
+          "root_dispersion": "0.000001876 seconds",
+          "leap_status": "Normal"
+        },
+        "kernel_error_bounds": {
+          "maxerror_us": 500,
+          "esterror_us": 0
+        },
+        "acquisition": {
+          "local_pre_ns": 1789167646152973000,
+          "local_post_ns": 1789167655810919000,
+          "acquisition_window_ns": 9657946000
+        }
+      },
+      "cross_check": {
+        "primary_minus_witness_ns": -385434943,
+        "acquisition_skew_bound_ns": 21293056000,
+        "interpretation": "This delta is NOT a measurement of the offset between the two time bases. Both stamps were fetched over SSH and the difference is dominated by acquisition skew, bounded above by acquisition_skew_bound_ns. A real comparison requires a simultaneous triggered capture, not two SSH calls.",
+        "independence": "NOT independent, and deliberately so. The witness's grandmaster is watched continuously by the primary's i210 (mesh_crosscheck), which is what makes the witness trustworthy rather than merely separate. Residual shared-mode risk: both chains start at GPS, so neither covers a constellation-wide fault or spoofing. Different receivers (ZED-F9T vs LEA-6T), boards, and servos (ts2phc vs ptp4l) do cover receiver-local faults.",
+        "why_the_crosscheck_matters": "Over 21 days the ZED-F9T logged 0 qErr excursions beyond 50 ns in 357,982 samples (sd 2.255 ns). The LEA-6T that feeds the BMC has a comparable core (sd 6.02 ns) but produced 3 excursions past 1 us in 468,631 samples. Rare multi-microsecond excursions on the witness chain are exactly what the continuous i210-vs-BMC measurement is there to expose."
+      },
+      "precision": {
+        "what_bounds_the_stamp": "the cost of reading the clock, not the clock's quality",
+        "primary_stamp_read_cost_ns": 9999,
+        "primary_discipline_rms_ns": -12,
+        "witness_stamp_read_cost_ns": 5084,
+        "witness_discipline_rms_ns": 45.1,
+        "honest_summary": "The primary clock is disciplined to GNSS at the nanosecond level, but this stamp was read from userspace at a cost of ~9999 ns. Treat the stamp as good to MICROseconds. The nanosecond figures describe the clocks; they are not the accuracy of this timestamp.",
+        "absolute_accuracy_claimed": false,
+        "uncalibrated_terms": [
+          "GNSS antenna cable delay (69 ns configured in the F9T; unverified by us)",
+          "PPS coax length from F9T TP1 to i210 SDP0",
+          "i210 SDP0 input latency / edge-detect offset",
+          "receiver accuracy with respect to UTC(k), both receivers",
+          "PTP path asymmetry on the witness chain (path delay ~893 ns, one-way assumed)"
+        ]
+      }
+    }
+  },
+  "pulse_hash": "c5bc745e90a16a1805d1abcec21eb22c08497e7ebf6943d68e2452231935be17",
+  "signatures": {
+    "entropy": {
+      "signer": "protectli",
+      "role": "entropy_signer",
+      "alg": "ed25519",
+      "key_id": "1fc857c9f439ab9a",
+      "public_key_b64": "a2ANhyUVHQGpi1mQRKG+L7siT0ptYH9/MpLQ/UunILA=",
+      "sig_b64": "BA2pL2c8IxM4Wa35qiQj4qUEuuUQeRabZlMwtFpzEYcod7OfOCA8NTVoBUhtXFnJwd2WosqT7LWBUHhMbl3oAg=="
+    },
+    "time": {
+      "signer": "p550",
+      "role": "time_attester",
+      "alg": "ed25519",
+      "key_id": "6dae96e8faa9678a",
+      "public_key_b64": "XAsLFvZJFrZvYnqg7+t9AN8qgppLCfMa+iOQJc0f8U8=",
+      "sig_b64": "dWp8SKLLfmXRaROlp82FDIvAuU/qeOadNpgmmmiFxTiXpSYg7bDQLazJm94W/TAOhaz/YSw9ewhawyXv5IRKCw=="
+    },
+    "time_witness": {
+      "signer": "k3",
+      "role": "time_witness",
+      "alg": "ed25519",
+      "key_id": "817a5238d784c4b4",
+      "public_key_b64": "Y7uoa5a7ctiX+kN3P9SEbRbRKX49fF1thOUSqj+PmT0=",
+      "sig_b64": "HrQdJm+D0j2N0prrIJgfyWBTypU4raY1o/UliXw6BapelsBeSqS/nbPa4N3N6IdXj91Y/o7A0fu0H7UvlnO6BQ=="
+    }
+  },
+  "disclosure": {
+    "signed_payload": "sha256 of canonical(core); all signatures cover the same digest",
+    "what_this_proves": "Integrity since signing, attested by three independent hosts on two independent GNSS receiver chains.",
+    "what_this_does_NOT_prove": "It does not prove the value was unknown before publication. Single publisher, no external anchor. Any draw that matters must combine a pulse with a participant-supplied nonce.",
+    "time_precision_vs_accuracy": "We claim precision and a traceable discipline chain, NOT calibrated absolute accuracy versus UTC(k).",
+    "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md."
+  }
+}

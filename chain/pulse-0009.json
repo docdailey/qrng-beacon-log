@@ -1,0 +1,282 @@
+{
+  "core": {
+    "version": "0.2",
+    "seq": 9,
+    "prev_hash": "8ca1448ecb1ba8b1ce6e17ff83499cf3ae41c1ae7111ccdfc7cbf61ce3f278e1",
+    "attested_value": "4cb0af2d4b30cafb9d30992b5e8c62f0306b8cecc0ac3e95820c6cd0656b06cd",
+    "mix": {
+      "algorithm": "SHA256(domain || entropy || drand_randomness || chain_hash || round_be8)",
+      "domain_tag": "grok_antics/pulse-mix/v1",
+      "field_lengths_bytes": {
+        "domain": 24,
+        "entropy": 32,
+        "drand_randomness": 32,
+        "chain_hash": 32,
+        "round_be8": 8
+      },
+      "preimage_len_bytes": 128,
+      "attested_value": "4cb0af2d4b30cafb9d30992b5e8c62f0306b8cecc0ac3e95820c6cd0656b06cd",
+      "recompute": "python3 -c \"import hashlib;print(hashlib.sha256(b'grok_antics/pulse-mix/v1'+bytes.fromhex(E)+bytes.fromhex(R)+bytes.fromhex(C)+N.to_bytes(8,'big')).hexdigest())\"  where E=entropy.hex, R=drand.randomness, C=drand.chain_hash, N=drand.round"
+    },
+    "external_anchor": {
+      "network": "drand League of Entropy \u2014 quicknet",
+      "beacon_id": "quicknet",
+      "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+      "scheme": "bls-unchained-g1-rfc9380",
+      "period_s": 3,
+      "genesis_time": 1692803367,
+      "round": 32122254,
+      "randomness": "44f927d039a9d9f7871d61bb68f27cac76a80b10c5d7842e57a2d40f807a5411",
+      "signature": "8c48902ab5cffe3f8a6968d139592aea23915007ab220bbaefa6227293e8cae90fe3e633103add5d521ae28f3de82fc8",
+      "round_release_unix_s": 1789170129,
+      "randomness_equals_sha256_signature": true,
+      "fetched_from": "https://api.drand.sh",
+      "fetch_unix_s": 1789170127.064,
+      "fetch_latency_s": 0.419,
+      "reverify": "curl -s https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/32122254  -> must return this exact round/randomness/signature. randomness == sha256(signature) is checkable offline. Full BLS threshold verification requires a drand client and the chain public key from https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/info",
+      "what_this_buys": "drand round 32122254 did not exist before 2026-09-11T23:42:09Z UTC. Because the attested value is a hash over that round's randomness, the value could NOT have been computed before then. That is a checkable lower bound on this pulse's age, independent of us.",
+      "what_it_does_NOT_buy": "It does not stop a single publisher from generating many candidate pulses AFTER the round is released and publishing a preferred one. Mixing bounds PRECOMPUTATION, not SELECTION. Closing that needs the entropy committed BEFORE the round exists - see commitment.next_target_round and the roadmap."
+    },
+    "entropy": {
+      "hex": "ef73c7457d478be6ed7313ae7f048d0c3cff77b0e72701f737f39e4fde5c73dc",
+      "len_bytes": 32,
+      "sha256": "f0dec9aeea9c23e117649e31cee8da3fb3002ef478bbaaeb1adda43d6903b068",
+      "source": {
+        "device": "ID Quantique Quantis USB",
+        "serial": "246578A410",
+        "host": "protectli",
+        "endpoint": "http://192.168.70.1:8080/api/v1/random/bytes",
+        "correction": "none"
+      }
+    },
+    "time": {
+      "utc": "2026-09-11T23:42:10.000000000Z",
+      "tai": "2026-09-11T23:42:47.000000000Z",
+      "tai_minus_utc_s": 37,
+      "tai_source": "GNSS broadcast leapS + 19 (constellation, not host OS); cross-checked against p550 kernel adjtimex = 37",
+      "anchor": {
+        "what": "A GNSS second whose TP1 rising-to-on-time edge was captured by the i210 timestamping unit on SDP0 (ts2phc EXTTS). The capture timestamp is taken in hardware at the instant of the edge.",
+        "gps_week": 2435,
+        "gps_tow_ms": 517330000,
+        "tow_time_base": "UTC",
+        "tow_time_base_flag_note": "UBX-TIM-TP flags bit0. When set, towMS is already UTC and no leap subtraction applies; subtracting one anyway is an 18 s error.",
+        "utc_available_flag": true,
+        "week_tow_seconds": 1473205330.0,
+        "utc_unix_s": 1789170130.0,
+        "tai_unix_s": 1789170167.0,
+        "leap_seconds_gps_minus_utc": 18,
+        "tai_minus_utc_s": 37,
+        "leap_note": "leapS is GPS-UTC as broadcast by the satellites; TAI-GPS is a fixed 19 s, so TAI-UTC = leapS + 19. Derived from the constellation, not from the host OS.",
+        "sawtooth_qerr_ns_this_epoch": -3.39,
+        "sawtooth_flags": 11,
+        "sawtooth_meaning": "Deviation of THIS epoch's TP1 edge from its ideal instant, as reported by the receiver for this exact week/tow. Logged, NOT applied to the servo.",
+        "db_row_ts": "2026-09-11 23:42:09.325000",
+        "db_row_minus_anchor_s": -0.675,
+        "anchor_is_independent_of_software_read": true,
+        "sanity_check": "db_row_minus_anchor_s is the lag between the anchoring epoch and the moment the logger wrote the row. UBX-TIM-TP describes the NEXT pulse, so a value within about +/-2 s is expected. A value near 18 s would mean the leap handling is wrong."
+      },
+      "anchor_quality": {
+        "sawtooth_window": "15 min",
+        "samples": 901,
+        "expected_at_1Hz": 900,
+        "coverage_pct": 100.1,
+        "sawtooth_mean_ns": -0.154,
+        "sawtooth_sd_ns": 2.236,
+        "sawtooth_min_ns": -4.03,
+        "sawtooth_max_ns": 3.77,
+        "gnss_fix": {
+          "num_measurements": 27,
+          "constellations": {
+            "GPS": 7,
+            "Galileo": 8,
+            "SBAS": 2,
+            "BeiDou": 10
+          },
+          "rec_stat": "0x01",
+          "rawx_tow_ms": 517344999,
+          "rawx_week": 2435
+        }
+      },
+      "timehat_db": {
+        "host": "192.168.69.133",
+        "port": 3309,
+        "schema": "timehat",
+        "receiver_src": "f9t",
+        "tables": [
+          "qerr_stream",
+          "rawx_stream"
+        ]
+      },
+      "clock_chain": {
+        "stamper": "Intel i210 (PCI 01:00.0) PHC /dev/ptp0 on p550, hardware timestamping unit; TP1 captured on SDP0 via ts2phc EXTTS",
+        "reference": "u-blox ZED-F9T TP1 PPS, falling edge on the second, 100 ms width",
+        "i210_discipline": {
+          "servo": "ts2phc",
+          "reference": "u-blox ZED-F9T TP1 PPS -> i210 SDP0",
+          "last_offset_ns": -21,
+          "state": "s2",
+          "freq_ppb": -52608
+        },
+        "bmc_crosscheck": {
+          "what": "i210 PHC continuously measures the P550-BMC PHC (ptp4l free_running=1, slaveOnly=1 -> read-only instrument; it never steers the i210)",
+          "monitor": "bmc-phc-monitor.service",
+          "samples": 4,
+          "window_s": 20,
+          "offset_ns_min": 11,
+          "offset_ns_max": 19,
+          "offset_ns_rms": 16.5,
+          "offset_ns_stdev": 3.1,
+          "path_delay_ns": 445,
+          "servo_states": [
+            "s0"
+          ],
+          "bmc_announced_health": "clockClass 6 (GPS-locked), accuracy 100ns, source GPS, UTC 37"
+        },
+        "epoch_guard": {
+          "check": "PHC - CLOCK_REALTIME must equal TAI-UTC (+37 s) within 0.5 s",
+          "why": "lab notebook entry 220: a link bounce wipes the i210 epoch while ts2phc still reports a healthy lock. Servo metrics cannot detect this; only this difference can.",
+          "self_heal": "iphc-epoch-check.service via udev 99-iphc-epoch.rules on enp1s0 change",
+          "phc_minus_realtime_minus_tai_s": -1e-06,
+          "epoch_ok": true,
+          "iphc_epoch_check_status": "2026-09-10 21:25:01 UTC PHC-REALTIME +36.999985s, err -0.000015s - epoch OK, no action\n2026-09-10 21:25:37 UTC PHC-REALTIME -0.005700s, err -37.005700s (SIMULATED) - EPOCH LOST, restarting ts2phc-f9t.service\n2026-09-10 21:25:37 UTC --dry-run, not restarting",
+          "chrony_iphc_line": "#* IPHC                          0   0   377     0     +4ns[   +6ns] +/- 1000ns",
+          "chrony_selects_iphc": true
+        },
+        "chrony_primary": {
+          "reference_id": "49504843 (IPHC)",
+          "stratum": "1",
+          "rms_offset": "0.000000015 seconds",
+          "root_delay": "0.000000001 seconds",
+          "root_dispersion": "0.000001656 seconds",
+          "leap_status": "Normal"
+        },
+        "chrony_witness": {
+          "reference_id": "50484300 (PHC)",
+          "stratum": "1",
+          "rms_offset": "0.000000026 seconds",
+          "root_delay": "0.000000001 seconds",
+          "root_dispersion": "0.000002050 seconds",
+          "leap_status": "Normal"
+        },
+        "witness_discipline": {
+          "servo": "ptp4l",
+          "reference": "P550-BMC GPS GM (domain 44, UDPv4)",
+          "samples": 60,
+          "offset_ns_min": -105,
+          "offset_ns_max": 80,
+          "offset_ns_rms": 41.0,
+          "offset_ns_stdev": 41.0,
+          "path_delay_ns_last": 891,
+          "states": [
+            "s2"
+          ]
+        }
+      },
+      "orchestration": {
+        "note": "Software latency of building and signing this record. It bounds how FRESH the record is, not how well the anchored instant is known. Do not add these to the anchor uncertainty.",
+        "primary_observation": {
+          "host": "p550",
+          "clock": "CLOCK_REALTIME",
+          "observed_utc": "2026-09-11T23:42:09.550807331Z",
+          "read_cost_ns": 10000,
+          "acquisition": {
+            "local_pre_ns": 1789170128487860000,
+            "local_post_ns": 1789170149588705000,
+            "acquisition_window_ns": 21100845000
+          }
+        },
+        "witness_observation": {
+          "host": "k3",
+          "clock": "CLOCK_REALTIME",
+          "observed_utc": "2026-09-11T23:42:09.965595505Z",
+          "read_cost_ns": 5541,
+          "acquisition": {
+            "local_pre_ns": 1789170128488061000,
+            "local_post_ns": 1789170149977798000,
+            "acquisition_window_ns": 21489737000
+          }
+        },
+        "observation_minus_anchor_s": -0.449,
+        "residual_software_claim": "The binding of these entropy bytes to this anchor is asserted in software. The ANCHOR's time is hardware-known; the ASSOCIATION between the bytes and the anchor carries the orchestration latency above. That is the honest residual, and it is a liveness limit, not a time-accuracy limit."
+      },
+      "precision": {
+        "model": "anchored",
+        "anchor_uncertainty": {
+          "receiver_sawtooth_sd_ns": 2.236,
+          "sawtooth_this_epoch_ns": -3.39,
+          "sawtooth_applied": false,
+          "i210_servo_residual_ns_rms": -21,
+          "dominant_term": "ts2phc servo residual plus uncalibrated path delays",
+          "not_dominant": "userspace clock read cost \u2014 it does not enter the anchor"
+        },
+        "honest_summary": "This pulse is anchored to GNSS epoch week 2435 tow 517330000 ms, whose TP1 edge was captured in i210 hardware. The receiver reported a sawtooth of -3.39 ns for that exact epoch (sd 2.236 ns over the last 15 min, 100.1% coverage) and the i210 servo residual was ~-21 ns. Software read costs are reported separately under 'orchestration' and do NOT bound the anchored instant.",
+        "absolute_accuracy_claimed": false,
+        "calibrated_terms": [
+          "GNSS antenna cable delay: 69 ns, MEASURED (lab notebook 213/215), carried by every receiver on the feed - not an assumption",
+          "BMC EXTI+PHC-read latency: trimmed out via ptptgt 900 (notebook 214)"
+        ],
+        "uncalibrated_terms": [
+          "PPS coax length from F9T TP1 to i210 SDP0",
+          "i210 SDP0 input latency / edge-detect offset",
+          "i210-monitor path asymmetry, bounded at +/-445 ns by meanPathDelay",
+          "6T-vs-F9T receiver difference (awaiting SDP1 extts fanout)"
+        ],
+        "absolute_utc_limit": "The F9T is currently L1-ONLY on this antenna path (33 signals on L1, 0 on L2). Absolute UTC/TAI therefore carries an uncorrected ionospheric term. Dual-band L1/L2 is on the roadmap (TW3972 antenna) and is what would put the fleet on real UTC/TAI. Until then: excellent PRECISION, uncalibrated ABSOLUTE accuracy.",
+        "error_budget_note": "The sawtooth does NOT combine in quadrature: it is strongly autocorrelated (LEA-6T lag-1 +0.839, decaying over ~7 s), so no disciplining loop can average it away - 32 s of averaging buys 2x where white noise would buy 5.7x. Measured on this bench, subtracting qErr took a receiver from 6.13 to 1.68 ns sd (r2=0.970). Correcting it is worth real accuracy, and the right place is the capture, not chrony. Sign convention: corrected = raw + qErr. (Lab notebook entry 212.)"
+      },
+      "anchor_vs_gnss": {
+        "drand_round_release_unix_s": 1789170129,
+        "gnss_anchor_utc_unix_s": 1789170130.0,
+        "gnss_anchor_minus_drand_release_s": 1.0,
+        "interpretation": "The GNSS anchor must fall AFTER the drand round was released; the gap is the window in which this pulse was assembled. Exact timing is what makes that window small and checkable - precision multiplies the anchor."
+      },
+      "cross_check": {
+        "primary_minus_witness_ns": -414788174,
+        "acquisition_skew_bound_ns": 21489737000,
+        "interpretation": "This delta is NOT a measurement of the offset between the two time bases. Both stamps were fetched over SSH and the difference is dominated by acquisition skew, bounded above by acquisition_skew_bound_ns. A real comparison requires a simultaneous triggered capture, not two SSH calls.",
+        "independence": "NOT independent, and deliberately so. The witness's grandmaster is watched continuously by the primary's i210 (mesh_crosscheck), which is what makes the witness trustworthy rather than merely separate. Residual shared-mode risk: both chains start at GPS, so neither covers a constellation-wide fault or spoofing. Different receivers (ZED-F9T vs LEA-6T), boards, and servos (ts2phc vs ptp4l) do cover receiver-local faults.",
+        "why_the_crosscheck_matters": "Over 21 days the ZED-F9T logged 0 qErr excursions beyond 50 ns in 357,982 samples (sd 2.255 ns). The LEA-6T that feeds the BMC has a comparable core (sd 6.02 ns) but produced 3 excursions past 1 us in 468,631 samples. Rare multi-microsecond excursions on the witness chain are exactly what the continuous i210-vs-BMC measurement is there to expose."
+      }
+    },
+    "commitment": {
+      "next_target_round": 32122354,
+      "next_target_round_release_unix_s": 1789170429,
+      "rule": "The next pulse in this chain MUST use a drand round >= next_target_round. That round did not exist when this pulse was signed, so its randomness could not have been known here - which bounds grinding of the successor."
+    }
+  },
+  "pulse_hash": "74eaf3b5e7239cf0861b96f3fbce8b03c14f375b35fd09c3a156dba38b13b201",
+  "signatures": {
+    "entropy": {
+      "signer": "protectli",
+      "role": "entropy_signer",
+      "alg": "ed25519",
+      "key_id": "1fc857c9f439ab9a",
+      "public_key_b64": "a2ANhyUVHQGpi1mQRKG+L7siT0ptYH9/MpLQ/UunILA=",
+      "sig_b64": "npRG3qBi/cAbtgUnbSbuYJGTFoDlW7YO1O+SfeaBffx8R7oRkoJkZGrWR4oNfKJ1yuRTfSqUmI6XQdJzD1DrDw=="
+    },
+    "time": {
+      "signer": "p550",
+      "role": "time_attester",
+      "alg": "ed25519",
+      "key_id": "6dae96e8faa9678a",
+      "public_key_b64": "XAsLFvZJFrZvYnqg7+t9AN8qgppLCfMa+iOQJc0f8U8=",
+      "sig_b64": "27XkJEXwprBkc/QxcKZwy3JKgEJwuR2H7xVQTNoJNS4nvtUcJSifiaqE2/lLDTwp+P2nQtLvEDhpKKeYcDakDw=="
+    },
+    "time_witness": {
+      "signer": "k3",
+      "role": "time_witness",
+      "alg": "ed25519",
+      "key_id": "817a5238d784c4b4",
+      "public_key_b64": "Y7uoa5a7ctiX+kN3P9SEbRbRKX49fF1thOUSqj+PmT0=",
+      "sig_b64": "K9q/ROgG6Qxl13AlBYxJ0d69gJAr/+7rF21Z88aSFAS/Nlj78QOX3ziFVqkSdOtXcD+q7h80XD/gretrxt/9Cg=="
+    }
+  },
+  "disclosure": {
+    "signed_payload": "sha256 of canonical(core); all signatures cover the same digest",
+    "attested_value_is_the_output": "Consumers should use core.attested_value, NOT core.entropy.hex. The attested value is the Quantis entropy mixed with an external drand round, so it depends on a value no single party controls.",
+    "what_this_proves": "Integrity since signing, attested by three independent hosts on two independent GNSS receiver chains.",
+    "what_this_does_NOT_prove": "It does not prove the value was unknown before publication. Single publisher, no external anchor. Any draw that matters must combine a pulse with a participant-supplied nonce.",
+    "time_precision_vs_accuracy": "We claim precision and a traceable discipline chain, NOT calibrated absolute accuracy versus UTC(k).",
+    "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md."
+  }
+}

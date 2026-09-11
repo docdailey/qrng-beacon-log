@@ -1,0 +1,59 @@
+{
+  "core": {
+    "version": "0",
+    "seq": 2,
+    "prev_hash": "31f2ff09899f5f60b9c9e5e6990ddd2202380709fb43e89c67dbceeb9510925b",
+    "entropy": {
+      "hex": "f8ae6eef1eb7c3db29f2c932846a24163326cfde0b6042a5039164d7d5240df2",
+      "len_bytes": 32,
+      "sha256": "9564c449a0d4f3f0abea66690d5836160ae2b787ee90fc3e3fe3591fb9c17bd7",
+      "source": {
+        "device": "ID Quantique Quantis USB",
+        "serial": "246578A410",
+        "host": "protectli",
+        "endpoint": "http://192.168.70.1:8080/api/v1/random/bytes",
+        "correction": "none"
+      }
+    },
+    "time": {
+      "utc": "2026-09-11T22:40:01.407894884Z",
+      "tai": "2026-09-11T22:40:38.407894884Z",
+      "tai_minus_utc_s": 37,
+      "unix_ns": 1789166401407894884,
+      "source": {
+        "host": "f9t",
+        "stratum": "1",
+        "reference_id": "50545000 (PTP)",
+        "rms_offset": "0.000000012 seconds",
+        "root_dispersion": "0.000000968 seconds",
+        "chain": "u-blox ZED-F9T GPS -> PPS -> PTP/chrony"
+      }
+    }
+  },
+  "pulse_hash": "8a4ebf6741ab46cc04e562bf51d35346dfd9afbf9f2a444e3ae13f79f5ab2ebb",
+  "signatures": {
+    "entropy": {
+      "signer": "protectli",
+      "role": "entropy_signer",
+      "alg": "ed25519",
+      "key_id": "1fc857c9f439ab9a",
+      "public_key_b64": "a2ANhyUVHQGpi1mQRKG+L7siT0ptYH9/MpLQ/UunILA=",
+      "sig_b64": "WXG64ZqQCCa41ej47u4IpQ+wwPB1s1JIzoKrwvolaKNmQWuX8oXtE/q+0LkZQV1QyAmSyq+SP+s0qhCoWGYvAQ=="
+    },
+    "time": {
+      "signer": "f9t",
+      "role": "time_attester",
+      "alg": "ed25519",
+      "key_id": "4687aa55eff780e4",
+      "public_key_b64": "XTXEocHhGqqxtpEHFaZRDjzTVayAP4aAS76BEg7avQ4=",
+      "sig_b64": "3FdIv1cfejm8q3eWtryh5XXgYOB5APoSvFZ499V9v2HRrcnsj0jUZD6U5evxHfC0XBJtp4V6Mw0W8Or2m7zIAQ=="
+    }
+  },
+  "disclosure": {
+    "signed_payload": "sha256 of canonical(core); both signatures cover the same digest",
+    "clock_read_to_signature_latency_ms": 3090.0,
+    "what_this_proves": "The pulse has not been altered since signing, and two independent hosts attested it. The time field is when f9t read its clock, not when it signed; the gap is the latency above.",
+    "what_this_does_NOT_prove": "It does not prove the value was unknown before publication. v0 has a single publisher and no external anchor. Do not use a pulse for any draw whose result matters unless it is combined with a participant-supplied nonce.",
+    "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md."
+  }
+}

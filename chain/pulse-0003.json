@@ -1,0 +1,119 @@
+{
+  "core": {
+    "version": "0",
+    "seq": 3,
+    "prev_hash": "8a4ebf6741ab46cc04e562bf51d35346dfd9afbf9f2a444e3ae13f79f5ab2ebb",
+    "entropy": {
+      "hex": "92f933012572fd883196a74ff11dcfe2ca43122be92d7e2e2ff08b2b493d30e4",
+      "len_bytes": 32,
+      "sha256": "33c25d80b995e465e0384511476abbb9066c9ccd63f533476b40622102602792",
+      "source": {
+        "device": "ID Quantique Quantis USB",
+        "serial": "246578A410",
+        "host": "protectli",
+        "endpoint": "http://192.168.70.1:8080/api/v1/random/bytes",
+        "correction": "none"
+      }
+    },
+    "time": {
+      "utc": "2026-09-11T22:46:58.793628580Z",
+      "tai": "2026-09-11T22:47:35.793628580Z",
+      "tai_minus_utc_s": 37,
+      "tai_source": "kernel adjtimex (ret=0, status=0x2000) \u2014 read, not hardcoded",
+      "unix_ns": 1789166818793628580,
+      "authoritative_clock": {
+        "host": "p550",
+        "hardware": "Intel I210 Gigabit (PCI 01:00.0)",
+        "phc_device": "/dev/ptp0",
+        "phc_clock_name": "a0369f37b8e7",
+        "nic": "enp1s0",
+        "timebase": "TAI",
+        "raw_phc_ns_tai": 1789166855793628580
+      },
+      "discipline": {
+        "servo": "ts2phc (linuxptp), generic source",
+        "reference": "u-blox ZED-F9T TP1 PPS, FALLING edge on the second",
+        "path": "ZED-F9T (hosted on f9t) -> coax -> i210 SDP0 -> ts2phc -> /dev/ptp0",
+        "service": "ts2phc-f9t.service",
+        "samples": 9,
+        "window_s": 8,
+        "states": [
+          "s2"
+        ],
+        "offset_ns_min": 1,
+        "offset_ns_max": 15,
+        "offset_ns_rms": 9.81,
+        "offset_ns_stdev": 4.39,
+        "freq_ppb": -52896
+      },
+      "chrony": {
+        "reference_id": "49504843 (IPHC)",
+        "stratum": "1",
+        "rms_offset": "0.000000010 seconds",
+        "root_delay": "0.000000001 seconds",
+        "root_dispersion": "0.000002962 seconds",
+        "leap_status": "Normal",
+        "skew": "0.008 ppm"
+      },
+      "kernel_error_bounds": {
+        "maxerror_us": 1,
+        "esterror_us": 0
+      },
+      "read_quality": {
+        "method": "interleaved sys/phc/sys, lowest-latency of 11",
+        "read_latency_ns": {
+          "min": 27000,
+          "median": 30000,
+          "max": 78999
+        },
+        "chosen_read_latency_ns": 27000,
+        "phc_minus_sys_spread_ns": 23090,
+        "phc_minus_sys_median_ns": 36999999260
+      },
+      "precision": {
+        "clock_discipline_rms_ns": 9.81,
+        "clock_discipline_peak_ns": 15,
+        "servo_states_in_window": [
+          "s2"
+        ],
+        "stamp_uncertainty_ns": 27000,
+        "dominant_term": "userspace PHC read latency",
+        "honest_summary": "The i210 PHC tracks the GNSS PPS to ~9.81 ns RMS, but this timestamp was READ from userspace at a cost of ~27000 ns. Treat the stamp as good to ~27000 ns (tens of microseconds), NOT to nanoseconds. The nanosecond figures describe the clock, not the stamp.",
+        "absolute_accuracy_claimed": false,
+        "uncalibrated_terms": [
+          "GNSS antenna cable delay (69 ns is configured in the F9T; we have not verified it)",
+          "PPS coax length from the F9T TP1 to the i210 SDP0 input",
+          "i210 SDP0 input latency / edge-detect offset",
+          "the ZED-F9T receiver's own accuracy with respect to UTC(k)"
+        ]
+      }
+    }
+  },
+  "pulse_hash": "899712d2f74099b97bd9f663661a5024c15e43d6c0e865446965900077304808",
+  "signatures": {
+    "entropy": {
+      "signer": "protectli",
+      "role": "entropy_signer",
+      "alg": "ed25519",
+      "key_id": "1fc857c9f439ab9a",
+      "public_key_b64": "a2ANhyUVHQGpi1mQRKG+L7siT0ptYH9/MpLQ/UunILA=",
+      "sig_b64": "FdUlYvmpL/ZPVjvvy0PKXtE+wjvgC8nRovr+2Jhqhp1V+3e73hGSv6M6fuPOXIIjACysMOrr9Eq47m+EtLzqAQ=="
+    },
+    "time": {
+      "signer": "p550",
+      "role": "time_attester",
+      "alg": "ed25519",
+      "key_id": "6dae96e8faa9678a",
+      "public_key_b64": "XAsLFvZJFrZvYnqg7+t9AN8qgppLCfMa+iOQJc0f8U8=",
+      "sig_b64": "ni8ZhsuVqsZYr/m+GEy2MtJxifNB+w/ZwOzucydZzqNVhl0gQ+BFuvRWuuVo5BF4xSnndQuNOoI3k1bAYoZwAQ=="
+    }
+  },
+  "disclosure": {
+    "signed_payload": "sha256 of canonical(core); both signatures cover the same digest",
+    "clock_read_to_signature_latency_ms": 13074.3,
+    "what_this_proves": "The pulse has not been altered since signing, and two independent hosts attested it. The time field is when f9t read its clock, not when it signed; the gap is the latency above.",
+    "what_this_does_NOT_prove": "It does not prove the value was unknown before publication. v0 has a single publisher and no external anchor. Do not use a pulse for any draw whose result matters unless it is combined with a participant-supplied nonce.",
+    "time_precision_vs_accuracy": "We claim PRECISION (how tightly the PHC tracks the GNSS PPS) and traceability of the discipline chain. We do NOT claim calibrated absolute accuracy versus UTC(k); the cable and input-latency terms are uncalibrated and listed in core.time.precision.uncalibrated_terms.",
+    "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md."
+  }
+}
