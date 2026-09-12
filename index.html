@@ -34,10 +34,20 @@
   are published beside every pulse. Rekor entries with inclusion proofs, and
   OpenTimestamps submissions, live on the repository's <code>anchors</code> branch and
   are checked by the CLI from git — <em>this site does not serve them.</em>
-  OpenTimestamps proofs are currently <strong>pending</strong> Bitcoin confirmation.
-  Log checkpoints for independent witnesses are specified in
-  <a href="/TLOG.md">TLOG.md</a> but <strong>not yet enabled</strong>, so
-  <code>/checkpoint</code> is intentionally absent.</p>
+  OpenTimestamps proofs are currently <strong>pending</strong> Bitcoin confirmation.</p>
+
+  <h2>Log checkpoint</h2>
+  <p>The log is an RFC&nbsp;6962 Merkle tree over every pulse, published as a
+  <a href="https://c2sp.org/tlog-checkpoint">C2SP checkpoint</a> in
+  <a href="https://c2sp.org/signed-note">signed-note</a> form:</p>
+  <pre><a href="/checkpoint">/checkpoint</a>            current signed head
+<a href="/checkpoints/000049">/checkpoints/NNNNNN</a>    per-size history</pre>
+  <p class="note">Origin <code>notbefore.net/log</code>. Anyone can recompute the root
+  from the published pulses and check it against the head — the leaf is
+  <code>canonical(pulse record)</code>, the tree is RFC&nbsp;6962 with no variations.
+  See <a href="/TLOG.md">TLOG.md</a>. Witness cosignatures are not yet collected, so
+  a split view is presently detectable by a client comparing heads over time rather
+  than by a third party.</p>
 
   <h2>Verify it yourself</h2>
   <pre>pip install notbefore py_ecc
