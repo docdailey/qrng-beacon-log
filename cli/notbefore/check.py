@@ -21,14 +21,14 @@ class CheckResult:
     def __init__(self, seq):
         self.seq = seq; self.ok = True; self.lines = []; self.verbose = []
         self.commit_seq = self.pulse_hash_reveal = self.pulse_hash_commit = self.attested_value = self.drand_round = None
-        self.bls_offline = False; self.tsa_pass = 0; self.anchors = "not checked"
+        self.bls_offline = False; self.tsa_pass = 0; self.anchors = "not checked"; self.tlog = "not checked"
         self.log_git_sha = self.log_ref = None; self.verifier_git_sha = vendored_meta().get("git_sha")
     def say(self, ok, msg, level=None):
         tag = level or ("PASS" if ok else "FAIL")
         if tag == "FAIL": self.ok = False
         self.lines.append(f"[{tag}] {msg}")
     def summary(self):
-        return {"ok": self.ok, "bls_offline": self.bls_offline, "tsa_tokens_verified": self.tsa_pass, "anchors": self.anchors,
+        return {"ok": self.ok, "bls_offline": self.bls_offline, "tsa_tokens_verified": self.tsa_pass, "anchors": self.anchors, "tlog": self.tlog,
                 "lines": self.lines}
 
 def _run(args, cwd=None):
@@ -73,6 +73,9 @@ def check_pair(seq: int, src: LogSource, refetch=True, anchors=True, verbose=Fal
     if anchors:
         R.anchors = _check_anchors(R, src, (seq - 1, seq), rc_, refetch)
     else: R.anchors = "skipped (--no-anchors)"
+    try:
+        from . import tlogcheck; R.tlog = tlogcheck.check(src, (seq - 1, seq), R, refetch)
+    except Exception as e: R.say(True, f"transparency-log check unavailable: {e}", "WARN"); R.tlog = "error"
     return R
 
 def _check_anchors(R, src, seqs, rev_core, refetch):

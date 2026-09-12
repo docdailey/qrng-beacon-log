@@ -40,6 +40,18 @@ def statement_for(pulse_path):
           "pulse_hash": p["pulse_hash"], "prev_hash": core["prev_hash"], "file_sha256": sha256(raw)}
     return canon(st), st
 
+CHECKPOINT_RE = re.compile(r"checkpoints/(\d{6})$")
+def checkpoint_statement_for(path):
+    """Canonical anchor statement for a published signed checkpoint (TLOG.md). Derivable from the file alone."""
+    raw = open(path, "rb").read(); lines = raw.decode().split("\n")
+    st = {"anchor": ANCHOR_VERSION, "repo": REPO, "genesis": GENESIS_PULSE_HASH, "type": "checkpoint",
+          "origin": lines[0], "tree_size": int(lines[1]), "root_b64": lines[2], "note_sha256": sha256(raw)}
+    return canon(st), st
+
+def checkpoint_files(root):
+    d = os.path.join(root, "checkpoints")
+    return sorted(os.path.join(d, f) for f in os.listdir(d) if re.fullmatch(r"\d{6}", f)) if os.path.isdir(d) else []
+
 # ------------------------------------------------------------------ keys
 def load_priv(pem): return serialization.load_pem_private_key(pem, password=None)
 def load_pub(pem): return serialization.load_pem_public_key(pem)

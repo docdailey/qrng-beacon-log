@@ -249,3 +249,13 @@ were stamped from it and are superseded.
   signature; RFC 3161 when available). ❌ Never say a skip is a failure of the beacon's security claim: no commitment
   existed, so nothing was selected or withheld.
 
+## Added 2026-09-12 — transparency-log checkpoints (binding)
+
+- ✅ Say: "the log publishes an RFC 6962 tree head as a C2SP checkpoint signed under the origin `notbefore.net/log`, in the
+  same commit as each pulse; anyone can recompute the root and check consistency with any earlier checkpoint."
+- ❌ Never say "witnessed" or "cosigned" until an operator we do not control has actually cosigned a checkpoint. Until
+  then the honest phrase is "self-signed checkpoints, Rekor-anchored; consistency checkable by any client that
+  remembers its last head."
+- ❌ Never present the checkpoint as proof that a pulse is *honest*; it proves the pulse is in *this* log and that the
+  log did not rewrite or fork its past relative to a head someone holds.
+

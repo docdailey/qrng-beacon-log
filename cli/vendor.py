@@ -4,7 +4,7 @@ pinning them to the repo commit. Re-run (and bump the package version) whenever 
 The freetsa CA + TSA certificates are fetched once here so the package pins them instead of trusting first use."""
 import os, shutil, hashlib, json, subprocess, time, urllib.request, sys
 CLI = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(CLI); DST = os.path.join(CLI, "notbefore", "verifier")
-FILES = ["verify.py", "bls_drand.py", "drand_anchor.py", "schema.py", "tsa.py",
+FILES = ["verify.py", "bls_drand.py", "drand_anchor.py", "schema.py", "tsa.py", "tlog.py",
          "hosts/attest_lib.py", "hosts/attest_host.py", "hosts/entropy_host.py", "hosts/gnss_probe.py", "hosts/stamp_probe.py", "hosts/EXPECTED.json",
          "ci/anchor_lib.py", "ci/KNOWN_NONCOMPLIANT.json"]
 FILES += sorted("keys/" + f for f in os.listdir(os.path.join(ROOT, "keys")) if not f.startswith(".") and os.path.isfile(os.path.join(ROOT, "keys", f)) and "private" not in f)

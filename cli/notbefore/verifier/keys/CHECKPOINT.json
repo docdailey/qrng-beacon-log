@@ -1,0 +1,14 @@
+{
+  "note": "Identity of this log as a C2SP transparency log (TLOG.md \u00a74-5). The origin line is PERMANENT: it names the log for every witness and client forever; changing it creates a new log identity. The checkpoint key is distinct from every pulse-signing key; it asserts 'this is the log', never 'this host observed this'.",
+  "origin": "notbefore.net/log",
+  "domain_holder": "Bill (docdailey) \u2014 notbefore.net",
+  "public_key_file": "keys/checkpoint.pub",
+  "alg": "ed25519",
+  "key_id_hex": "8b627e7f",
+  "pubkey_sha256": "fc63e554debf73eb7e110a5a6964b216793b1935036790f0e36c7ad139dfb8aa",
+  "signer_host": "think",
+  "private_key_path_on_signer": "~/beacon/checkpoint.key",
+  "created_utc": "2026-09-12",
+  "enabled": false,
+  "enabled_note": "set true (and commit) only after the origin string is confirmed; the first signed checkpoint fixes the identity"
+}

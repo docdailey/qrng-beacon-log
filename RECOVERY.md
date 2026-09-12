@@ -127,3 +127,15 @@ the published chain — read `cycle.log`, find whether the pulse was minted but 
   window — would cost one hour's value and buy the first real `failure` pulse in the log. Bill's call.
 - Housekeeping: protectli holds three test records `0997–0999.abandoned` from the 02:01–02:47 cut-over, in the old
   format with E in clear; never published, harmless, but they should be removed (as root, noted in the ledger).
+
+## 6. Checkpoints (TLOG.md) — failure modes
+
+- The aggregator signs `checkpoint` + `checkpoints/NNNNNN` inside `publish()`; a signing failure **never blocks** the
+  pulse (logged as `checkpoint NOT written`) and CI turns red with *"checkpoint size N != M published pulses"* until the
+  next successful publish covers everything. That red is correct: readers must be able to see when a head lagged.
+- `publish-checkpoint` refuses to sign a head that is not an append-only extension of the last published checkpoint
+  (fork) or a chain shorter than it (rollback). If it refuses, do not "fix" the checkpoints directory — read
+  `cycle.log`, compare `checkpoints/` with `git log`, and write ERRATA; a refusal here is the tlog doing its job.
+- `~/beacon/checkpoint.key` on think is the log's identity key. Losing it means a new key under the same origin (clients
+  and witnesses pin the key: rotation is a documented event, not a silent swap). Back it up with the anchor key.
+

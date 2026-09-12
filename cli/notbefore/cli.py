@@ -42,6 +42,8 @@ def build_parser():
     common(sub.add_parser("value", help="print the attested value V (hex) if the pair verifies"))
     common(sub.add_parser("seed", help="print the derived seed S = SHA256(D_derive || V || purpose)"), purpose=True)
     common(sub.add_parser("shuffle", help="deterministically shuffle the lines of FILE with S"), purpose=True, file=True)
+    cp = sub.add_parser("checkpoint", help="show and verify the log's current signed checkpoint against the vendored identity and this machine's cached head")
+    cp.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS); cp.add_argument("--offline", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     sp = sub.add_parser("split", help="shuffle, then split FILE into A (first floor(frac·k)) and B"); common(sp, purpose=True, file=True)
     sp.add_argument("--frac", type=float, required=True); sp.add_argument("--out-a"); sp.add_argument("--out-b")
     return ap
@@ -72,11 +74,22 @@ def _write_transcript(a, t, slug):
 
 def main(argv=None):
     a = build_parser().parse_args(argv)
+    for k, d in (("verbose", False), ("json", False), ("offline", False), ("no_anchors", False), ("seq", 0)):
+        if not hasattr(a, k): setattr(a, k, d)
     try:
         src = _open_source(a)
     except LogError as e:
         _err(str(e)); return 1
     try:
+        if a.cmd == "checkpoint":
+            from .check import CheckResult
+            from . import tlogcheck
+            R = CheckResult(0); R.log_git_sha, R.log_ref = src.log_git_sha, (src.ref or "working tree")
+            st = tlogcheck.check(src, (), R, refetch=not getattr(a, "offline", False))
+            note = src._read_bytes("checkpoint")
+            for l in R.lines: sys.stderr.write(l + "\n")
+            if note: sys.stdout.write(note.decode())
+            return 0 if R.ok and st in ("ok", "absent", "no identity") else 1
         R = check_pair(a.seq, src, refetch=not a.offline, anchors=not a.no_anchors, verbose=a.verbose)
         _print_check(R, a)
         if a.cmd == "verify":

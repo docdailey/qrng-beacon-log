@@ -28,9 +28,19 @@ def drand_latest_round():
     with urllib.request.urlopen(f"https://api.drand.sh/{CHAIN_HASH}/public/latest", timeout=15) as r:
         return json.load(r)["round"]
 
+def checkpoint():
+    """TLOG.md: sign the new tree head so the pulse and the checkpoint covering it travel in ONE commit. Never blocks
+    publication: a signing failure is logged and CI reports the stale checkpoint (keys/CHECKPOINT.json must be enabled)."""
+    try:
+        out = run("python3", "tlog.py", "publish-checkpoint"); log("checkpoint: " + out.strip()[:120])
+    except Exception as e:
+        if "not enabled" in str(e): return
+        log(f"checkpoint NOT written: {str(e)[:200]}")
+
 def publish(msg):
     run("git", "add", "-A", "chain")
     if run("git", "status", "--porcelain", "chain", check=False):
+        checkpoint(); run("git", "add", "-A", "chain", "checkpoint", "checkpoints", check=False)
         run("git", "commit", "-q", "-m", msg)
         run("git", "push", "-q", "origin", "main")
     return time.time()

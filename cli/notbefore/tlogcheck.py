@@ -1,0 +1,71 @@
+"""Transparency-log checks for the client (TLOG.md §8): verify the log's signed checkpoint with the VENDORED origin and
+key, recompute the tree from the pulses actually read, prove the pair's inclusion, and compare against the last head
+this machine saw — a client that remembers its last checkpoint detects a split view by itself, without asking anyone."""
+import os, sys, json, subprocess, tarfile, io, time, re
+from .check import VENDOR, KEYS
+sys.path.insert(0, VENDOR)
+import tlog as T   # vendored copy of the repo's tlog.py
+
+def identity():
+    p = os.path.join(KEYS, "CHECKPOINT.json")
+    return json.load(open(p)) if os.path.exists(p) else None
+
+def heads_dir():
+    d = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "notbefore", "heads"); os.makedirs(d, exist_ok=True); return d
+
+def _chain_leaves_from_source(src):
+    """All pulse files at the pinned ref, as canonical leaves in seq order. Uses `git archive` (one process) when possible."""
+    if src.mode == "dir" and src.ref is None: return T.chain_leaves(os.path.join(src.dir, "chain"))
+    r = subprocess.run(["git", "archive", "--format=tar", src.ref, "chain"], cwd=src.dir, capture_output=True)
+    if r.returncode: raise RuntimeError("git archive failed: " + r.stderr.decode()[:200])
+    files = {}
+    with tarfile.open(fileobj=io.BytesIO(r.stdout)) as tf:
+        for m in tf.getmembers():
+            if re.search(r"chain/pulse-\d{4}\.json$", m.name): files[m.name] = tf.extractfile(m).read()
+    leaves = []
+    for i, name in enumerate(sorted(files)):
+        j = json.loads(files[name])
+        if j["core"]["seq"] != i + 1: raise RuntimeError(f"seq gap at {name}")
+        leaves.append(T.canonical(j))
+    return leaves
+
+def check(src, seqs, R, refetch=True):
+    """Appends [PASS]/[FAIL]/[WAIT] lines to R (a CheckResult). Returns a status string."""
+    ident = identity()
+    if not ident: R.say(True, "transparency log: no checkpoint identity vendored in this release — skipped", "INFO"); return "no identity"
+    if not ident.get("enabled"): R.say(True, f"transparency log: identity {ident['origin']} vendored but checkpoints not yet enabled by the operator — skipped", "INFO"); return "no identity"
+    origin = ident["origin"]; pub_raw = T.load_pub_raw(os.path.join(KEYS, os.path.basename(ident["public_key_file"])))
+    note_b = src._read_bytes("checkpoint")
+    if note_b is None: R.say(True, f"transparency log ({origin}): no `checkpoint` published at {R.log_ref} yet", "WAIT"); return "absent"
+    note = note_b.decode()
+    ok, text = T.verify_note(note, origin, pub_raw); R.say(ok, f"checkpoint signature by {origin} (vendored key id {T.key_id(origin, pub_raw).hex()})")
+    if not ok: return "bad signature"
+    o, size, root = T.parse_checkpoint(text); R.say(o == origin, f"checkpoint origin line is {o!r}")
+    try: leaves = _chain_leaves_from_source(src)
+    except Exception as e: R.say(False, f"could not rebuild the tree from the log: {e}"); return "tree error"
+    R.say(size <= len(leaves), f"checkpoint size {size} <= {len(leaves)} pulses read from the log")
+    if size > len(leaves): return "size"
+    recomputed = T.mth(leaves[:size]); R.say(recomputed == root, f"root at size {size} recomputes from the pulses actually read ({recomputed.hex()[:16]}…)")
+    if recomputed != root: return "root mismatch"
+    for s in seqs:
+        i = s - 1
+        if i < size:
+            inc = T.verify_inclusion(T.leaf_hash(leaves[i]), i, size, T.inclusion_path(i, leaves[:size]), root)
+            R.say(inc, f"pulse {s:04d} is included in the checkpointed tree (leaf {i}, RFC 6962 inclusion proof)")
+        else: R.say(True, f"pulse {s:04d} is newer than the published checkpoint (size {size}); inclusion not yet provable", "WAIT")
+    # cached head: the client's own split-view detector
+    hp = os.path.join(heads_dir(), re.sub(r"[^A-Za-z0-9._-]", "_", origin) + ".checkpoint")
+    status = "ok"
+    if os.path.exists(hp):
+        old = open(hp).read(); ook, otext = T.verify_note(old, origin, pub_raw)
+        if ook:
+            _, osize, oroot = T.parse_checkpoint(otext)
+            if osize > len(leaves) or (osize <= size and not T.verify_consistency(osize, size, T.consistency_proof(osize, leaves[:size]), oroot, root)) or (osize > size):
+                R.say(False, f"SPLIT VIEW / ROLLBACK: the head this machine saw before (size {osize}, root {oroot.hex()[:16]}…) is NOT a prefix of the head now served (size {size}). Keep {hp} as evidence.")
+                return "SPLIT VIEW"
+            R.say(True, f"consistent with the head this machine last saw (size {osize} -> {size}; append-only)")
+        else: R.say(True, f"cached head at {hp} does not verify; replacing it", "WARN")
+    else: R.say(True, f"first checkpoint seen on this machine for {origin}; caching it as the reference head", "INFO")
+    if not os.path.exists(hp) or size >= T.parse_checkpoint(T.verify_note(open(hp).read(), origin, pub_raw)[1])[1]:
+        open(hp, "w").write(note)
+    return status

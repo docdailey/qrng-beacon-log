@@ -93,6 +93,21 @@ for pf in L.pulse_files(os.path.join(ROOT, "chain")):
         except Exception as e: say(f"[WARN] {seq:04d}: OpenTimestamps proof unreadable: {e}")
     if ok: say(f"[PASS] {seq:04d} {st['type']:<7} rekor logIndex {entry['logIndex']} @ {rec['rekor']['integrated_utc']}  SET+inclusion OK{'  refetched' if REFETCH else ''}  ots {rec['ots'].get('status')}")
     else: T["failures"] += 1
+# ---- signed checkpoints (TLOG.md): each published checkpoints/NNNNNN should be anchored; its statement hash is expected under the key
+T["checkpoints"] = 0; T["checkpoints_anchored"] = 0
+for cf in L.checkpoint_files(ROOT):
+    size = int(os.path.basename(cf)); T["checkpoints"] += 1
+    statement, st = L.checkpoint_statement_for(cf); expected_hash[L.sha256(statement)] = f"checkpoint {size:06d}"
+    stem = os.path.join(A, f"checkpoint-{size:06d}"); rec_path = stem + ".anchor.json"
+    if not os.path.exists(rec_path):
+        age = time.time() - os.path.getmtime(cf); in_flight[f"checkpoint {size:06d}"] = age
+        say(f"[{'FAIL' if age > GRACE_S else 'WAIT'}] checkpoint {size:06d}: no anchor ({age/60:.0f} min)"); T["failures"] += age > GRACE_S; continue
+    rec = json.load(open(rec_path)); entry = rec["rekor"]["entry"]; h, k = L.entry_hash_and_key(entry)
+    ok = open(stem + ".stmt.json", "rb").read() == statement and h == L.sha256(statement) and k is not None and L.key_id(L.load_pub(k)) == L.key_id(anchor_pub) \
+         and L.verify_sig(anchor_pub, base64.b64decode(rec["signature_b64"]), statement) and entry["logID"] == L.REKOR_LOG_ID and L.verify_set(entry, rekor_pub) and L.verify_inclusion(entry, rekor_pub)[0]
+    known_uuids[rec["rekor"]["uuid"]] = f"checkpoint {size:06d}"; T["checkpoints_anchored"] += ok; T["failures"] += not ok
+    say(f"[{'PASS' if ok else 'FAIL'}] checkpoint {size:06d} (root {st['root_b64'][:12]}…): Rekor anchor logIndex {entry['logIndex']} @ {rec['rekor']['integrated_utc']} verified offline")
+
 # ---- split-view detector: every entry under the anchor key must be a published anchor
 if REFETCH:
     try:
@@ -112,11 +127,11 @@ if REFETCH:
             h, _ = L.entry_hash_and_key(e)
             when = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e["integratedTime"]))
             if h in expected_hash:
-                s_ = expected_hash[h]; age = in_flight.get(s_)
+                s_ = expected_hash[h]; age = in_flight.get(s_)   # seq (int) for pulses, 'checkpoint NNNNNN' for checkpoints
                 if age is not None and age > GRACE_S:
-                    say(f"[FAIL] Rekor entry logIndex {e['logIndex']} ({when}) IS pulse {s_:04d}'s anchor, but its record has been missing from the anchors branch for {age/60:.0f} min"); unexplained.append(u)
+                    say(f"[FAIL] Rekor entry logIndex {e['logIndex']} ({when}) IS {s_ if isinstance(s_, str) else 'pulse %04d' % s_}'s anchor, but its record has been missing from the anchors branch for {age/60:.0f} min"); unexplained.append(u)
                 else:
-                    say(f"[WAIT] Rekor entry logIndex {e['logIndex']} ({when}) is pulse {s_:04d}'s anchor; its record is not on the anchors branch yet (in flight)"); flight.append(u)
+                    say(f"[WAIT] Rekor entry logIndex {e['logIndex']} ({when}) is {s_ if isinstance(s_, str) else 'pulse %04d' % s_}'s anchor; its record is not on the anchors branch yet (in flight)"); flight.append(u)
             else:
                 say(f"[FAIL] Rekor entry {u[:16]}… (logIndex {e['logIndex']}, {when}) is signed by the anchor key but its hash {h[:16]}… matches NO published pulse — possible hidden branch / split view"); unexplained.append(u)
         T["unexplained_rekor_entries"] = len(unexplained); T["rekor_entries_in_flight"] = len(flight)

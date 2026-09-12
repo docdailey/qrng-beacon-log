@@ -67,3 +67,38 @@ def test_13_commit_after_a_skip_is_accepted_by_the_vendored_verifier():
     assert r.returncode == 0
 def test_14_spec_version_is_0_3():
     rc, out, err = nb("--version"); assert "notbefore/spec/0.3" in out and "0.3.0" in out
+def test_15_client_side_split_view_detector(tmp_path, monkeypatch):
+    """TLOG.md §8: with a (temporary) checkpoint identity, `verify` proves inclusion against the log's checkpoint and
+    refuses when the served head is not an append-only extension of the head this machine saw before."""
+    import notbefore.tlogcheck as TC, notbefore.check as C, notbefore.log as NL
+    T = TC.T
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    log = tmp_path / "log"; (log / "chain").mkdir(parents=True)
+    for f in sorted(os.listdir(os.path.join(LOG, "chain"))):
+        if f.endswith(".json") and "tsa" not in f: shutil.copy2(os.path.join(LOG, "chain", f), log / "chain" / f)
+    priv = T.Ed25519PrivateKey.generate(); pub_raw = priv.public_key().public_bytes(T.serialization.Encoding.Raw, T.serialization.PublicFormat.Raw)
+    origin = "test.invalid/log"
+    monkeypatch.setattr(TC, "identity", lambda: {"origin": origin, "public_key_file": "keys/x.pub", "enabled": True})
+    monkeypatch.setattr(T, "load_pub_raw", lambda p: pub_raw)
+    leaves = T.chain_leaves(str(log / "chain")); n = len(leaves)
+    def publish(size, leaves_for_root): (log / "checkpoint").write_text(T.sign_note(T.checkpoint_body(origin, size, T.mth(leaves_for_root[:size])), origin, priv))
+    publish(n, leaves)
+    src = NL.LogSource(log_dir=str(log)); R = C.CheckResult(23)
+    assert TC.check(src, (22, 23), R, refetch=False) == "ok" and R.ok, R.lines
+    assert any("is included in the checkpointed tree" in l and "0023" in l for l in R.lines) and any("first checkpoint seen" in l for l in R.lines)
+    # honest growth: same log, one more (fake) pulse appended -> consistent
+    j = json.load(open(log / "chain" / f"pulse-{n:04d}.json")); j["core"]["seq"] = n + 1; json.dump(j, open(log / "chain" / f"pulse-{n+1:04d}.json", "w"))
+    leaves2 = T.chain_leaves(str(log / "chain")); publish(n + 1, leaves2)
+    R2 = C.CheckResult(23); assert TC.check(NL.LogSource(log_dir=str(log)), (22, 23), R2, refetch=False) == "ok" and any("consistent with the head this machine last saw" in l for l in R2.lines), R2.lines
+    # split view: a different history of the same size (two pulses swapped), checkpoint signed by the same key
+    forked = list(leaves2); forked[10], forked[11] = forked[11], forked[10]
+    (log / "checkpoint").write_text(T.sign_note(T.checkpoint_body(origin, n + 1, T.mth(forked)), origin, priv))
+    R3 = C.CheckResult(23); st = TC.check(NL.LogSource(log_dir=str(log)), (22, 23), R3, refetch=False)
+    # the served pulses still hash to the honest root, so the forked checkpoint fails "root recomputes" before consistency:
+    assert not R3.ok and any("root at size" in l and l.startswith("[FAIL]") for l in R3.lines), R3.lines
+    # now serve a log whose files really are the forked order (rename two pulses' contents) -> consistency vs cached head must fail
+    a, b = log / "chain" / "pulse-0011.json", log / "chain" / "pulse-0012.json"; ja, jb = json.load(open(a)), json.load(open(b))
+    ja["core"]["seq"], jb["core"]["seq"] = 12, 11; json.dump(jb, open(a, "w")); json.dump(ja, open(b, "w"))
+    leaves3 = T.chain_leaves(str(log / "chain")); publish(n + 1, leaves3)      # a checkpoint that honestly covers the FORKED history
+    R4 = C.CheckResult(23); st4 = TC.check(NL.LogSource(log_dir=str(log)), (22, 23), R4, refetch=False)
+    assert st4 == "SPLIT VIEW" and any("SPLIT VIEW / ROLLBACK" in l for l in R4.lines), R4.lines

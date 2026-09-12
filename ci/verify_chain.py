@@ -98,12 +98,19 @@ rc, out = run("python3", "tlog.py", "root")
 if rc == 0:
     r = json.loads(out.strip().splitlines()[-1]); say(f"[INFO] tlog root over chain/ at size {r['size']}: {r['root_sha256']}  (checkpoints begin once the origin is decided; TLOG.md §4.1)")
 else: say("[FAIL] tlog.py root could not build the tree over chain/ (seq gap?)"); T["failures"] += 1
-if os.path.exists(os.path.join(ROOT, "checkpoint")) and os.path.exists(os.path.join(ROOT, "keys", "CHECKPOINT.json")):
-    cp = json.load(open(os.path.join(ROOT, "keys", "CHECKPOINT.json")))
-    older = sorted(glob.glob(os.path.join(ROOT, "checkpoints", "*")))
-    args = ["python3", "tlog.py", "verify", "checkpoint", "--origin", cp["origin"], "--pub", cp["public_key_file"]] + (["--old", older[-2]] if len(older) >= 2 else [])
-    rc, out = run(*args); say(f"[{'PASS' if rc == 0 else 'FAIL'}] signed checkpoint verifies (signature, root recomputes, consistency with the previous checkpoint)"); T["failures"] += rc != 0
-    if rc: print(out)
+cp_id = json.load(open(os.path.join(ROOT, "keys", "CHECKPOINT.json"))) if os.path.exists(os.path.join(ROOT, "keys", "CHECKPOINT.json")) else None
+if cp_id and cp_id.get("enabled"):
+    cpf = os.path.join(ROOT, "checkpoint")
+    if not os.path.exists(cpf): say("[FAIL] identity enabled but no `checkpoint` file published"); T["failures"] += 1
+    else:
+        older = sorted(glob.glob(os.path.join(ROOT, "checkpoints", "[0-9]*")))
+        args = ["python3", "tlog.py", "verify", "checkpoint", "--origin", cp_id["origin"], "--pub", cp_id["public_key_file"]] + (["--old", older[-2]] if len(older) >= 2 else [])
+        rc, out = run(*args); say(f"[{'PASS' if rc == 0 else 'FAIL'}] signed checkpoint ({cp_id['origin']}) verifies: signature, root recomputes from chain/, consistent with the previous checkpoint"); T["failures"] += rc != 0
+        if rc: print(out)
+        size = int(open(cpf).read().split("\n")[1]); fresh = size == T["pulses"]
+        say(f"[{'PASS' if fresh else 'FAIL'}] checkpoint size {size} == {T['pulses']} published pulses (every pulse is covered by the head in the same commit)"); T["failures"] += not fresh
+        if older and open(older[-1]).read() != open(cpf).read(): say("[FAIL] `checkpoint` differs from the newest checkpoints/ entry"); T["failures"] += 1
+elif cp_id: say(f"[INFO] checkpoint identity {cp_id['origin']} present but not enabled — no checkpoints signed yet")
 if REQ_BLS and T["bls_skipped"]: say(f"[FAIL] BLS skipped {T['bls_skipped']} time(s) with REQUIRE_BLS=1"); T["failures"] += 1
 say("\n=== verification tally ===")
 for k, v in T.items(): say(f"  {k:24s} {v}")

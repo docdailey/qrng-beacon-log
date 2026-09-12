@@ -71,6 +71,25 @@ for pf in L.pulse_files(os.path.join(ROOT, "chain")):
                 say(f"[OK]   {seq:04d} ots upgraded: Bitcoin block {rec['ots']['bitcoin_block_height']}")
         T["ots_complete" if json.load(open(rec_path))["ots"].get("status") == "complete" else "ots_pending"] += 1
 
+# ---- signed checkpoints (TLOG.md): same anchoring, record name checkpoint-NNNNNN; no OTS (one digest per hour is enough via the pulses)
+for cf in L.checkpoint_files(ROOT):
+    size = int(os.path.basename(cf)); stem = os.path.join(A, f"checkpoint-{size:06d}"); rec_path = stem + ".anchor.json"; stmt_path = stem + ".stmt.json"
+    statement, st = L.checkpoint_statement_for(cf)
+    if os.path.exists(rec_path):
+        if open(stmt_path, "rb").read() != statement: say(f"[FAIL] checkpoint {size:06d}: published statement differs from the file — a checkpoint changed after anchoring"); T["errors"] += 1
+        continue
+    try:
+        sig = L.sign(priv, statement); uuid, entry, how = L.rekor_upload(statement, sig, pub_pem); T["rekor_" + how] += 1
+        rec = {"anchor": L.ANCHOR_VERSION, "type": "checkpoint", "tree_size": size, "origin": st["origin"], "root_b64": st["root_b64"],
+               "statement_sha256": L.sha256(statement), "signature_b64": base64.b64encode(sig).decode(), "anchor_key_id": kid, "anchor_key_file": "keys/anchor.pub",
+               "rekor": {"server": L.REKOR, "uuid": uuid, "logIndex": entry["logIndex"], "integratedTime": entry["integratedTime"],
+                         "integrated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(entry["integratedTime"])), "logID": entry["logID"], "entry": entry},
+               "anchored_by": {"run_url": os.environ.get("RUN_URL"), "main_commit": os.environ.get("GITHUB_SHA"), "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}}
+        with open(stmt_path, "wb") as f: f.write(statement)
+        json.dump(rec, open(rec_path, "w"), indent=1, sort_keys=True); T["anchored_now"] += 1
+        say(f"[OK]   checkpoint {size:06d} rekor {how} logIndex {entry['logIndex']} integratedTime {rec['rekor']['integrated_utc']}")
+    except Exception as e: say(f"[FAIL] checkpoint {size:06d}: {type(e).__name__}: {e}"); T["errors"] += 1
+
 # INDEX.tsv — one line per anchored pulse, for humans and for grep
 rows = []
 for f in sorted(os.listdir(A)):

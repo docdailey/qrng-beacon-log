@@ -134,11 +134,11 @@ qhL7yq2V0mZ1cC1hVQ0rXnFhq0zvHn2Kx3eGx0W7Ays=
 MUST be non-empty, stable **forever**, and unique to this log. Convention is a schema-less URL.
 It is also the signature key name (§5).
 
-**Decision required (Bill).** A domain you control and will not retire. `notbefore.org` was unregistered on
-2026-09-12 — `notbefore.org/log` is the natural choice if you register it; otherwise a domain already yours.
-Do **not** use a `github.com/...` path: the origin outlives any particular hosting choice, and moving it later
-means a new log identity. No checkpoint is signed until this is decided; the code takes `--origin` and refuses
-without it.
+**Decided 2026-09-12: the domain is `notbefore.net` (Bill holds it; site in progress).** Origin line: **`notbefore.net/log`**
+— recorded in `keys/CHECKPOINT.json` with the checkpoint public key (`keys/checkpoint.pub`, Ed25519, origin-bound
+key ID `8b627e7f`; private key `~/beacon/checkpoint.key` on think, distinct from the aggregator key). The identity
+file carries `enabled: false` until the exact string is confirmed; the first signed checkpoint fixes it forever.
+Do **not** use a `github.com/...` path: the origin outlives any particular hosting choice.
 
 ### 4.2 Extension lines
 
@@ -292,9 +292,8 @@ Freeze all 45 records first (§2.1) and add the CI check that recomputes every l
 
 ## 12. Decisions needed before implementation
 
-1. **Origin line** — the one irreversible choice here.
-2. **Checkpoint signing key** — new Ed25519 key, and where it lives (the entropy signer runs
-   under a forced command on `protectli`; the checkpoint key need not be on the same host).
+1. ~~**Origin line**~~ — `notbefore.net/log` (domain decided 2026-09-12; string awaiting one-word confirmation).
+2. ~~**Checkpoint signing key**~~ — generated on think, `~/beacon/checkpoint.key`, public key in `keys/checkpoint.pub` (2026-09-12). **Back it up with the anchor key.**
 3. ~~Failure pulses as leaves~~ — yes, and skip pulses (decided).
 4. **Witnesses to approach** — transparency-dev and sigstore operators first; they add logs by
    configuration.
@@ -355,7 +354,9 @@ of TAI … metrologically traceable" would have been a CLAIMS violation on first
 | RFC 6962 tree, inclusion path, consistency proof, RFC 9162 verifiers | `tlog.py`, self-tested against CT vectors |
 | checkpoint body, signed note, Ed25519 key-ID derivation, note verification | `tlog.py checkpoint / sign / verify` |
 | CI: self-test on every push; recompute the live root; verify `checkpoint` when present | `ci/verify_chain.py` |
-| aggregator writes `checkpoint` + `checkpoints/NNNN` in the pulse's commit | **blocked on the origin decision** |
-| Rekor-anchoring of each checkpoint | after the above |
+| aggregator writes `checkpoint` + `checkpoints/NNNNNN` in the pulse's commit (`tlog.py publish-checkpoint`, append-only self-check, rollback refusal) | implemented, dry-run tested; **enabled the moment the origin string is confirmed** |
+| Rekor-anchoring of each checkpoint (`anchors/checkpoint-NNNNNN.*`, expected by the split-view check) | implemented |
+| CI: checkpoint required once enabled, size == pulses, consistent with the previous one | implemented |
+| `notbefore checkpoint`; `verify` proves the pair's inclusion and checks consistency with the head this machine last saw | implemented; ships as 0.4.0 with the first checkpoint |
 | witness submission (`tlog-witness`) | after the above; needs operators to configure the log (outreach is HELD) |
-| `notbefore checkpoint`, inclusion + cached-head consistency in `verify` | 0.4.0, after checkpoints exist |
+| `notbefore.net` serving `/checkpoint`, `/checkpoints/NNNNNN`, the spec and install line | Bill is standing the site up; content can be published from this repo by CI |
