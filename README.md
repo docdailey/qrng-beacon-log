@@ -5,7 +5,7 @@
 > A working experiment in proving not merely where public randomness came from, but when its private
 > contribution became irrevocably fixed — and making a withheld reveal publicly detectable.
 
-**Spec:** [`PROTOCOL.md`](PROTOCOL.md) (normative) · **Product contract:** [`NOTBEFORE.md`](NOTBEFORE.md) (the seed \(V\) and the labeled derive layer; draft 0.2) · **CLI:** `pip install notbefore` ([`cli/`](cli/) — `verify|value|seed|shuffle|split|sample|assign|id|range|bytes|explain|pin|checkpoint`, pinned vendored verifier; **how to use it: [`USAGE.md`](USAGE.md)**) · **Transparency log:** [`TLOG.md`](TLOG.md) (RFC 6962 tree + C2SP checkpoints, `tlog.py`; draft 2) · **Claims discipline:** [`CLAIMS.md`](CLAIMS.md) ·
+**Spec:** [`PROTOCOL.md`](PROTOCOL.md) (normative) · **Product contract:** [`NOTBEFORE.md`](NOTBEFORE.md) (the seed \(V\) and the labeled derive layer; draft 0.4) · **CLI:** `pip install notbefore` ([`cli/`](cli/) — `verify|value|seed|shuffle|split|sample|assign|id|range|bytes|explain|pin|checkpoint`, pinned vendored verifier; **how to use it: [`USAGE.md`](USAGE.md)**) · **Transparency log:** [`TLOG.md`](TLOG.md) (RFC 6962 tree + C2SP checkpoints, `tlog.py`; draft 2) · **Claims discipline:** [`CLAIMS.md`](CLAIMS.md) ·
 **Trust assumptions:** [`PUBLICATION.md`](PUBLICATION.md) · **Cadence + failure semantics:** [`CADENCE.md`](CADENCE.md) ·
 **Why:** [`THESIS.md`](THESIS.md) · **Keys:** [`keys/KEYS.json`](keys/KEYS.json) (history with validity windows) ·
 **Known defects:** [`ERRATA.md`](ERRATA.md) — published pulses are never edited; defects are logged and fixed forward ·

@@ -326,7 +326,7 @@ The shipped CLI writes this skeleton plus: `pulse_hash_commit`, `drand_round`, `
 
 ## 8. CLI (normative behavior)
 
-**Status: implemented** — package `notbefore` 0.2.0 in `cli/` of the log repository (**`pip install notbefore`** — released to PyPI 2026-09-12 13:41 UTC via Trusted Publishing, with Sigstore attestations). The verifier, keys, drand group key, Rekor key, freetsa CA and expected host configuration are **vendored** in the package and pinned to a named log commit (`notbefore --version`); the log is read as data. §14 is its acceptance suite and runs in CI (`.github/workflows/cli.yml`). Requires `git` and `openssl` on PATH.
+**Status: implemented** — package `notbefore` in `cli/` of the log repository (the current release is whatever PyPI serves; `notbefore --version` prints package, spec and vendored-verifier commit — this document deliberately names no package version) (**`pip install notbefore`** — released to PyPI 2026-09-12 13:41 UTC via Trusted Publishing, with Sigstore attestations). The verifier, keys, drand group key, Rekor key, freetsa CA and expected host configuration are **vendored** in the package and pinned to a named log commit (`notbefore --version`); the log is read as data. §14 is its acceptance suite and runs in CI (`.github/workflows/cli.yml`). Requires `git` and `openssl` on PATH.
 
 ```text
 notbefore verify   <seq>                                   # exit 0/1; transcript on stderr
@@ -476,4 +476,4 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 4. **Publication anchors** (Rekor + OpenTimestamps, ERR-008) were not in 0.1: added §4.5, verification step 12, an eligibility row, a fourth public clock (§9), and the split-view row of §10 rewritten from "pin a clone" to "detectable, not prevented".
 5. Non-goals gained "immutability / prevention of equivocation" and "any cryptocurrency position" (§1.2), matching `CLAIMS.md`.
 6. Object paths in a v0.5 pulse were added to §3 so an implementor need not guess.
-7. §8 now describes the shipped CLI (`cli/`, package `notbefore` 0.2.0, vendored pinned verifier); at 0.2's first draft it said the CLI did not exist yet.
+7. §8 now describes the shipped CLI (`cli/`, package `notbefore`, vendored pinned verifier); at 0.2's first draft it said the CLI did not exist yet.

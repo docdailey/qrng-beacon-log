@@ -238,7 +238,7 @@ were stamped from it and are superseded.
   claim we can prove: "fixed before round \(R\), not selected after".
 - ❌ Never "NotBefore-certified", "NotBefore-grade", or any phrasing that makes the name sound like a standard or an
   accreditation. ❌ Never "PulseTrain" (rejected 2026-09-12: crowded name space, an existing hardware product).
-- ✅ The CLI shipped 2026-09-12 (`cli/`, package `notbefore` 0.2.0). Released to PyPI 2026-09-12 (`pip install notbefore`, 0.2.0). ✅ Say "the CLI verifies with a pinned, vendored verifier"; ❌ never say the package "certifies" a pulse.
+- ✅ The CLI shipped 2026-09-12 (`cli/`, package `notbefore`; first PyPI release 0.2.0 that day, current release per PyPI — never quote a package version in the normative spec). ✅ Say "the CLI verifies with a pinned, vendored verifier"; ❌ never say the package "certifies" a pulse.
 
 ## Added 2026-09-12 — skip pulses (binding)
 

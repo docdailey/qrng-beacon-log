@@ -40,7 +40,7 @@ expected host configuration are **vendored inside this package**, pinned at a na
 verifier means updating the package — deliberately.
 
 **Two publication surfaces.** The log is read from git (a cached clone of the repository, or `--log-dir`);
-`https://notbefore.net` serves the same repository statically. Once checkpoints are enabled, `verify` also fetches
+`https://notbefore.net` serves the same repository statically. Since 2026-09-12 (log identity `notbefore.net/log`), `verify` also fetches
 `https://notbefore.net/checkpoint` and requires it to be the same head as git's, or an append-only relative of it —
 two different heads under the log's key is a split between surfaces and fails loudly (`--checkpoint-url` overrides).
 
