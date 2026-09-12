@@ -193,3 +193,15 @@ were stamped from it and are superseded.
 - ❌ Never present a subset rate as an archive rate, and never quote a "verified-leaves-only" root as the archive root.
 - Never quote `c88c4320…` as the archive's integrity root. Quote `manifest-verified.json` once it exists, with its
   leaf count, and quote the mismatch count beside it.
+
+
+## Added 2026-09-12 after review #3 (binding)
+
+- Pulses **0018/0019** fail the current verifier (ERR-007). Describe them as "first v0.5 pair; witness guard misfired;
+  content valid on live evidence; formally non-compliant". The first fully compliant v0.5 pair will be named here.
+- ❌ "A dishonest aggregator cannot fabricate any host's facts" is **withdrawn** until host isolation ships (review #3
+  finding 1): today the aggregator's SSH identity can reach the keys and secrets on each host. ✅ Say: "each host signs its
+  own statement; isolation of keys and secrets from the aggregator's SSH identity is in progress."
+- ❌ Do not call the watcher independent while it trusts code or keys from the watched repository. ✅ v3 watcher runs only
+  its operator's pinned verifier and keys (`watcher/make_pins.py`).
+- The archive figure is **1.92 % of the archive, 5.6 % of the scanned subset**; never the reverse.

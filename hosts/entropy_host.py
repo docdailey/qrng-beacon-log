@@ -4,8 +4,10 @@ its own statements. The aggregator never sees E before the reveal and cannot fab
 the host did not make.
 
   entropy_host.py commit  <seq> <target_round> <chain_hash>   -> signed commit statement (no E)
-  entropy_host.py reveal  <seq> <commit_pulse_hash>           -> signed reveal statement (with E)
-  entropy_host.py abandon <seq> <reason>                      -> signed abandonment (E retired, never revealed)
+  entropy_host.py reveal-prepare  <seq> <commit_pulse_hash>          -> signed reveal statement (with E); secret kept as .revealing
+  entropy_host.py abandon-prepare <seq> <commit_pulse_hash> <reason> -> signed failure statement bound to the commit pulse; secret kept as .abandoning
+  entropy_host.py finalize        <seq> <resolving_pulse_hash>       -> ONLY after the resolving pulse is durable+published: .revealing->.revealed / .abandoning->.abandoned
+  (prepare is idempotent: a crash between prepare and finalize leaves E recoverable; nothing is finalized on a promise)
 """
 import sys, os, json, base64, hashlib, urllib.request, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -50,9 +52,16 @@ def cmd_commit(seq, target_round, chain_hash):
                              "statement_sig": signed["signature"]["sig_b64"]}).encode()); os.close(fd)
     print(json.dumps(signed))
 
-def cmd_reveal(seq, commit_pulse_hash):
-    sp = os.path.join(PEND, f"{int(seq):04d}.secret")
-    if not os.path.exists(sp): die(f"no held secret for seq {seq}")
+def _find(seq, states):
+    for st in states:
+        p = os.path.join(PEND, f"{int(seq):04d}.{st}")
+        if os.path.exists(p): return p, st
+    return None, None
+
+def cmd_reveal(seq, commit_pulse_hash):          # reveal-prepare
+    sp, st = _find(seq, ("secret", "revealing"))
+    if not sp: die(f"no held or revealing secret for seq {seq}")
+    if st == "secret": os.replace(sp, sp.replace(".secret", ".revealing")); sp = sp.replace(".secret", ".revealing")
     sec = json.load(open(sp)); E = bytes.fromhex(sec["E"])
     if hashlib.sha256(COMMIT_DOMAIN + E).hexdigest() != sec["commitment"]: die("held E does not match commitment")
     # host-side check that the target round has actually been released (drand's own clock)
@@ -70,25 +79,37 @@ def cmd_reveal(seq, commit_pulse_hash):
                "drand_latest_round_seen_by_host": released,
                "commit_statement_sig_b64": sec["statement_sig"]})
     signed = A.sign_statement(ROLE, st)
-    os.replace(sp, sp.replace(".secret", ".revealed"))
-    print(json.dumps(signed))
+    print(json.dumps(signed))                    # NOT finalized here: see cmd_finalize
 
-def cmd_abandon(seq, reason):
-    sp = os.path.join(PEND, f"{int(seq):04d}.secret")
-    if not os.path.exists(sp): die(f"no held secret for seq {seq}")
+def cmd_abandon(seq, commit_pulse_hash, reason):  # abandon-prepare; binds to the COMMIT PULSE HASH per PROTOCOL v0.5
+    sp, st0 = _find(seq, ("secret", "revealing", "abandoning"))
+    if not sp: die(f"no secret for seq {seq}")
+    if st0 != "abandoning": os.replace(sp, os.path.join(PEND, f"{int(seq):04d}.abandoning")); sp = os.path.join(PEND, f"{int(seq):04d}.abandoning")
     sec = json.load(open(sp))
-    st = A.base_statement(ROLE, HOST, seq, "failure", sec["commitment"], sec["chain_hash"], TOOLS)
-    st.update({"entropy_commitment": sec["commitment"], "target_round": sec["target_round"], "reason": reason,
+    st = A.base_statement(ROLE, HOST, seq, "failure", commit_pulse_hash, sec["chain_hash"], TOOLS)
+    st.update({"commit_seq": int(seq), "commit_pulse_hash": commit_pulse_hash, "entropy_commitment": sec["commitment"],
+               "target_round": sec["target_round"], "reason": reason,
                "custody": "E retired unrevealed; this host will never disclose it"})
-    signed = A.sign_statement(ROLE, st)
-    os.replace(sp, sp.replace(".secret", ".abandoned"))
-    print(json.dumps(signed))
+    print(json.dumps(A.sign_statement(ROLE, st)))
+
+def cmd_finalize(seq, resolving_pulse_hash):
+    """Called by the aggregator ONLY after the reveal/failure pulse is written AND pushed. Idempotent."""
+    sp, st = _find(seq, ("revealing", "abandoning", "revealed", "abandoned"))
+    if not sp: die(f"nothing to finalize for seq {seq}")
+    if st in ("revealed", "abandoned"): print(json.dumps({"seq": int(seq), "state": st, "already": True})); return
+    final = sp.replace(".revealing", ".revealed").replace(".abandoning", ".abandoned")
+    sec = json.load(open(sp)); sec["resolved_by_pulse_hash"] = resolving_pulse_hash; sec["finalized_unix"] = int(time.time())
+    if st == "revealing": pass                                  # E may remain on disk; it is public now
+    json.dump(sec, open(sp, "w")); os.replace(sp, final)
+    print(json.dumps({"seq": int(seq), "state": os.path.basename(final).split(".")[-1], "resolved_by": resolving_pulse_hash}))
 
 def glob_pending():
-    return sorted(f for f in os.listdir(PEND) if f.endswith(".secret"))
+    return sorted(f for f in os.listdir(PEND) if f.endswith((".secret", ".revealing", ".abandoning")))
 
 if __name__ == "__main__":
     a = sys.argv[1:]
-    {"commit": lambda: cmd_commit(a[1], a[2], a[3]), "reveal": lambda: cmd_reveal(a[1], a[2]),
-     "abandon": lambda: cmd_abandon(a[1], " ".join(a[2:]) or "unspecified"),
+    {"commit": lambda: cmd_commit(a[1], a[2], a[3]),
+     "reveal-prepare": lambda: cmd_reveal(a[1], a[2]),
+     "abandon-prepare": lambda: cmd_abandon(a[1], a[2], " ".join(a[3:]) or "unspecified"),
+     "finalize": lambda: cmd_finalize(a[1], a[2]),
      "pending": lambda: print(json.dumps(glob_pending()))}[a[0]]()

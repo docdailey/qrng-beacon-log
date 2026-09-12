@@ -10,7 +10,8 @@
 **Why:** [`THESIS.md`](THESIS.md) · **Keys:** [`keys/KEYS.json`](keys/KEYS.json) (history with validity windows) ·
 **Known defects:** [`ERRATA.md`](ERRATA.md) — published pulses are never edited; defects are logged and fixed forward
 
-**Status: research prototype and adversarially honest design exercise — not infrastructure to consume.**
+**Status: research prototype and adversarially honest design exercise — not infrastructure to consume, and not yet
+hostile-operator-secure** (host isolation and watcher independence are the open items; see `ERRATA.md` ERR-007 and `CLAIMS.md`).
 The CI badge above re-verifies every pulse, link, commit/reveal pair, RFC 3161 token and the archive
 Merkle root hourly and on every push, with a live drand re-fetch.
 

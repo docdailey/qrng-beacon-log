@@ -243,13 +243,22 @@ def strict_main():
             else: chk(ok, f"{name}: key pinned for seq {core['seq']} — {desc}")
         return st
 
+    def clock_health(st, name):
+        """A REQUIRED clock statement must itself report a healthy clock. Signature alone is not enough (ERR-007)."""
+        g = (st.get("measurement") or {}).get("epoch_guard") or {}
+        sel = g.get("chrony_selects_refclock", g.get("chrony_selects_iphc"))
+        chk(g.get("epoch_ok") is True and sel is True and not g.get("ALERT"),
+            f"{name}: {st.get('host')} reports a healthy clock in its own statement (epoch_ok, hardware refclock selected, no alert)",
+            f"epoch_ok={g.get('epoch_ok')} selects_refclock={sel} alert={g.get('ALERT')}")
+
     if typ == "commit":
         C, R = d.get("entropy_commitment"), d.get("target_round")
         chk(_hex(C, 64) and isinstance(R, int), "derived.entropy_commitment is 64 hex and target_round is an int")
         e = stmt_ok("entropy", core["seq"], "commit", C)
         chk(e.get("entropy_commitment") == C and e.get("target_round") == R, "entropy host's own commitment and target round match derived")
         chk("entropy_hex" not in e, "commit statement discloses no entropy")
-        g = stmt_ok("gnss", core["seq"], "commit", C); stmt_ok("time", core["seq"], "commit", C); stmt_ok("witness", core["seq"], "commit", C)
+        g = stmt_ok("gnss", core["seq"], "commit", C); tm = stmt_ok("time", core["seq"], "commit", C); wt = stmt_ok("witness", core["seq"], "commit", C)
+        clock_health(tm, "time"); clock_health(wt, "witness")
         now = core["drand_at_commit"]; verify_drand(now, refetch)
         chk(R > now["round"], f"target round {R} is strictly after the round current at commit ({now['round']})")
         rel = S.release_time(R); chk(d.get("target_release_unix_s") == rel, f"derived.target_release_unix_s == genesis+(R-1)*period == {rel}")
@@ -257,7 +266,7 @@ def strict_main():
         chk(anchor < rel, f"GNSS anchor (from f9t's signed statement) precedes target release by {rel - anchor} s")
         chk(_D(d.get("anchor_utc_unix_s", "nan")) == anchor, "derived.anchor_utc_unix_s equals the GNSS host's signed anchor")
         eg = sts["time"]["statement"]["measurement"].get("epoch_guard", {})
-        chk(eg.get("epoch_ok") is True and eg.get("chrony_selects_iphc") is True, "p550 epoch guard passed inside p550's signed statement")
+        # (p550 guard is covered by clock_health above)
         if prev is not None:
             chk(prev["core"].get("type", "legacy") in ("legacy", "reveal", "failure") or "type" not in prev["core"], "state machine: commit follows a reveal, failure or legacy pulse")
     elif typ in ("reveal", "failure"):
@@ -267,7 +276,8 @@ def strict_main():
             e = stmt_ok("entropy", cs, "reveal", cph)
             E = bytes.fromhex(e.get("entropy_hex", "")); chk(len(E) == 32, "revealed entropy is 32 bytes")
             chk(hashlib.sha256(S.COMMIT_DOMAIN + E).hexdigest() == C, "SHA256(domain||E) == the commitment (entropy host's E matches what it committed)")
-            g = stmt_ok("gnss", core["seq"], "reveal", cph); stmt_ok("time", core["seq"], "reveal", cph); stmt_ok("witness", core["seq"], "reveal", cph)
+            g = stmt_ok("gnss", core["seq"], "reveal", cph); tm = stmt_ok("time", core["seq"], "reveal", cph); wt = stmt_ok("witness", core["seq"], "reveal", cph)
+            clock_health(tm, "time"); clock_health(wt, "witness")
             dr = core["drand"]; verify_drand(dr, refetch)
             R = dr["round"]; rel = S.release_time(R); chk(d.get("round_release_unix_s") == rel, f"derived.round_release_unix_s == computed {rel}")
             anchor = _D(g["measurement"]["anchor"]["utc_unix_s"]); chk(anchor >= rel, f"reveal GNSS anchor is {anchor - rel} s after the round release")
@@ -280,7 +290,9 @@ def strict_main():
                 chk(pc.get("derived", {}).get("target_round") == R, f"drand round {R} == committed target round")
                 cprev = _D(pc["derived"]["anchor_utc_unix_s"]); chk(cprev < rel, f"commit anchor precedes round release by {rel - cprev} s")
         else:
-            e = stmt_ok("entropy", cs, "failure", C)
+            e = stmt_ok("entropy", cs, "failure", cph)                  # PROTOCOL v0.5: failure binds to the COMMIT PULSE HASH
+            chk(e.get("entropy_commitment") == C and e.get("commit_pulse_hash") == cph, "entropy host's failure names the same commitment and commit pulse")
+            chk(e.get("reason") == d.get("reason"), "host-signed failure reason equals the aggregator's published reason")
             chk("entropy_hex" not in e, "failure statement discloses no entropy (E abandoned unrevealed)")
             for n in ("gnss", "time", "witness"):
                 if n in sts: stmt_ok(n, core["seq"], "failure", cph)

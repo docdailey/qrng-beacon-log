@@ -1,0 +1,7 @@
+{
+  "note": "Pulses that are EXPECTED to fail the current verifier because of a published erratum. CI counts them separately; any other failure still fails the build, and a listed pulse that unexpectedly PASSES is flagged so this list cannot silently hide anything. Pulses are immutable; the list only grows.",
+  "pulses": {
+    "18": {"erratum": "ERR-007", "expected_failure": "witness: k3 reports a healthy clock", "reason": "witness epoch guard misfired (kernel TAI offset unset on k3; refid PHC); clock healthy on live evidence"},
+    "19": {"erratum": "ERR-007", "expected_failure": "witness: k3 reports a healthy clock", "reason": "same as 18"}
+  }
+}

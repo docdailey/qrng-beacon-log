@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""beacon-cmd — the ONLY thing the aggregator can run on a role host (forced SSH command, user `beacon`).
+
+Reads the requested operation from SSH_ORIGINAL_COMMAND (or argv when run locally), validates it against a fixed
+allowlist and this host's fixed role, enforces a monotonic sequence per phase, and invokes the host's signer.
+Nothing here accepts a probe command, a role, a host name, or a path from the caller.
+"""
+import os, sys, json, re, shlex, subprocess, fcntl
+CFG = json.load(open("/etc/beacon/host.json"))          # {"role","host","probe":[...],"refid":...,"kind":"attest"|"entropy"}
+HOME = os.path.expanduser("~beacon"); STATE = os.path.join(HOME, "state.json"); BEACON = os.path.join(HOME, "beacon")
+HEX64 = re.compile(r"^[0-9a-f]{64}$"); PHASES = ("commit", "reveal", "failure")
+
+def die(m): sys.stderr.write("beacon-cmd: " + m + "\n"); sys.exit(2)
+def args():
+    raw = os.environ.get("SSH_ORIGINAL_COMMAND")
+    return shlex.split(raw) if raw else sys.argv[1:]
+def monotonic(phase, seq):
+    """Never sign a lower seq than already signed for this phase (replay / backdating guard)."""
+    with open(STATE, "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX); f.seek(0); st = json.loads(f.read() or "{}")
+        last = st.get(phase, 0)
+        if seq < last: die(f"seq {seq} < last signed {last} for phase {phase}")
+        st[phase] = seq; f.seek(0); f.truncate(); f.write(json.dumps(st))
+def run(cmd):
+    r = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=150)
+    sys.stdout.write(r.stdout); sys.stderr.write(r.stderr); sys.exit(r.returncode)
+
+a = args()
+if not a: die("no operation")
+op = a[0]
+if CFG["kind"] == "attest":
+    if op != "attest" or len(a) != 5: die("usage: attest <phase> <seq> <binding> <chain_hash>")
+    phase, seq, binding, chain = a[1], a[2], a[3], a[4]
+    if phase not in PHASES or not seq.isdigit() or not HEX64.match(binding) or not HEX64.match(chain): die("bad argument")
+    monotonic(phase, int(seq))
+    run(["python3", os.path.join(BEACON, "attest_host.py"), CFG["role"], CFG["host"], seq, phase, binding, chain, "--"] + CFG["probe"])
+elif CFG["kind"] == "entropy":
+    E = os.path.join(BEACON, "entropy_host.py")
+    if op == "commit" and len(a) == 4 and a[1].isdigit() and a[2].isdigit() and HEX64.match(a[3]):
+        monotonic("commit", int(a[1])); run(["python3", E, "commit", a[1], a[2], a[3]])
+    if op == "reveal-prepare" and len(a) == 3 and a[1].isdigit() and HEX64.match(a[2]):
+        monotonic("reveal", int(a[1])); run(["python3", E, "reveal-prepare", a[1], a[2]])
+    if op == "abandon-prepare" and len(a) >= 4 and a[1].isdigit() and HEX64.match(a[2]):
+        reason = re.sub(r"[^A-Za-z0-9 ._:{}\",=-]", "", " ".join(a[3:]))[:200]
+        monotonic("failure", int(a[1])); run(["python3", E, "abandon-prepare", a[1], a[2], reason])
+    if op == "finalize" and len(a) == 3 and a[1].isdigit() and HEX64.match(a[2]): run(["python3", E, "finalize", a[1], a[2]])
+    if op == "pending" and len(a) == 1: run(["python3", E, "pending"])
+    die("operation not allowed: " + op)
+else:
+    die("misconfigured host")

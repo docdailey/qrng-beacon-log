@@ -6,6 +6,27 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-007 — required witness statements in pulses 0018/0019 report "invalid" while the pulses verify
+
+**Affected:** pulses **0018, 0019** (the first v0.5 pair), `core.statements.witness.statement.measurement.epoch_guard`.
+**What was wrong:** the witness (k3) statement carries `epoch_ok: false`, `chrony_selects_iphc: false` and an ALERT
+text saying timestamps from this clock are invalid — yet the strict verifier passed the pulses, because it checked the
+witness's **signature** and never its **content**. Two defects: (1) the epoch guard was written for p550 and misfires on
+k3: k3's chrony disciplines from its PHC with `offset -37` rather than the `tai` option, so its kernel TAI offset is
+**0** and the guard computed a 37 s "epoch error"; and k3's refclock id is `PHC`, not `IPHC`; (2) the verifier treated
+required clock statements as attested-if-signed.
+**Was k3's clock actually bad?** No, on live evidence taken 2026-09-12 02:3x UTC: PHC − CLOCK_REALTIME = 36.999985 s
+(PHC holds TAI, system UTC — exactly right), chrony stratum 1 selecting `PHC` at RMS 15 ns, ptp4l offset to the BMC
+grandmaster −6 ns. The guard's verdict was wrong; the pulses' *timestamps* were fine. That does not excuse a pulse that
+says "invalid" and passes.
+**Fix (2026-09-12):** the probe is host-aware (expected refclock id passed per host; when the kernel TAI offset is
+unset it uses the IERS constant and says so); the **aggregator refuses to mint** if a required clock statement reports
+an unhealthy clock; **the verifier now fails a pulse whose required time or witness statement reports
+`epoch_ok != true`, an unselected hardware refclock, or any ALERT** — pulses 0018/0019 therefore now **fail** the current
+verifier, as they should, and are recorded here as valid-in-content but formally non-compliant. Latent issue also
+logged: k3's `offset -37` is the hardcoded leap-second form; it should be the `tai` option (gap #10).
+**Found by:** external reviewer, 2026-09-12 (review #3, finding 4).
+
 ## ERR-006 — archive manifest hashes do not match the bytes on disk for at least 1.9 % of blocks (PRELIMINARY)
 
 **Affected:** the archive commitment root **`c88c4320…2738`** (`merkle/manifest.json`), the claim "committed to

@@ -16,6 +16,37 @@ verifies each statement, assembles `core`, and signs only the assembly with a fi
 aggregator therefore cannot fabricate any host's facts. All host scripts are published under `hosts/` and
 version-bound into each pulse by SHA-256 (`core.tooling`).
 
+### Trust boundary (stated precisely)
+Two different adversaries, two different answers:
+- **A hostile or compromised aggregator (think) or aggregator process** cannot forge any host's facts once host
+  isolation is deployed (`hosts/ISOLATION.md`): each host's key and secret live under a dedicated `beacon` OS user,
+  and the aggregator's SSH identity can run exactly one fixed-role forced command with locally validated
+  `phase/seq/binding` and a monotonic-seq guard. **Until isolation is live on a host, that host's statements prove
+  origin-by-signature only**, and `CLAIMS.md` says so.
+- **A hostile operator** (the person who administers all machines) is **out of scope**: nothing in this protocol
+  defends against them. What defends the consumer against the operator is the external structure — drand,
+  RFC 3161 tokens, and a watcher running the operator-independent pinned verifier — which bounds *what* the operator
+  can do (not before the round; not selected after commitment; not withheld without a public, attested record).
+
+### Resolution is two-phase (crash-safe)
+The entropy host **prepares** a reveal or abandonment (statement signed, secret kept as `.revealing`/`.abandoning`)
+and **finalizes** only when the aggregator confirms the resolving pulse is written **and published**. A crash between
+prepare and finalize leaves `E` recoverable; prepare is idempotent. A reveal is refused once the deadline has passed;
+the cycle records a signed failure instead.
+
+### Required clock statements must report a healthy clock
+For `time` and `witness`, the verifier requires the statement's own `epoch_guard` to report `epoch_ok: true`, the
+host's hardware refclock selected, and no alert. A signed statement that says "invalid" fails the pulse (ERR-007).
+The aggregator refuses to mint such a pulse.
+
+### Failure pulses
+The entropy host's failure statement binds to the **commit pulse hash** and carries the reason; the verifier requires
+that reason to equal the aggregator's published `derived.reason`.
+
+### Known non-compliance
+Pulses are immutable. When a verifier change makes an already-published pulse non-compliant, it is listed in
+`ci/KNOWN_NONCOMPLIANT.json` with its erratum; CI counts it separately and fails if it ever unexpectedly passes.
+
 ### Canonical form
 `canon(x)` = `json.dumps(x, sort_keys=True, separators=(",", ":"), ensure_ascii=False)` as UTF-8, over a value
 domain containing **no floats and no integers outside ±(2⁵³−1)**. Producers rewrite every float and every

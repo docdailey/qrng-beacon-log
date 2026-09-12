@@ -11,8 +11,9 @@ sys.path.insert(0, os.path.join(ROOT, "hosts")); sys.path.insert(0, ROOT)
 import schema as S
 REQ_BLS = os.environ.get("REQUIRE_BLS", "1") == "1"; REFETCH = os.environ.get("REFETCH") == "1"
 V05_FROM = 18
+KNOWN = json.load(open(os.path.join(ROOT, "ci", "KNOWN_NONCOMPLIANT.json"))).get("pulses", {})
 pulses = sorted(f for f in glob.glob(f"{ROOT}/chain/pulse-*.json") if re.search(r"pulse-\d{4}\.json$", f))
-T = dict(pulses=0, v05_pulses=0, signatures=0, host_statements=0, chain_links=0, commit_pulses=0, reveal_pulses=0, failure_pulses=0,
+T = dict(pulses=0, known_noncompliant=0, unexpected_pass_of_listed=0, v05_pulses=0, signatures=0, host_statements=0, chain_links=0, commit_pulses=0, reveal_pulses=0, failure_pulses=0,
          commit_reveal_pairs=0, bls_verified=0, bls_skipped=0, drand_refetched=0, tsa_tokens=0, tsa_min_margin_s=None,
          err004_warnings=0, tooling_drift_warnings=0, state_machine_violations=0, failures=0)
 lines = []
@@ -37,6 +38,13 @@ for p in pulses:
     T[f"{typ}_pulses"] = T.get(f"{typ}_pulses", 0) + (typ in ("commit", "reveal", "failure"))
     if typ == "reveal": T["commit_reveal_pairs"] += out.count("predecessor IS the referenced commit")
     bad = rc != 0 or (REQ_BLS and "[WARN] BLS verification skipped" in out)
+    kn = KNOWN.get(str(core["seq"]))
+    if kn and bad and kn["expected_failure"] in out:
+        T["known_noncompliant"] += 1; bad = False
+        say(f"[KNOWN-NONCOMPLIANT {kn['erratum']}] {os.path.basename(p)} fails as documented: {kn['expected_failure']}")
+    elif kn and not bad:
+        T["unexpected_pass_of_listed"] += 1; bad = True
+        say(f"[FAIL] {os.path.basename(p)} is listed under {kn['erratum']} but PASSED - the list or the verifier is wrong")
     # state machine across the chain (v0.5 era)
     if prev_core is not None and (v05 or prev_core.get("v") == "0.5"):
         pt = prev_core.get("type", "legacy")

@@ -44,7 +44,9 @@ def fail(seq, reason, extra=None):
         log("failure pulse minted: " + out.strip().replace("\n", " ")[:160])
     except Exception as e:
         log(f"could not mint failure pulse: {e}")
-    try: publish(f"FAILURE pulse for commit {seq}: {reason}")
+    try:
+        publish(f"FAILURE pulse for commit {seq}: {reason}")
+        log("finalize: " + run("python3", "pulse.py", "finalize", check=False).strip()[:120])
     except Exception as e: log(f"could not publish failure pulse: {e}")
     sys.exit(1)
 
@@ -73,7 +75,9 @@ def main():
         if time.time() > release + REVEAL_DEADLINE_S - 60:
             fail(seq, "round-never-observed", {"last_check_utc": time.strftime("%H:%M:%SZ", time.gmtime())})
         time.sleep(3)
-    # ---- REVEAL ----
+    # ---- REVEAL (only if it can still be published inside the deadline; otherwise a signed failure) ----
+    if time.time() > release + REVEAL_DEADLINE_S - 90:
+        fail(seq, "reveal-window-missed", {"now_minus_release_s": round(time.time() - release, 1)})
     try:
         rout = json.loads(run("python3", "pulse.py", "reveal"))
     except Exception as e:
@@ -81,8 +85,8 @@ def main():
     pushed = publish(f"REVEAL pulse {rout['seq']} (commit {seq}, drand round {target})")
     late = pushed - release
     log(f"revealed seq {rout['seq']} value {rout['attested_value'][:16]}..., pushed {late:.0f}s after release")
-    if late > REVEAL_DEADLINE_S:
-        fail(seq, "reveal-published-late", {"late_s": round(late, 1), "deadline_s": REVEAL_DEADLINE_S})
+    try: log("finalize: " + run("python3", "pulse.py", "finalize").strip()[:120])
+    except Exception as e: log(f"finalize deferred (E stays recoverable on the entropy host): {e}")
     log("cycle complete")
 
 if __name__ == "__main__":

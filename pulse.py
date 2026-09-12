@@ -25,7 +25,7 @@ PUBLIC = os.path.isdir(os.path.join(HERE, "chain"))
 CHAIN  = os.path.join(HERE, "chain") if PUBLIC else os.path.join(HERE, "..", "chain")
 KEYS   = os.path.join(HERE, "keys", "KEYS.json")
 SSH = {"protectli": "willy@192.168.70.1", "p550": "willy@192.168.68.44", "k3": "root@192.168.68.24", "f9t": "willy@192.168.68.46"}
-PROBE = {"time": "sudo -n python3 ~/beacon/stamp_probe.py /dev/ptp0", "witness": "python3 ~/beacon/stamp_probe.py /dev/ptp1",
+PROBE = {"time": "sudo -n python3 ~/beacon/stamp_probe.py /dev/ptp0 IPHC", "witness": "python3 ~/beacon/stamp_probe.py /dev/ptp1 PHC",
          "gnss": "python3 ~/beacon/gnss_probe.py"}
 DEFAULT_LEAD, MIN_LEAD = 100, 60
 _PULSE_RE = re.compile(r"^pulse-\d{4}\.json$")
@@ -80,6 +80,10 @@ def collect(seq, phase, binding, names):
         role, host = S.STATEMENTS[n]
         raw = ssh(host, f"python3 ~/beacon/attest_host.py {role} {host} {seq} {phase} {binding} {S.CHAIN_HASH} -- {PROBE[n]}")
         out[n] = check_statement(n, json.loads(raw), seq, phase, binding)
+        if n in ("time", "witness"):                      # a REQUIRED clock statement must report a healthy clock
+            g = out[n]["statement"]["measurement"].get("epoch_guard", {})
+            if g.get("epoch_ok") is not True or g.get("chrony_selects_refclock") is not True or g.get("ALERT"):
+                die(f"{n} ({host}) reports an unhealthy clock: epoch_ok={g.get('epoch_ok')} selects_refclock={g.get('chrony_selects_refclock')} {g.get('ALERT') or ''}")
     return out
 
 def drand_verified(rnd=None):
@@ -147,7 +151,8 @@ def cmd_commit(lead):
             "tooling": tooling(sts), "aggregator_host": "think"}
     path, ph, st = seal(core)
     if path is None:
-        ssh("protectli", f"python3 ~/beacon/entropy_host.py abandon {seq} tsa-tokens-insufficient")
+        ssh("protectli", f"python3 ~/beacon/entropy_host.py abandon-prepare {seq} {'0'*64} tsa-tokens-insufficient")
+        ssh("protectli", f"python3 ~/beacon/entropy_host.py finalize {seq} {'0'*64}")   # nothing was published; retire E immediately
         die(f"only {len(st['tokens'])} TSA token(s); nothing was written; E abandoned on the entropy host")
     print(json.dumps({"minted": path, "type": "commit", "seq": seq, "pulse_hash": ph, "target_round": target,
                       "target_release_utc": core["derived"]["target_release_utc"], "tsa_tokens": [(t["tsa"], t["time"]) for t in json.load(open(path + ".tsa.json"))["tokens"]],
@@ -160,8 +165,10 @@ def cmd_reveal():
     cseq, cph = seq, prev_hash; target = hp["core"]["derived"]["target_round"]; seq += 1
     latest = drand_verified()
     if latest["round"] < target: die(f"drand at round {latest['round']}; target {target} releases {hp['core']['derived']['target_release_utc']}")
+    if latest["round_release_unix_s"] > S.release_time(target) + S.REVEAL_DEADLINE_S:
+        die(f"reveal deadline passed (drand time is {latest['round_release_unix_s'] - S.release_time(target):.0f} s past the round); record a failure instead")
     dr = drand_verified(target)
-    ent = check_statement("entropy", json.loads(ssh("protectli", f"python3 ~/beacon/entropy_host.py reveal {cseq} {cph}")), cseq, "reveal", cph)
+    ent = check_statement("entropy", json.loads(ssh("protectli", f"python3 ~/beacon/entropy_host.py reveal-prepare {cseq} {cph}")), cseq, "reveal", cph)
     E = bytes.fromhex(ent["statement"]["entropy_hex"])
     if hashlib.sha256(S.COMMIT_DOMAIN + E).hexdigest() != hp["core"]["derived"]["entropy_commitment"]: die("revealed E does not match the published commitment")
     sts = {"entropy": ent, **collect(seq, "reveal", cph, S.REQUIRED["reveal"])}
@@ -187,8 +194,8 @@ def cmd_fail(reason):
     seq, prev_hash, hp = head()
     if ptype(hp) != "commit": die("head is not a commit; nothing to fail")
     cseq, cph = seq, prev_hash; seq += 1
-    ent = check_statement("entropy", json.loads(ssh("protectli", f"python3 ~/beacon/entropy_host.py abandon {cseq} {reason}")), cseq, "failure",
-                          hp["core"]["derived"]["entropy_commitment"])
+    ent = check_statement("entropy", json.loads(ssh("protectli", f"python3 ~/beacon/entropy_host.py abandon-prepare {cseq} {cph} {reason}")), cseq, "failure", cph)
+    if ent["statement"].get("reason") != reason: die("entropy host signed a different failure reason")
     sts = {"entropy": ent}
     for n in ("gnss", "time", "witness"):
         try: sts.update(collect(seq, "failure", cph, (n,)))
@@ -201,6 +208,17 @@ def cmd_fail(reason):
     path, ph, _ = seal(core)
     print(json.dumps({"minted": path, "type": "failure", "seq": seq, "fails_commit": cseq, "reason": reason}, indent=2))
 
+def cmd_finalize():
+    """After the resolving pulse (reveal/failure) is written AND pushed, tell the entropy host to retire its secret."""
+    seq, ph, hp = head()
+    if ptype(hp) not in ("reveal", "failure"): die("head is not a reveal or failure; nothing to finalize")
+    cseq = hp["core"]["derived"]["commit_seq"]
+    if git("rev-parse", "--is-inside-work-tree")[0] == 0:
+        git("fetch", "-q", "origin", "main")
+        if git("rev-parse", "HEAD")[1] != git("rev-parse", "origin/main")[1] or git("status", "--porcelain", "chain")[1]:
+            die("resolving pulse is not yet published; refusing to finalize (E stays recoverable)")
+    print(ssh("protectli", f"python3 ~/beacon/entropy_host.py finalize {cseq} {ph}"))
+
 def cmd_status():
     seq, h, p = head(); print(f"head: seq {seq}  type {ptype(p)}  hash {h[:16]}")
     try: print("entropy host pending:", ssh("protectli", "python3 ~/beacon/entropy_host.py pending"))
@@ -211,4 +229,5 @@ if __name__ == "__main__":
     if cmd == "commit": cmd_commit(int(a[a.index("--lead") + 1]) if "--lead" in a else DEFAULT_LEAD)
     elif cmd == "reveal": cmd_reveal()
     elif cmd == "fail": cmd_fail(" ".join(a[1:]) or "unspecified")
+    elif cmd == "finalize": cmd_finalize()
     else: cmd_status()
