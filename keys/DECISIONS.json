@@ -11,6 +11,8 @@
   "mirror": "decisions/ in this repository, written by decisions_mirror.py on the minting host (:20 and :50), witness-cosigned there",
   "write_once_rule": "the first valid statement for (key_id, decision_id) is the authoritative preregistration (seq_in_namespace 1); later statements for the same tuple are amendments and are never the one `execute` accepts for the original randomization",
   "created_utc": "2026-09-12",
-  "enabled": false,
-  "enabled_note": "enabled becomes true in the release that ships after the Worker and its D1 database are live; until then the CLI signs contracts and reports 'decision log not enabled in this release' instead of submitting"
+  "enabled": true,
+  "enabled_note": "Enabled 2026-09-12 after the Worker (qrng-beacon-log, D1 notbefore-decisions) went live at https://notbefore.net/decisions and its first checkpoint (size 0) verified under keys/decisions.pub. From this release on, `plan` submits and `execute` consults the log.",
+  "enabled_utc": "2026-09-12T23:31:05Z",
+  "worker": "Cloudflare Worker qrng-beacon-log (Git-integrated Workers Builds from this repository; wrangler.jsonc), D1 database notbefore-decisions, secret DECISIONS_SIGNING_KEY"
 }

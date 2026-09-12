@@ -179,14 +179,14 @@ def test_24_decision_contract_plan_execute(tmp_path):
     f = tmp_path / "eligible.txt"; f.write_text("\n".join(f"chart-{i:03d}" for i in range(30)) + "\n")
     out = tmp_path / "plan.json"
     # an `after` in the past selects a known pulse deterministically: the first eligible reveal released at/after 0022's release
-    rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:audit", "--sample", "12", "--out", str(out), str(f), cwd=str(tmp_path))
+    rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:audit", "--sample", "12", "--out", str(out), "--no-log", str(f), cwd=str(tmp_path))
     assert rc == 0 and len(o.strip()) == 64, e
     c = json.load(open(out)); assert c["operation"] == "sample" and c["params"] == {"k": 12} and c["input"]["record_count"] == 30 and c["selection"]["after_unix_s"] == 1789182000
     assert os.path.exists(str(out) + ".tsa.json"), "TSA registration files missing"
     # execute: registered today, so every token is AFTER a 2026-09-12T03:0x pulse release -> must REFUSE (decision after the value)
     rc, o, e = nb("execute", str(out), "--input", str(f), "--transcript", "none", cwd=str(tmp_path)); assert rc == 1 and "not strictly before the selected round" in e, e
     # the same contract, unregistered, allowed as a dry run: deterministic selection + output
-    out2 = tmp_path / "plan2.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:audit", "--sample", "12", "--out", str(out2), "--no-timestamp", str(f), cwd=str(tmp_path)); assert rc == 0
+    out2 = tmp_path / "plan2.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:audit", "--sample", "12", "--out", str(out2), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0
     rc1, o1, e1 = nb("execute", str(out2), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "t1.json"), cwd=str(tmp_path)); assert rc1 == 0, e1
     rc2, o2, e2 = nb("execute", str(out2), "--input", str(f), "--allow-unregistered", "--transcript", "none", cwd=str(tmp_path)); assert o1 == o2 and len(o1.split()) == 12
     assert "selected by rule" in e1 and "reveal 0023" in e1, e1           # 0022 released 03:05:27Z -> first eligible reveal at/after 03:00 is 0023
@@ -209,7 +209,7 @@ def test_26_contract_negatives(tmp_path):
     """Real files: one token deleted, a token corrupted, a contract byte edited, roster edited — each refused."""
     import shutil
     f = tmp_path / "r.txt"; f.write_text("\n".join(f"x{i}" for i in range(10)) + "\n"); c = tmp_path / "c.json"
-    rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:neg", "--sample", "3", "--out", str(c), str(f), cwd=str(tmp_path)); assert rc == 0, e
+    rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:neg", "--sample", "3", "--out", str(c), "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0, e
     assert os.path.exists(str(c) + ".freetsa.tsr") and os.path.exists(str(c) + ".digicert.tsr")
     base = [str(c), "--input", str(f), "--transcript", "none"]
     rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and "not strictly before" in e            # registered today, round in the past
@@ -231,7 +231,7 @@ def test_27_rule_traverses_failures_without_a_cutoff(tmp_path):
     for seq in (23, 25, 27, 29, 31, 33):     # corrupt the attested value of six reveals -> each fails verification
         p = log / "chain" / f"pulse-{seq:04d}.json"; j = json.load(open(p)); v = j["core"]["derived"]["attested_value"]; j["core"]["derived"]["attested_value"] = ("00" if v[:2] != "00" else "11") + v[2:]; json.dump(j, open(p, "w"))
     f = tmp_path / "r.txt"; f.write_text("a\nb\nc\n"); c = tmp_path / "c.json"
-    rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:trav", "--sample", "1", "--out", str(c), "--no-timestamp", str(f), cwd=str(tmp_path), log=str(log)); assert rc == 0
+    rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:trav", "--sample", "1", "--out", str(c), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path), log=str(log)); assert rc == 0
     rc, o, e = nb("execute", str(c), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path), log=str(log))
     assert rc == 0 and "reveal 0035" in e and e.count("passed over by rule") >= 6, e
 
@@ -272,7 +272,7 @@ def test_29_identity_and_signed_contracts(tmp_path, monkeypatch):
     rc, o, e = nb("keygen"); assert rc == 1 and "exists" in e                                    # never silently replaces an identity
     rc, o, e = nb("whoami"); kid = o.split()[0]; assert rc == 0 and len(kid) == 16
     f = tmp_path / "r.txt"; f.write_text("\n".join(f"p{i}" for i in range(9)) + "\n"); c = tmp_path / "c.json"
-    rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:signed", "--decision-id", "trial:abc@v1", "--sample", "2", "--out", str(c), "--no-timestamp", str(f), cwd=str(tmp_path)); assert rc == 0, e
+    rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:signed", "--decision-id", "trial:abc@v1", "--sample", "2", "--out", str(c), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0, e
     j = json.load(open(c)); assert j["spec"] == "notbefore/contract/2" and j["signer"]["key_id"] == kid and j["decision_id"] == "trial:abc@v1"
     st, sig = DL.read_signature(str(c)); assert DL.verify_statement(st, sig)[0] and st["contract_sha256"] == hashlib.sha256(open(c, "rb").read()).hexdigest()
     base = [str(c), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "t.json"), "--no-anchors"]
@@ -336,11 +336,12 @@ def test_31_live_decision_log_roundtrip(tmp_path, monkeypatch):
     a second contract under the same decision_id is an amendment, and execute refuses the superseded one."""
     import notbefore.decisionlog as DL
     if not DL.enabled() or OFF: pytest.skip("decision log not enabled in this release (or offline)")
+    if os.environ.get("NOTBEFORE_LIVE_LOG_TEST") != "1": pytest.skip("appends real entries to the public decision log: run with NOTBEFORE_LIVE_LOG_TEST=1 before a release")
     key = tmp_path / "id.key"; monkeypatch.setenv("NOTBEFORE_KEY", str(key)); nb("keygen")
     f = tmp_path / "r.txt"; f.write_text("a\nb\nc\nd\n"); did = "test:live:" + hashlib.sha256(os.urandom(8)).hexdigest()[:12]
-    c1 = tmp_path / "c1.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:live1", "--decision-id", did, "--sample", "1", "--out", str(c1), "--no-timestamp", str(f), cwd=str(tmp_path)); assert rc == 0 and "AUTHORITATIVE" in e, e
+    c1 = tmp_path / "c1.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:live1", "--decision-id", did, "--sample", "1", "--out", str(c1), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0 and "AUTHORITATIVE" in e, e
     r1 = json.load(open(DL.receipt_path(str(c1)))); assert r1["summary"]["seq_in_namespace"] == 1
-    c2 = tmp_path / "c2.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:live2", "--decision-id", did, "--sample", "1", "--out", str(c2), "--no-timestamp", str(f), cwd=str(tmp_path)); assert rc == 0 and "AMENDMENT" in e, e
+    c2 = tmp_path / "c2.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:live2", "--decision-id", did, "--sample", "1", "--out", str(c2), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0 and "AMENDMENT" in e, e
     rc, o, e = nb("execute", str(c2), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "not the first registered" in e, e
     rc, o, e = nb("execute", str(c1), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "AT/AFTER the round release" in e, e   # registered today, round in the past
     rc, o, e = nb("register", str(c1), cwd=str(tmp_path)); assert rc == 0 and "already present" in e                     # idempotent

@@ -188,8 +188,8 @@ were stamped from it and are superseded.
   append-only; equivocation by the log is detectable (mirror, witnesses, Rekor), not prevented". ❌ Never "prevents
   p-hacking" or "proves this was the only analysis": two decision ids or two keys can name one experiment — say
   "aliases are a naming problem the log makes visible, not one it solves". ❌ Never say a contract is "registered" when
-  only RFC 3161 tokens exist: that is *timestamped*. ❌ Until `keys/DECISIONS.json` says `enabled: true`, the log is
-  "designed and deployed for test", not "live".
+  only RFC 3161 tokens exist: that is *timestamped*. ✅ Since 2026-09-12 23:29 UTC (`notbefore` ≥ 0.8.1): "the decision log is live at
+  notbefore.net/decisions"; say "entries 0–2 are release tests" if asked about its first entries.
 - ✅ Since 2026-09-12 (ERR-014): "RFC 3161 tokens are verified only against trust anchors pinned in `keys/tsa/`
   (FreeTSA root + signer, DigiCert Trusted Root G4 + timestamping CA, fingerprints in `PINS.json`) — never the
   host's certificate store, never a download." ❌ Never say a token is "trusted by the system" or "publicly

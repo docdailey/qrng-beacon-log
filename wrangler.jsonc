@@ -2,8 +2,8 @@
   // notbefore.net — static publication of the qrng-beacon-log, plus the decision log (DECISION-LOG.md).
   // Workers Static Assets serve the repo root (assets.directory = "."): verifiers fetch chain/pulse-*.json,
   // /checkpoint and /checkpoints/* straight from git — the hourly pulse commit IS the deploy. .assetsignore keeps
-  // operational files out. The Worker script handles ONLY /decisions and /decisions/* (run_worker_first); every other
-  // path is served as a static asset exactly as before.
+  // operational files out. The Worker script runs first on every request so it can redirect www.* to the apex; /decisions* is the log,
+  // every other path is served from the static assets exactly as before (env.ASSETS.fetch).
   "name": "qrng-beacon-log",          // the Worker the Git integration (Workers Builds) deploys; notbefore.net + www are its custom domains
   "compatibility_date": "2026-09-12",
   "main": "worker/decisions.js",
@@ -17,7 +17,7 @@
     "directory": ".",
     "binding": "ASSETS",
     "not_found_handling": "404-page",
-    "run_worker_first": ["/decisions", "/decisions/*"]
+    "run_worker_first": true          // the Worker sees every request: /decisions* -> the log, www.* -> 301 to the apex, everything else -> env.ASSETS (static)
   },
   "d1_databases": [
     { "binding": "DB", "database_name": "notbefore-decisions", "database_id": "aafd0759-29dc-47bf-9f3c-5fc8624ef551" }

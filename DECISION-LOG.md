@@ -60,7 +60,8 @@ GET  /decisions/lookup?key_id=&decision_id=   all entries for the namespace + th
 GET  /decisions/leaves?from=&to=         pages of leaves (mirroring)
 POST /decisions/submit                   {statement, signature_b64, tsa_tokens?, contract?} → 201 receipt (200 if it existed)
 ```
-A receipt is `{index, seq_in_namespace, authoritative, received_utc, leaf, size, checkpoint, proof}`. The CLI trusts
+Requests need a `User-Agent` header (Cloudflare answers the bare Python default with 403; the CLI and the mirror send
+their own). A receipt is `{index, seq_in_namespace, authoritative, received_utc, leaf, size, checkpoint, proof}`. The CLI trusts
 none of it until the note verifies under the **vendored** key for the **vendored** origin and the proof reaches the
 note's root; a receipt that fails is an error, not a warning.
 
@@ -90,5 +91,8 @@ note's root; a receipt that fails is an error, not a warning.
 1. ✅ `notbefore keygen`, signed `contract/2`, `.sig.json` statements (0.8.0).
 2. ✅ The log: Worker + D1 + checkpoints (`worker/`), mirror (`decisions_mirror.py`), anchors, witness key.
 3. ✅ `execute` consults the log (live, or the mirror offline); the transcript carries `decision_log`.
-4. ⏳ `keys/DECISIONS.json` `enabled` flips to true in the release after the Worker is live; until then the CLI signs
-   and reports "decision log not enabled in this release" instead of submitting.
+4. ✅ Live since 2026-09-12 23:29 UTC at `https://notbefore.net/decisions` (Worker `qrng-beacon-log`, D1
+   `notbefore-decisions`); `keys/DECISIONS.json` `enabled: true` from `notbefore` 0.8.1. Entries 0–2 are the release's
+   own live test (throwaway keys, decision ids `trial:abc@v1` and `test:live:…`) and are labelled as such here rather
+   than removed — nothing is ever removed. The first mirror commit was `DECISIONS mirror: size 0`; the mirror runs at
+   :20 and :50 and its checkpoints are anchored like the pulse log's.

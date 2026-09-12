@@ -144,10 +144,9 @@ registered in notbefore.net/decisions: index 12, AUTHORITATIVE (first entry for 
 then wait for the pulse and run: notbefore execute notbefore-plan-chart-audit-2026-q4.json
 ```
 
-The `registered in …` line appears once the release you run has the decision log enabled (`keys/DECISIONS.json`,
-`enabled: true`). 0.8.0 ships the identity, the signing and the client with the log **disabled** until the Worker is
-live; until then `plan` prints `[INFO] decision log not enabled in this release` and `execute` records
-`decision_log.status: disabled`. Status: `DECISION-LOG.md`.
+The decision log went live on 2026-09-12 and is enabled from `notbefore` 0.8.1 (`keys/DECISIONS.json`); 0.8.0
+signs but prints `[INFO] decision log not enabled in this release` instead of registering. Status and endpoints:
+`DECISION-LOG.md`.
 
 Three files matter beside the contract: the two `.tsr` tokens (third-party proof of *when* these bytes existed), the
 `.sig.json` statement (your key saying "I commit to contract 3551… under decision_id chart-audit-2026-q4"), and the
