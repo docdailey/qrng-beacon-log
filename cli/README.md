@@ -9,7 +9,7 @@ anchored to drand quicknet, RFC 3161 timestamps, Rekor and OpenTimestamps. Spec:
 unique. This is not a certification of anything; see `CLAIMS.md` in the log repository.
 
 ```bash
-pip install notbefore            # needs git and openssl on PATH; add [anchors] for OpenTimestamps proofs
+pip install notbefore            # PyPI, 0.2.0; needs git and openssl on PATH; add [anchors] for OpenTimestamps proofs
 notbefore verify 41              # commit 40 + reveal 41: signatures (pinned keys), drand BLS offline, RFC 3161, Rekor anchors
 notbefore value 41               # V, only if verify passes
 notbefore seed 41 --purpose clinic-qi-roster-2026-09-12       # S = SHA256("notbefore/derive/v1" || V || purpose)

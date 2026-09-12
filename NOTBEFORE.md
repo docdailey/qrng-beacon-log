@@ -297,7 +297,7 @@ This file is the engineering artifact. Screenshots of hex are not.
 
 ## 8. CLI (normative behavior)
 
-**Status: implemented** — package `notbefore` 0.2.0 in `cli/` of the log repository (`pip install notbefore` once on PyPI; `pip install ./cli` from a checkout meanwhile). The verifier, keys, drand group key, Rekor key, freetsa CA and expected host configuration are **vendored** in the package and pinned to a named log commit (`notbefore --version`); the log is read as data. §14 is its acceptance suite and runs in CI (`.github/workflows/cli.yml`). Requires `git` and `openssl` on PATH.
+**Status: implemented** — package `notbefore` 0.2.0 in `cli/` of the log repository (**`pip install notbefore`** — released to PyPI 2026-09-12 13:41 UTC via Trusted Publishing, with Sigstore attestations). The verifier, keys, drand group key, Rekor key, freetsa CA and expected host configuration are **vendored** in the package and pinned to a named log commit (`notbefore --version`); the log is read as data. §14 is its acceptance suite and runs in CI (`.github/workflows/cli.yml`). Requires `git` and `openssl` on PATH.
 
 ```text
 notbefore verify  <seq>
