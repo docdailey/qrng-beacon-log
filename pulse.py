@@ -18,7 +18,10 @@ know the attested value before R releases, and we cannot select the entropy afte
 The commitment only proves what it claims if it is PUBLISHED before R. Signing is not
 publishing. See ../PUBLICATION.md.
 """
-import json, base64, hashlib, subprocess, sys, time, os, glob
+import json, base64, hashlib, subprocess, sys, time, os, glob, re
+_PULSE_RE = re.compile(r"^pulse-\d{4}\.json$")
+def pulse_files(d):
+    return sorted(f for f in glob.glob(os.path.join(d, "pulse-*.json")) if _PULSE_RE.match(os.path.basename(f)))
 from concurrent.futures import ThreadPoolExecutor
 import drand_anchor
 import tsa
@@ -166,10 +169,10 @@ def mark_failed(seq, reason, extra=None):
     return path
 
 def head():
-    files = sorted(glob.glob(os.path.join(CHAIN, "pulse-*.json")))
+    files = pulse_files(CHAIN)
     if files:
         p = json.load(open(files[-1])); return p["core"]["seq"], p["pulse_hash"], p
-    leg = sorted(glob.glob(os.path.join(LEGACY, "pulse-*.json"))) if LEGACY else []
+    leg = pulse_files(LEGACY) if LEGACY else []
     if leg:
         p = json.load(open(leg[-1])); return p["core"]["seq"], p["pulse_hash"], p
     return 0, "0" * 64, None

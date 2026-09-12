@@ -23,7 +23,8 @@ TSAS = {
 }
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(HERE, "tsa-certs"); os.makedirs(CACHE, exist_ok=True)
-SYS_CA = "/opt/homebrew/etc/openssl@3/cert.pem" if os.path.exists("/opt/homebrew/etc/openssl@3/cert.pem") else "/etc/ssl/cert.pem"
+SYS_CA = next((c for c in ("/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/cert.pem",
+                           "/opt/homebrew/etc/openssl@3/cert.pem", "/etc/pki/tls/certs/ca-bundle.crt") if os.path.exists(c)), "/etc/ssl/cert.pem")
 
 def sh(*a, **k):
     return subprocess.run(a, capture_output=True, text=True, **k)
