@@ -320,7 +320,7 @@ never use it as key material.
 
 This file is the engineering artifact. Screenshots of hex are not.
 
-The shipped CLI writes this skeleton plus: `pulse_hash_commit`, `drand_round`, `derive_domain`, `operation` and its parameter (`frac` | `k` | `arms` | `lo`,`hi` | `n` | `hexlen`), `input_file`, `input_sha256`, `record_count`, `output_sha256` (or `A`/`B` with `count`+`sha256` for `split`), `log_ref`, `cli_version`, `spec`, `verified_utc`, and a `checks` summary. Field-by-field meaning and what must be stable on a re-run: `cli/USAGE.md`.
+The shipped CLI writes this skeleton plus: `pulse_hash_commit`, `drand_round`, `derive_domain`, `operation` and its parameter (`frac` | `k` | `arms` | `lo`,`hi` | `n` | `hexlen`), `input_file`, `input_sha256`, `record_count`, `output_sha256` (or `A`/`B` with `count`+`sha256` for `split`), `log_ref`, `cli_version`, `spec`, `verified_utc`, and a `checks` summary. Field-by-field meaning and what must be stable on a re-run: `USAGE.md`.
 
 ---
 
@@ -346,7 +346,7 @@ notbefore diff-transcript a.json b.json                    # what changed: input
 ```
 Every derive command writes a transcript (§7.5) unless `--transcript none`; `--transcript -` prints it. Global flags:
 `-q` (only FAIL/WARN on stderr), `--json`, `--offline`, `--no-anchors`, `--repo URL`, `--log-dir DIR`, `--log-ref SHA`,
-`--lock notbefore.lock`, `--checkpoint-url`. Consumer walkthrough with real files: `cli/USAGE.md`.
+`--lock notbefore.lock`, `--checkpoint-url`. Consumer walkthrough with real files: `USAGE.md`.
 
 - `verify` prints PASS/FAIL lines to **stderr**, exit 0/1; since 0.4.0 it also proves the pair's inclusion in the log's signed checkpoint (`notbefore.net/log`), cross-checks the checkpoint served by `https://notbefore.net/checkpoint`, and refuses if the head is not an append-only extension of the head this machine saw before. Every payload (`value`, `seed`, shuffled lines) is **stdout only**, so `V=$(notbefore value N)` is the bare hex. `-q` suppresses PASS/INFO lines; failures still print and exit 1.
 - `value` prints \(V\) hex only if verify would pass; else exit 1, no stdout hex.

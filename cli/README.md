@@ -24,7 +24,7 @@ notbefore pin                    # notbefore.lock: re-runs verify at exactly thi
 notbefore diff-transcript a.json b.json
 notbefore checkpoint             # the log's signed head; site cross-check; cached-head consistency
 ```
-**Walkthrough with real files and the exact transcript: [`USAGE.md`](USAGE.md).**
+**Walkthrough with real files and the exact transcript: [`USAGE.md`](../USAGE.md).**
 
 **Streams, for scripting.** Payloads go to **stdout only**; the verification transcript goes to **stderr**. So
 `V=$(notbefore value 45)` is the 64-hex value and nothing else, and `notbefore shuffle … > out.txt` is clean. `-q`
