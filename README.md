@@ -52,7 +52,29 @@ python3 tsa.py verify chain/pulse-0010.json      # checks digest + TSA certifica
 Tokens on pulses 0010/0011 are retroactive (taken 2026-09-12 00:24 UTC, labelled in `*.tsa.json`);
 from the next commit onward tokens are taken at mint time, before the target round exists.
 
+## Publication anchors and the split-view check (Rekor + OpenTimestamps, since 2026-09-12)
+
+This is a **single-writer** log. Its operator could, in real time, mint two different valid pulse-*N*s on one
+`prev_hash` and show each to a different audience — nothing inside a single-writer log prevents that. So every
+published pulse is also entered, under the pinned key `keys/anchor.pub`, into two append-only logs we do not run:
+**Rekor** (the public Sigstore transparency log) and **OpenTimestamps** (Bitcoin block headers). The proofs live on
+the [`anchors`](../../tree/anchors) branch. Anyone can list every Rekor entry ever made under our key; an entry that
+matches no published pulse is public evidence of a hidden branch, and a pulse with no entry 25 minutes after
+publication fails CI.
+
+```bash
+git worktree add anchors origin/anchors
+pip install cryptography opentimestamps-client
+REFETCH=1 python3 ci/verify_anchors.py --anchors anchors     # offline SET + inclusion proofs, live refetch, split-view enumeration
+```
+Pulses 0001–0041 were anchored retroactively (2026-09-12 12:47 UTC); from 0042 each pulse is anchored within
+minutes of its push, so a commit's Rekor time precedes its drand release. See `PUBLICATION.md` and ERR-008.
+
 ## What this is, and is not
+
+- **Not a blockchain.** Hash-linked and append-only, yes; but one writer, no consensus, no proof-of-work. The
+  writer's honesty about *when* is bounded by clocks nobody here controls (drand, RFC 3161, Rekor, Bitcoin headers),
+  and its honesty about *which* chain is made checkable by the anchors above. Equivocation is detectable, not prevented.
 
 An attested-log prototype and a timing thesis. The world already has drand; what it does not have
 is operators who put their own source under commit-reveal, publish before the round, measure the

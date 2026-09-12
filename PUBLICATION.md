@@ -33,12 +33,10 @@ GitHub at all; GitHub's committer date is now corroboration. First at-commit-sta
 | history is not rewritten | we *could* force-push; **any clone or mirror detects it** because the old commit hashes stop existing upstream | clone once, compare `git log` later; mirror the repo |
 | the repo is what we say it is | it is under the same GitHub account that signs these notes, and the keys in `keys/` match those in every pulse | `--pin keys/` in `verify.py` |
 
-**Weakest link, honestly:** GitHub commit timestamps are set by the *committer* (us) and merely
-recorded by GitHub; the push event time is GitHub's own, but it is not exposed as durably. A
-stronger, independent time-of-existence proof would be **OpenTimestamps** (free calendar servers,
-anchored into the Bitcoin block chain — a timestamping protocol, not a trading position). Adding
-it is one command per pulse (`ots stamp pulse.json`); it is **not installed and not decided** —
-it needs Bill's call given the project's stance on anything crypto-adjacent.
+**Weakest link, honestly (as written 2026-09-12 morning):** GitHub commit timestamps are set by the committer
+(us). This was answered the same day by the RFC 3161 tokens below and by the publication anchors further below;
+OpenTimestamps, flagged here as "not decided", was decided by Bill on 2026-09-12 ("go on all") once it was clear
+that it is a timestamping protocol and nothing else.
 
 ## Independent timestamps — RFC 3161 (added 2026-09-12)
 
@@ -66,3 +64,31 @@ before the round.** That is what a watcher's pre-round COMMIT-RECEIPT provides.
   chain makes that *visible*: an unrevealed commit is a permanent hole, and `pulse.py reveal` refuses
   to skip. A consumer should treat any commit without a following reveal as a failed pulse and say so.
 - It does not certify anything. See `CLAIMS.md`.
+
+## Publication anchors — Rekor + OpenTimestamps (added 2026-09-12)
+
+**The problem they answer.** A single-writer log can be forked by its writer in real time and shown selectively
+(a *split view*). Publication on GitHub does not settle this: we control the account. What settles it is an
+append-only record we do **not** control, in which every pulse we publish is entered under a pinned key, and which
+anyone can enumerate.
+
+| anchor | what is entered | who runs it | what it proves | how to check |
+|---|---|---|---|---|
+| **Rekor** (`rekor.sigstore.dev`) | `hashedrekord`: sha256 of the canonical anchor statement, our signature, `keys/anchor.pub` | Sigstore / OpenSSF (Linux Foundation) | the statement existed at Rekor's `integratedTime`; it is in a Merkle log whose checkpoints Rekor signs; every entry under our key is listable | `ci/verify_anchors.py` verifies SET + inclusion proof + checkpoint offline against `keys/rekor.pub`; `REFETCH=1` re-fetches live and enumerates the key |
+| **OpenTimestamps** | the same digest, via four free calendar servers | independent calendar operators; final proof is a Merkle path into a **Bitcoin block header** | the digest existed before that block's time | `ots verify` against your own node, or `verify_anchors.py`, which checks the Merkle root against public header sources |
+
+**Trust assumptions, stated.** Rekor is honest and available (it is a single organisation's log, though publicly
+monitored); the block-header sources (`blockstream.info`, `mempool.space`) return true headers — anyone who doubts
+that runs a node; the anchor private key lives in a GitHub Actions secret, so a compromise of our GitHub account
+could forge *anchors* — but not pulses, and a forged anchor that matches no published pulse is exactly what the
+split-view check flags.
+
+**Timing.** The anchor workflow runs on each push, so a commit reaches Rekor a minute or two after it is pushed —
+before its drand release. That makes Rekor a **third independent clock** on each commit (after freetsa and
+DigiCert). It is downstream of minting: anchoring failure never blocks a pulse; it shows up in CI as a missing anchor.
+
+**Retroactive.** Pulses 0001–0041 were anchored on 2026-09-12 12:47 UTC. Their Rekor times prove existence from
+then; the RFC 3161 tokens are their commit-time proof. From 0042 the anchor is contemporaneous.
+
+**What this is not.** Not a certification; not a consensus system; not a cryptocurrency position of any kind. It
+is a hash in two public logs.

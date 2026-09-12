@@ -122,6 +122,32 @@ publish one. A watcher that signs receipts for commitments it sees before their 
 the watcher's second job.
 
 
+## Why there is no proof-of-work (added 2026-09-12)
+
+Bill: "this reminds me of blockchain without work" — and then, "so anyone could branch this pulse chain."
+
+Structurally it is that: hash-linked, append-only, one writer, no mining. What proof-of-work buys a blockchain is
+an **expensive clock**: rewriting history costs redoing the work, so the longest chain becomes "what happened, in
+order." Bitcoin burns energy to manufacture unforgeable time among strangers who trust nobody.
+
+We do not manufacture time; we **borrow it from things nobody here controls**. drand: a commit cannot be back-dated
+past a round, because the round's BLS signature is the proof the round exists and its value was unknowable before
+release. RFC 3161: two third parties signed "this commit hash existed before T". GNSS: the on-time edge is captured
+in hardware. Rekor: a public transparency log holds the hash of every pulse under our anchor key, with its own
+clock. OpenTimestamps: the same digest is committed into Bitcoin block headers — the one place we do lean on
+proof-of-work, and we lean on someone else's.
+
+So the trust model is a **transparency log** (Certificate Transparency, Rekor, the NIST beacon), not a blockchain.
+Blockchains solve a problem we do not have — many mutually distrusting *writers* agreeing on order. Our only question
+is whether *one* writer can lie about *when*. That is the thesis in one line.
+
+**The honest answer to "can anyone branch it".** A stranger cannot: five pinned-key signatures per pulse. The
+operator can, in real time only, and until 2026-09-12 nothing prevented or even documented it (ERR-008). What a
+blockchain has that a single-writer log lacks is **replication**; what we have instead is *detection*: the host
+refuses a second commit at a resolved seq (raises the cost, does not bind root), every pulse is anchored under a
+pinned key in Rekor and Bitcoin, anyone can enumerate every entry we ever made, and independent watchers compare
+what they saw. Equivocation is not prevented. It is made public.
+
 ## Where this stands (Bill, 2026-09-12)
 
 The value is the **operator discipline**, not the bytes: a source under commit-reveal, published before

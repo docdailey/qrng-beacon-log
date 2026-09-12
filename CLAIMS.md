@@ -210,3 +210,23 @@ were stamped from it and are superseded.
   its operator's pinned verifier and keys (`watcher/make_pins.py`).
 - The archive figure is **1,217 of 42,935 blocks = 2.835 %** (final, full re-hash 2026-09-12). The earlier "5.6 %" was
   the rate within the first third scanned and must not be quoted as an archive rate.
+
+## Added 2026-09-12 — single-writer log, forks, anchors (binding)
+
+- ✅ Say: "a hash-linked, append-only, **single-writer transparency log** — not a blockchain. There is no consensus
+  and no proof-of-work because there is one writer; the question is whether that writer can lie about *when*, and
+  that is bounded by clocks nobody here controls (drand, RFC 3161, Rekor, Bitcoin block headers)."
+- ✅ Say: "a stranger cannot extend the chain (five pinned-key signatures per pulse). The operator can fork it only
+  in real time (RFC 3161 tokens must predate the drand round), and any fork is **detectable** by anyone who
+  enumerates the Rekor entries under `keys/anchor.pub` or compares two observers' copies."
+- ❌ Never say equivocation is *prevented*. It is *detectable*. When asked, name the independent records as of the
+  date: GitHub history, Rekor, the OpenTimestamps calendars/Bitcoin, and the watchers (2026-09-12: one, ours).
+- ❌ Never say "immutable". Say "append-only and tamper-evident: a rewrite needs new signatures and new TSA tokens,
+  and leaves orphaned Rekor entries under our own key."
+- ✅ OpenTimestamps: "a timestamp proof anchored in Bitcoin block headers, via free calendar servers."
+  ❌ Never imply any cryptocurrency is held, bought, paid, traded or endorsed. The proof is a Merkle path to a
+  public block header; that is all it is.
+- ✅ Rekor: "the public Sigstore transparency log (OpenSSF / Linux Foundation)". It is a third-party log, not a
+  certification of anything.
+- ✅ Pulses 0001–0041: "anchored retroactively, 2026-09-12 12:47 UTC". ❌ Never present their Rekor times as
+  commit times.

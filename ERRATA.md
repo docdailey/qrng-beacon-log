@@ -6,6 +6,40 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-008 — the entropy host accepted a second commit at an already-resolved seq; operator equivocation was neither prevented nor documented (2026-09-12)
+
+**Affected:** `hosts/entropy_host.py` before hash `d2eaa923b7ac817f…`; `PROTOCOL.md`, `CLAIMS.md`, `THESIS.md`
+through commit `75c0366`, none of which stated the split-view limitation. `hosts/beacon-cmd` is unchanged: its
+`seq < last` guard is a *backdating* guard by design (an unpublished commit legitimately reuses its seq).
+
+**What was wrong.** After a commit at seq N had been published and resolved (revealed or abandoned),
+`entropy_host.py commit N` would mint a fresh commitment at the same seq. With the aggregator assembling pulses,
+the operator could produce two different valid pulse-Ns on one `prev_hash` — a fork — and show each to a different
+audience. Nothing published said so; a reader could not have known the log was equivocation-*detectable* only by
+comparing independent observations, of which there was exactly one (ours).
+
+**Not a stranger's capability, and not retroactive.** Every pulse carries five signatures under pinned keys, so a
+fork by anyone but the key holders fails verification; and a commit's RFC 3161 tokens must predate its drand round,
+so both branches of a fork would have to be made live inside the same publication window.
+
+**Fix.** (1) `entropy_host.py` refuses `commit N` when seq N has a record in state `revealing`/`abandoning`/`revealed`,
+or `abandoned` with a real resolver hash (an abandonment bound to the all-zero hash means the commit never entered
+the published chain, and the seq may be reused). Deployed on protectli 2026-09-12 12:45 UTC and exercised through
+the forced command. Defence in depth only — root on the host can delete the record. (2) **Publication anchors:**
+every published pulse is entered, under the pinned key `keys/anchor.pub`, into Rekor (the public Sigstore
+transparency log) and OpenTimestamps (Bitcoin block headers); `ci/verify_anchors.py` verifies each anchor offline
+against the pinned Rekor key and **enumerates every Rekor entry ever made under the anchor key** — an anchored
+hidden branch is publicly visible, and a published pulse with no anchor fails CI after 25 minutes. (3) PROTOCOL,
+CLAIMS and THESIS now state the single-writer split-view limitation and what bounds it.
+
+**Retroactive anchors.** Pulses 0001–0041 were anchored 2026-09-12 12:47 UTC, after the fact (Rekor log indices
+2807717612–2807718704). Their Rekor times prove existence *from then*, not from minting; the TSA tokens remain the
+commit-time proof. From 0042 on, the workflow anchors each pulse within minutes of its push, so a commit's Rekor
+`integratedTime` precedes its drand release — a third clock on the commit.
+
+**Found by:** Bill's question "so anyone could branch this pulse chain?" (2026-09-12), answered by reading the guard
+code instead of the design intent.
+
 ## ERR-007 — required witness statements in pulses 0018/0019 report "invalid" while the pulses verify
 
 **Affected:** pulses **0018, 0019** (the first v0.5 pair), `core.statements.witness.statement.measurement.epoch_guard`.

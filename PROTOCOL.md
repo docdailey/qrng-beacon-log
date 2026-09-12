@@ -27,6 +27,33 @@ Two different adversaries, two different answers:
   defends against them. What defends the consumer against the operator is the external structure — drand,
   RFC 3161 tokens, and a watcher running the operator-independent pinned verifier — which bounds *what* the operator
   can do (not before the round; not selected after commitment; not withheld without a public, attested record).
+- **Equivocation (split view).** This is a single-writer log: the operator holds every signing key and can, in
+  real time, produce two different valid pulse-*N*s on one `prev_hash` and show each to a different audience. The
+  protocol does not prevent this; it makes it **detectable**: (a) the entropy host refuses a second commit at a seq
+  that already resolved a published commit (ERR-008; raises the cost, does not bind root); (b) every published pulse
+  is anchored under a pinned key in two public append-only logs (below), and every entry ever made under that key is
+  enumerable; (c) independent watchers record what they observed. A fork is impossible after the fact, because a
+  commit's RFC 3161 tokens must predate its drand round.
+
+### Publication anchors (normative for the operator since 2026-09-12; verifiable by anyone)
+For every `chain/pulse-NNNN.json`, the operator's CI computes the **anchor statement** — canonical JSON with keys
+`anchor` (`qrng-beacon-log/anchor/1`), `repo`, `genesis` (pulse-0001 hash), `seq`, `type`, `pulse_hash`,
+`prev_hash`, `file_sha256` — signs it with `keys/anchor.pub` (ECDSA P-256), and:
+1. enters a `hashedrekord` (sha256 of the statement + signature + public key) into **Rekor**
+   (`https://rekor.sigstore.dev`, log ID `c0d23d6a…`, key pinned in `keys/rekor.pub`);
+2. submits the same digest to **OpenTimestamps** calendars, and upgrades the proof once it is in a Bitcoin block;
+3. publishes statement, signature, Rekor entry (signed entry timestamp, inclusion proof, checkpoint) and the OTS
+   proof on the `anchors` branch.
+
+**Verification** (`ci/verify_anchors.py`; run by CI on every push and hourly): recompute the statement from the
+pulse file and require byte-equality with the published one; the Rekor entry's hash must be sha256(statement) and
+its key `keys/anchor.pub`; verify the signature; verify Rekor's signed entry timestamp and the inclusion proof
+against the checkpoint, and the checkpoint's signature, all offline against `keys/rekor.pub`; with `REFETCH=1`,
+fetch the entry live and require identity; for commits, report whether Rekor's `integratedTime` precedes the drand
+release; verify the OTS proof's Bitcoin Merkle root against a public block header when complete. **Split-view
+check:** enumerate every Rekor entry under `keys/anchor.pub`; each must be a published anchor. **A pulse with no
+anchor 25 minutes after publication is non-compliant.** Pulses 0001–0041 were anchored retroactively
+(2026-09-12 12:47 UTC); their Rekor times are not commit times.
 
 ### Resolution is two-phase (crash-safe)
 The entropy host **prepares** a reveal or abandonment (statement signed, secret kept as `.revealing`/`.abandoning`)

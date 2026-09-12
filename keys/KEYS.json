@@ -57,5 +57,22 @@
       "status": "active",
       "note": "v0.5: signs the assembled pulse digest only; host facts are attested by host signatures inside core.statements"
     }
-  ]
+  ],
+  "anchors": {
+    "note": "Publication-anchor keys (not pulse signers). anchor_signer signs the canonical anchor statement of every published pulse into Rekor (ci/anchor_lib.py); rekor_log is the pinned public key of the Rekor transparency log used to verify signed entry timestamps and checkpoints offline.",
+    "anchor_signer": {
+      "file": "keys/anchor.pub",
+      "alg": "ECDSA P-256 / SHA-256",
+      "key_id_sha256_spki": "0ba35c3f423663b7",
+      "valid_from_seq": 1,
+      "status": "active",
+      "holder": "GitHub Actions secret ANCHOR_KEY (operator-issued 2026-09-12)"
+    },
+    "rekor_log": {
+      "file": "keys/rekor.pub",
+      "server": "https://rekor.sigstore.dev",
+      "log_id": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+      "pinned_utc": "2026-09-12"
+    }
+  }
 }

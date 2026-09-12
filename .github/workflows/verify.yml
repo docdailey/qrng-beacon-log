@@ -8,8 +8,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }          # full history: publication times come from git log
+      - uses: actions/checkout@v4
+        with: { ref: anchors, path: anchors }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install cryptography py_ecc
+      - run: pip install cryptography py_ecc opentimestamps-client
       - name: Verify every pulse, link, pair, TSA token, drand BLS signature (pinned group key) and the Merkle root, with live drand re-fetch
         run: REFETCH=1 REQUIRE_BLS=1 python3 ci/verify_chain.py
+      - name: Verify publication anchors (Rekor SET + inclusion proofs offline against the pinned Rekor key, live refetch, OpenTimestamps) and run the split-view check
+        if: always()
+        run: REFETCH=1 python3 ci/verify_anchors.py --anchors anchors

@@ -1,0 +1,37 @@
+name: anchor-pulses
+# Enter every published pulse into two append-only logs outside the operator's control — Rekor (Sigstore transparency
+# log) and OpenTimestamps (Bitcoin block headers) — and record the proofs on the `anchors` branch. Downstream of
+# publication: it never touches `main` or `chain/`, and its failure never blocks minting. See PUBLICATION.md.
+on:
+  push:
+    branches: [main]
+    paths: ["chain/pulse-*.json"]
+  schedule: [{ cron: "37 * * * *" }]   # catch-up + upgrade pending OpenTimestamps proofs once they reach Bitcoin
+  workflow_dispatch:
+concurrency: { group: anchors, cancel-in-progress: false }
+permissions: { contents: write }
+jobs:
+  anchor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: { ref: anchors, path: anchors }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install cryptography opentimestamps-client
+      - name: Anchor pulses in Rekor (hashedrekord signed by keys/anchor.pub) and OpenTimestamps; upgrade pending OTS proofs
+        env:
+          ANCHOR_KEY: ${{ secrets.ANCHOR_KEY }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 ci/anchor_pulses.py --anchors anchors
+      - name: Publish the anchors branch
+        run: |
+          cd anchors
+          git config user.name "qrng-beacon-anchor"
+          git config user.email "anchor@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "no new anchors"; exit 0; fi
+          n=$(ls pulse-*.anchor.json | wc -l | tr -d ' ')
+          git commit -q -m "anchors: ${n} pulses anchored (run ${{ github.run_id }})"
+          git push origin HEAD:anchors

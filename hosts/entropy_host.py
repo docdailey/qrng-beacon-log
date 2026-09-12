@@ -38,6 +38,7 @@ def cmd_commit(seq, target_round, chain_hash):
     sp = os.path.join(PEND, f"{int(seq):04d}.secret")
     if os.path.exists(sp): die(f"seq {seq} already has a held secret; reveal or abandon it first")
     if glob_pending(): die("another commit is pending on this host: " + ", ".join(glob_pending()))
+    refuse_if_seq_resolved_a_published_commit(seq)
     E = fresh_entropy(32)
     commitment = hashlib.sha256(COMMIT_DOMAIN + E).hexdigest()
     st = A.base_statement(ROLE, HOST, seq, "commit", commitment, chain_hash, TOOLS)
@@ -65,6 +66,21 @@ def cmd_commit(seq, target_round, chain_hash):
     finally: os.close(dfd)
     if open(sp, "rb").read() != payload: die("secret readback mismatch; refusing to return a commitment")
     print(json.dumps(signed))
+
+def refuse_if_seq_resolved_a_published_commit(seq):
+    """Equivocation guard (ERR-008). A seq whose commitment was PUBLISHED and then revealed or abandoned must never be
+    committed to again: a second valid commit at the same seq is a fork of the chain. Publication is what the host
+    learns at reveal-prepare / abandon-prepare, through the commit pulse hash; an abandonment bound to the all-zero
+    hash means the commit never entered the published chain (abort-unpublished / recover), and the seq may be reused.
+    Root on this host can delete the record: this raises the cost of a fork, it does not bind the operator."""
+    for st in ("revealing", "abandoning", "revealed", "abandoned"):
+        p = os.path.join(PEND, f"{int(seq):04d}.{st}")
+        if not os.path.exists(p): continue
+        try: rec = json.load(open(p))
+        except Exception: rec = {}
+        resolver = rec.get("resolved_by_pulse_hash") or rec.get("commit_pulse_hash")
+        if st in ("revealing", "abandoning") or (resolver and resolver != "0" * 64):
+            die(f"seq {seq} already resolved a PUBLISHED commit ({st}, resolver {str(resolver)[:12]}); a second commit at this seq would fork the chain")
 
 def _find(seq, states):
     for st in states:
