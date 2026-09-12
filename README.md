@@ -1,5 +1,18 @@
 # qrng-beacon-log — public, append-only record of attested randomness pulses
 
+[![verify-chain](https://github.com/docdailey/qrng-beacon-log/actions/workflows/verify.yml/badge.svg)](https://github.com/docdailey/qrng-beacon-log/actions/workflows/verify.yml)
+
+> A working experiment in proving not merely where public randomness came from, but when its private
+> contribution became irrevocably fixed — and making a withheld reveal publicly detectable.
+
+**Spec:** [`PROTOCOL.md`](PROTOCOL.md) (normative) · **Claims discipline:** [`CLAIMS.md`](CLAIMS.md) ·
+**Trust assumptions:** [`PUBLICATION.md`](PUBLICATION.md) · **Cadence + failure semantics:** [`CADENCE.md`](CADENCE.md) ·
+**Why:** [`THESIS.md`](THESIS.md) · **Keys:** [`keys/KEYS.json`](keys/KEYS.json) (history with validity windows)
+
+**Status: research prototype and adversarially honest design exercise — not infrastructure to consume.**
+The CI badge above re-verifies every pulse, link, commit/reveal pair, RFC 3161 token and the archive
+Merkle root hourly and on every push, with a live drand re-fetch.
+
 Each `chain/pulse-NNNN.json` is a hash-chained, multi-host-signed record. From pulse 0010 the
 chain uses **commit-then-reveal**: a `commit` pulse publishes `sha256(entropy)` bound to a *future*
 drand round; the following `reveal` pulse discloses the entropy after that round exists.

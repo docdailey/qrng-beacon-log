@@ -1,0 +1,41 @@
+{
+  "note": "Key history. A pulse's signature key must be listed for its role with the pulse seq inside [valid_from_seq, valid_to_seq]. Retired keys stay listed so old pulses remain verifiable; they are never valid for new pulses.",
+  "keys": [
+    {
+      "role": "entropy_signer",
+      "host": "protectli",
+      "key_id": "1fc857c9f439ab9a",
+      "public_key_b64": "a2ANhyUVHQGpi1mQRKG+L7siT0ptYH9/MpLQ/UunILA=",
+      "valid_from_seq": 1,
+      "valid_to_seq": null,
+      "status": "active"
+    },
+    {
+      "role": "time_attester",
+      "host": "f9t",
+      "key_id": "4687aa55eff780e4",
+      "public_key_b64": "XTXEocHhGqqxtpEHFaZRDjzTVayAP4aAS76BEg7avQ4=",
+      "valid_from_seq": 1,
+      "valid_to_seq": 2,
+      "status": "retired"
+    },
+    {
+      "role": "time_attester",
+      "host": "p550",
+      "key_id": "6dae96e8faa9678a",
+      "public_key_b64": "XAsLFvZJFrZvYnqg7+t9AN8qgppLCfMa+iOQJc0f8U8=",
+      "valid_from_seq": 3,
+      "valid_to_seq": null,
+      "status": "active"
+    },
+    {
+      "role": "time_witness",
+      "host": "k3",
+      "key_id": "817a5238d784c4b4",
+      "public_key_b64": "Y7uoa5a7ctiX+kN3P9SEbRbRKX49fF1thOUSqj+PmT0=",
+      "valid_from_seq": 4,
+      "valid_to_seq": null,
+      "status": "active"
+    }
+  ]
+}

@@ -34,10 +34,28 @@ def load(src):
     if src.startswith(("http://", "https://")):
         with urllib.request.urlopen(src, timeout=20) as r: return json.loads(r.read().decode())
     return json.load(open(src))
-def load_key(pin, role):
+_HIST = {}
+def key_history(pin):
+    if pin in _HIST: return _HIST[pin]
+    src = f"{pin.rstrip('/')}/KEYS.json" if pin.startswith(("http://", "https://")) else os.path.join(pin, "KEYS.json")
+    try: _HIST[pin] = load(src).get("keys", [])
+    except Exception: _HIST[pin] = None
+    return _HIST[pin]
+def pin_check(pin, role, key_b64, seq):
+    """True if the key is pinned for this role at this seq. Prefers KEYS.json (a history with validity
+    windows); falls back to the single <role>.pub. Returns (ok, description)."""
+    hist = key_history(pin)
+    if hist is not None:
+        for k in hist:
+            if k["role"] == role and k["public_key_b64"] == key_b64:
+                lo, hi = k.get("valid_from_seq") or 0, k.get("valid_to_seq")
+                if lo <= seq and (hi is None or seq <= hi):
+                    return True, f"KEYS.json: {role}@{k.get('host')} {k['key_id']} ({k.get('status')}, seq {lo}-{hi or 'now'})"
+                return False, f"KEYS.json lists this {role} key but only for seq {lo}-{hi or 'now'}, not {seq}"
+        return False, f"KEYS.json has no {role} entry for this key"
     src = f"{pin.rstrip('/')}/{role}.pub" if pin.startswith(("http://", "https://")) else os.path.join(pin, f"{role}.pub")
-    try: return load(src)
-    except Exception: return None
+    try: return (load(src)["public_key_b64"] == key_b64), f"{role}.pub"
+    except Exception: return None, f"no pin for {role}"
 def utc(ts): return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).isoformat()
 
 def verify_drand(da, refetch):
@@ -71,9 +89,9 @@ def main():
         except Exception: r = False
         chk(r, f"{name} signature by {s['signer']} (key {s['key_id']}) over the RECOMPUTED digest")
         if pin:
-            k = load_key(pin, s["role"])
-            if k: chk(k["public_key_b64"] == s["public_key_b64"], f"{name} key matches pinned {s['role']}.pub")
-            else: print(f"[WARN] no pinned key for {s['role']}")
+            ok, desc = pin_check(pin, s["role"], s["public_key_b64"], core["seq"])
+            if ok is None: print(f"[WARN] {desc}")
+            else: chk(ok, f"{name} key is pinned for seq {core['seq']} — {desc}")
 
     # ---- type-specific ----
     if typ == "commit":

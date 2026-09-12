@@ -119,7 +119,10 @@ def get_time_block():
                 "sawtooth_applied_in_servo": False,
                 "phc_sawtooth_residual_note": ("This epoch's TP1 edge fell %s ns from ideal (sign: corrected = raw + qErr, "
                                                "notebook 212). The servo does not correct it; it is reported so a consumer can." % a["sawtooth_qerr_ns_this_epoch"]),
-                "i210_servo_residual_ns_rms": pri["discipline"].get("offset_ns_rms") or pri["discipline"].get("last_offset_ns"),
+                "i210_servo_last_offset_ns": pri["discipline"].get("last_offset_ns"),
+                "i210_servo_residual_ns_rms": pri["discipline"].get("offset_ns_rms"),
+                "i210_servo_rms_samples": pri["discipline"].get("samples"),
+                "i210_servo_rms_note": "RMS is null unless computed over >=3 window samples; last_offset_ns is signed and instantaneous - they are different quantities",
                 "dominant_term": "ts2phc servo residual plus uncalibrated path delays",
                 "not_dominant": "userspace clock read cost - it does not enter the anchor",
             },
