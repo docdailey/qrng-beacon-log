@@ -61,19 +61,18 @@ clock like an instrument, and write down what they may not say. It is verifiable
 
 ## Archive commitment ("entropy of record")
 
-`merkle/manifest.json` commits to the 4.50 TB Quantis capture archive (42,935 blocks, 2025-07-18 →
-2025-11-15) under root **`c88c4320dff421400744abb36e65ecfc6f185b1a0e9ead5ddb0e10920b7a2738`**.
-`merkle/leaves.tsv` is the full leaf list; `merkle_proof.py` recomputes the root and produces or
-checks inclusion proofs. A sample proof for one block is included.
+**Archive root: `4e93d4be9ff5355d40e7e2c1d0ea599a62326aa09a651c9fa0b584764ccd95c4`** — `merkle/manifest-rehashed.json`,
+over the **recomputed bytes** of all 42,935 blocks (4.50 TB, 2025-07-18 → 2025-11-15), each leaf carrying a
+`sidecar_concordance` flag: **41,718** blocks match their capture-time sidecar (provenance from 2025), **1,217 (2.835 %)**
+do not and carry provenance dated 2026-09-12 only (ERR-006). `merkle/leaves-rehashed.tsv` is the leaf list;
+`merkle_proof.py --rehashed` produces and checks inclusion proofs, which state the block's provenance tier. The earlier
+sidecar-based root `c88c4320…` (`manifest.json`) is retained, labelled, and must not be cited as the archive root.
 
 ```bash
 python3 merkle/merkle_proof.py root                                   # recompute root from leaves.tsv
 python3 merkle/merkle_proof.py verify merkle/proof_quantum_20251115_054715.json
 ```
-⚠️ **ERR-006 (2026-09-12): the full re-hash has so far found 823 blocks (1.92 % of the archive, 5.6 % of the scanned subset) that do NOT match their sidecar hash**
-(0 % before 2025-08-15, up to 38 % on 08-25/26; scan chronological, no extrapolation justified). The root above therefore commits to a manifest that is wrong for
-those blocks. **Do not rely on it for any block that has not been individually re-verified.** A second root over
-verified leaves only, plus the mismatch list, will be published when the re-hash completes. See `ERRATA.md`.
+ERR-006 is final: see `ERRATA.md` for the full account (window, sizes, tested hypotheses, statistical intactness of the bytes).
 
 ## Notes
 - Pulses 0001–0009 predate commit-then-reveal and are kept for chain continuity; they contain

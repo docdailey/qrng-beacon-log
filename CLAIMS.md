@@ -187,10 +187,11 @@ were stamped from it and are superseded.
 ## Added 2026-09-12 — archive after ERR-006 (binding)
 
 - ❌ Do not describe the archive as "verified", "hash-manifested" or "committed" without the ERR-006 qualifier.
-- ✅ Say: "the capture-time manifest is wrong for at least 1.9 % of the archive (5.6 % of the subset scanned so far,
-  clustered after 2025-08-15; scan is chronological, no extrapolation); a new manifest over the recomputed bytes of
-  every block, with per-leaf sidecar concordance, is being built; non-concordant blocks carry no capture-time claim."
-- ❌ Never present a subset rate as an archive rate, and never quote a "verified-leaves-only" root as the archive root.
+- ✅ Say (FINAL): "the archive root is `4e93d4be…95c4` over the recomputed bytes of all 42,935 blocks (4.50 TB);
+  41,718 blocks match their capture-time sidecar (provenance from 2025), 1,217 (2.835 %) do not and carry provenance
+  dated 2026-09-12 only; discordant blocks are excluded from any capture-time claim."
+- ❌ Never cite `c88c4320…` as the archive root (it commits to sidecar hashes that are wrong for 1,217 blocks); never
+  present a subset rate as an archive rate; never say "verified archive" without the concordant/discordant counts.
 - Never quote `c88c4320…` as the archive's integrity root. Quote `manifest-verified.json` once it exists, with its
   leaf count, and quote the mismatch count beside it.
 
@@ -207,4 +208,5 @@ were stamped from it and are superseded.
   independent watcher — say so in the same breath. Pulses 0001–0019 do not carry the isolation property.
 - ❌ Do not call the watcher independent while it trusts code or keys from the watched repository. ✅ v3 watcher runs only
   its operator's pinned verifier and keys (`watcher/make_pins.py`).
-- The archive figure is **1.92 % of the archive, 5.6 % of the scanned subset**; never the reverse.
+- The archive figure is **1,217 of 42,935 blocks = 2.835 %** (final, full re-hash 2026-09-12). The earlier "5.6 %" was
+  the rate within the first third scanned and must not be quoted as an archive rate.

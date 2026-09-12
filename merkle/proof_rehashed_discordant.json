@@ -1,0 +1,82 @@
+{
+  "scheme": "merkle-sha256/v1",
+  "manifest": "manifest-rehashed.json",
+  "root": "4e93d4be9ff5355d40e7e2c1d0ea599a62326aa09a651c9fa0b584764ccd95c4",
+  "leaves": 42935,
+  "index": 12326,
+  "filename": "quantum_20250825_134352.bin",
+  "sha256": "c740b3aecef1079826e3b956985b0075c7fdf1fa46ca52186df89416de70047b",
+  "size_bytes": 104890368,
+  "relpath": "2025/08/25/quantum_20250825_134352.bin",
+  "path": [
+    {
+      "side": "right",
+      "hash": "912e2fbcce0ffdb5ea9def11c0604cc93891c4bc41c5bbe2981b246d1c69b7a3"
+    },
+    {
+      "side": "left",
+      "hash": "fb4fdda44101ad54b0e10f6d8421d2c50b2a278d6e4a22105b943838547b3dbc"
+    },
+    {
+      "side": "left",
+      "hash": "45292f205aa911671d264c5aa71517ffd937a0d7102beb5ef0f4a2d335011833"
+    },
+    {
+      "side": "right",
+      "hash": "7597426e2ebadd5a51641fde40790a7b1471f68d79bf251f35728fd5fae8ea3f"
+    },
+    {
+      "side": "right",
+      "hash": "e404e81c2a322d6f4e7f990022f576c461ecce6b2f6540ccc68d7804c32f2b89"
+    },
+    {
+      "side": "left",
+      "hash": "ead4e6d90e2c7a25f41d8a0a35a07205c5a3c4599e8fc3a461e1e23a3391778a"
+    },
+    {
+      "side": "right",
+      "hash": "809c031fb8b5f7e433aa26e04816b297d4099d36e549fe4d20bd15c784937dd9"
+    },
+    {
+      "side": "right",
+      "hash": "42134a50071402d6ac1a0ec804e1d4a711b253d02bc06fb46de1e535c31c181e"
+    },
+    {
+      "side": "right",
+      "hash": "520beab53324816e85620be962b0f42588c26ea3db500996016d80cc593dfe84"
+    },
+    {
+      "side": "right",
+      "hash": "a0b7e8829c1664bc546c7ecc8b0b37a100c81e1b21782320b54e0a761833688d"
+    },
+    {
+      "side": "right",
+      "hash": "0759bdb6848a64f5497279e104ea68bb543c7b38807d1480fa21bc095a03b8bf"
+    },
+    {
+      "side": "right",
+      "hash": "f2a18bdec0e7de177fa02b8aecd65a0a256c717402e8abfbb6536798c06e3d6a"
+    },
+    {
+      "side": "left",
+      "hash": "3b8141bce55c4dabe0fe7e75b7a96534b504062c3c9b6d3163b1aebf6e2b194a"
+    },
+    {
+      "side": "left",
+      "hash": "761e930997bfe79caf4d876c1942c3785846b5a49568e40e77330d4283bb42d3"
+    },
+    {
+      "side": "right",
+      "hash": "abd99f3e15d9672cbc26e926192dda623b79a4a014f4ef6308c229a862c988a0"
+    },
+    {
+      "side": "right",
+      "hash": "1b631c0ade1221b5d2b9a1024075b2cf4d9861a6bc2c873758fc014fbe38c440"
+    }
+  ],
+  "verify": "python3 merkle_proof.py verify <this file>",
+  "sidecar_sha256": "2fbb9be498c4dff066cf6dd5c3c690776aac7b6a2cf9ebff2e6f892accd189a0",
+  "sidecar_concordance": false,
+  "provenance": "capture-time sidecar does NOT match the bytes: provenance dated 2026-09-12 (re-hash) only; no capture-time claim",
+  "what_this_proves": "This block (filename + sha256) is one of the 42935 leaves committed under root 4e93d4be9ff5355d40e7e2c1d0ea599a62326aa09a651c9fa0b584764ccd95c4. Hash the block yourself and compare to sha256 to bind the bytes to the commitment."
+}

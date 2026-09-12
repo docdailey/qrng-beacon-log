@@ -28,48 +28,48 @@ compliant pair is 0020/0021** (2026-09-12 02:50–02:55 UTC). Latent issue also
 logged: k3's `offset -37` is the hardcoded leap-second form; it should be the `tai` option (gap #10).
 **Found by:** external reviewer, 2026-09-12 (review #3, finding 4).
 
-## ERR-006 — archive manifest hashes do not match the bytes on disk for at least 1.9 % of blocks (PRELIMINARY)
+## ERR-006 — archive manifest hashes do not match the bytes on disk for 2.835 % of blocks (FINAL, 2026-09-12)
 
-**Affected:** the archive commitment root **`c88c4320…2738`** (`merkle/manifest.json`), the claim "committed to
-capture-time sidecars", and any block not individually re-verified.
-**What was found (2026-09-12, full re-hash 34 % complete):** of **14,651** blocks re-hashed so far, **823** do **not**
-match the SHA-256 recorded in their capture-time sidecar. That is **5.62 % of the checked subset** and a demonstrated
-**archive-wide lower bound of 1.92 %** (823 / 42,935). Because the scan is chronological and the failures cluster by
-day, **no extrapolation to the unscanned remainder is justified** in either direction; the final figure will replace
-this one. (An earlier revision of this entry wrote "≥ 5.6 %" — that was the subset rate misstated as an archive bound;
-corrected 2026-09-12 after external review.) Distribution by capture day is not random:
-**zero** mismatches in the first 15 days (2025-07-18 → 08-14), then 0.5 % (08-15) rising to **38 %** (08-25, 08-26),
-still elevated on 08-29 (the job's current position). 272 of the 823 files are 16–48 KiB **larger** than 100 MiB.
-**Tested and rejected:** the sidecar hash is **not** the hash of the first 100 MiB, nor of the first `size_bytes` bytes
-(12/12 sampled), **nor of any of 25 offset/length windows of the file** (drop 16–64 KiB head, drop 16–48 KiB tail,
-8/8 sampled) — the recorded hash has **no verifiable relationship to the written bytes** for these blocks. File mtimes
-are consistent with the original write (filenames are local time; mtime − name ≈ the ~200 s write duration), which
-**argues against** later modification but does not prove it. **The sidecars name the culprit window:** every mismatching block belongs to
-a collector session whose `collection_stats.start_time` is **2025-08-15T09:00:41Z** — the exact onset of mismatches —
-whereas the clean blocks belong to earlier sessions (e.g. 2025-08-09T16:40:03Z). No collector logs exist for August
-(the `logs/` directory covers only 2025-07-16). Working conclusion: the collector started on 2025-08-15 hashed
-something other than the bytes it wrote (mutated or interleaved buffer), intermittently and load-dependently
-(0.5 % → 38 %). Collector source is being located to confirm. **The bytes themselves are intact.** A 10 MB slice of a
-mismatching block from the worst day (2025-08-25) is statistically indistinguishable from a matching block from
-2025-08-10: Shannon 7.999983 vs 7.999983 bits/byte, χ² p = 0.79 vs 0.73, serial correlation +4e-4 vs +2.5e-4, SP 800-22
-subset all pass on both, 90B MCV 7.962 vs 7.962. So this is a **broken provenance record, not corrupted data** — but
-note that passing randomness tests cannot by itself prove the bytes came from the Quantis; only the sidecar could have,
-and for these blocks it does not.
-**Salvage, honestly tiered:** the corrected manifest will carry two classes of leaf — **(A) capture-verified**: bytes
-match the capture-time sidecar (provenance chain intact from 2025); **(B) re-hashed-only**: bytes hashed on
-2026-09-12, no capture-time corroboration. Class B blocks are usable as random data with provenance dated 2026-09-12,
-and are **excluded** from any claim that rests on capture-time provenance.
-**What the root means now:** `c88c4320…` commits to the **manifest**, and the manifest is wrong for at least these
-blocks. **Do not rely on it for any block that has not been individually re-hashed.** The sample verification of
-3/3 published on 2026-09-11 was true and was a sample; it did not license the word "verified" for the archive, and
-`CLAIMS.md` said so — this entry is the reason that rule exists.
-**Plan (revised after external review):** (1) the full re-hash continues (resumable, read-only) — final numbers replace
-the preliminary ones here; (2) a **new archive manifest over the recomputed bytes of every readable block** —
-an archive root, not a subset root — with a per-leaf `sidecar_concordance` field (`true` = bytes match the capture-time
-sidecar; `false` = recorded hash unrelated to the bytes) and the mismatch list; (3) cause analysis; (4) leaves with
-`sidecar_concordance: false` carry provenance dated 2026-09-12 only and are excluded from any capture-time claim. The
-original root stays published, labelled, for the record.
-**Found by:** our own full re-hash job, started 2026-09-11 after the manifest was built from sidecars.
+**Affected:** the sidecar-based commitment root **`c88c4320…2738`** (`merkle/manifest.json`) and any capture-time
+provenance claim for the 1,217 blocks listed in `merkle/mismatch.json`.
+
+**Final result of the full re-hash (every one of 42,935 blocks, 4.50 TB, read on macstu 2026-09-12):**
+**1,217 blocks (2.835 % of the archive) do not match the SHA-256 in their capture-time sidecar; 41,718 do.** No block
+was missing or unreadable. (The preliminary entry's "5.6 %" was the rate within the first third scanned, where the
+failures are concentrated; the archive-wide figure is 2.835 %.)
+
+**Where they are.** Mismatches begin on **2025-08-15** and run through **2025-09-02** (worst days 08-25 at 38.1 % and
+08-26 at 37.7 %), with three isolated later blocks (09-05, 09-06, 09-28). **62 of 83 capture days have zero
+mismatches**, including the entire first four weeks (07-18 → 08-14). Sizes: 815 exactly 100 MiB; 401 between 16 and
+48 KiB over 100 MiB; one truncated at 85,573,632 bytes.
+
+**What was tested and rejected:** the sidecar hash is not the hash of the first 100 MiB, of the first `size_bytes`
+bytes, or of any of 25 offset/length windows of the file — it bears no verifiable relation to the written bytes. mtimes
+are consistent with a single original write, which argues against (does not prove) later modification. The one
+mismatching sidecar examined in detail belongs to a collector session started 2025-08-15T09:00:41Z, coinciding with
+the onset; a session-level attribution across all 1,217 blocks was **not** established (the August collector logs do
+not exist). **The bytes themselves are statistically intact**: a mismatching block from 08-25 is indistinguishable from
+a good block (Shannon 7.999983 vs 7.999983, all SP 800-22 pass, MCV 7.962 vs 7.962). This is a **broken provenance
+record, not corrupted data** — with the caveat that passing randomness tests cannot prove the bytes came from the
+Quantis; only the sidecar could, and for these blocks it does not.
+
+**The correction — a new archive root over the recomputed bytes of every block:**
+
+| | sidecar manifest (superseded, kept for the record) | **archive manifest (cite this)** |
+|---|---|---|
+| file | `merkle/manifest.json`, `leaves.tsv` | **`merkle/manifest-rehashed.json`, `leaves-rehashed.tsv`** |
+| leaf hash | capture-time sidecar SHA-256 | **SHA-256 of the bytes as re-read 2026-09-12** |
+| root | `c88c4320dff421400744abb36e65ecfc6f185b1a0e9ead5ddb0e10920b7a2738` | **`4e93d4be9ff5355d40e7e2c1d0ea599a62326aa09a651c9fa0b584764ccd95c4`** |
+| leaves | 42,935 | 42,935 (**41,718 concordant, 1,217 discordant**) |
+| per-leaf `sidecar_concordance` | — | `true` = provenance chain intact from 2025; `false` = provenance dated 2026-09-12 only |
+
+`merkle_proof.py --rehashed` produces and verifies inclusion proofs that carry the concordance flag; a proof for a
+discordant block says so in its `provenance` field, and a proof that claims concordance falsely does not verify.
+Discordant blocks are usable as random data with provenance dated 2026-09-12 and are **excluded from any claim that
+rests on capture-time provenance**. This is an archive root, not a subset root: every readable block is in it.
+
+**Found by:** our own full re-hash, started 2026-09-11 after the sidecar-based manifest was built; headline math
+corrected after external review (review #3, finding 5); final numbers 2026-09-12 12:05 UTC.
 
 ## ERR-005 — role signatures were digest signatures, not role attestations (architecture)
 

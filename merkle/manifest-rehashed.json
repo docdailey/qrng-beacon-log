@@ -1,0 +1,15 @@
+{
+  "scheme": "merkle-sha256/v1",
+  "leaf": "SHA256(0x00||filename||0x00||recomputed_sha256_hex)",
+  "node": "SHA256(0x01||left||right), odd node promoted",
+  "leaf_order": "sorted by filename",
+  "root": "4e93d4be9ff5355d40e7e2c1d0ea599a62326aa09a651c9fa0b584764ccd95c4",
+  "leaves": 42935,
+  "depth": 16,
+  "total_bytes": 4501833711616,
+  "sidecar_concordant": 41718,
+  "sidecar_discordant": 1217,
+  "discordant_pct_of_archive": 2.835,
+  "rehashed_unix": 1789214755,
+  "basis": "Every leaf's hash is the SHA-256 of the bytes on disk as re-read on macstu on 2026-09-12. sidecar_concordance is true when that equals the capture-time sidecar hash (provenance chain intact from 2025) and false otherwise (provenance dated 2026-09-12 only). This is the archive root; manifest.json (sidecar-based) is retained, labelled, for the record."
+}

@@ -85,8 +85,11 @@ for p in pulses:
         say(f"[FAIL] commit {seq}: reveal deadline passed with neither a reveal nor a signed failure pulse (withheld reveal)"); T["failures"] += 1
 stale = [f for f in glob.glob(f"{ROOT}/chain/pulse-*.FAILED.json") if int(re.search(r"pulse-(\d{4})", f).group(1)) >= V05_FROM]
 if stale: say(f"[FAIL] unsigned legacy FAILED.json markers exist in the v0.5 era: {[os.path.basename(x) for x in stale]}"); T["failures"] += 1
-rc, _ = run("python3", "merkle/merkle_proof.py", "root"); say(f"[{'PASS' if rc == 0 else 'FAIL'}] archive Merkle root recomputes from leaves.tsv"); T["failures"] += rc != 0
-rc, _ = run("python3", "merkle/merkle_proof.py", "verify", "merkle/proof_quantum_20251115_054715.json"); say(f"[{'PASS' if rc == 0 else 'FAIL'}] sample inclusion proof verifies"); T["failures"] += rc != 0
+rc, _ = run("python3", "merkle/merkle_proof.py", "root"); say(f"[{'PASS' if rc == 0 else 'FAIL'}] sidecar-manifest root recomputes from leaves.tsv (labelled, ERR-006)"); T["failures"] += rc != 0
+rc, _ = run("python3", "merkle/merkle_proof.py", "root", "--rehashed"); say(f"[{'PASS' if rc == 0 else 'FAIL'}] ARCHIVE root recomputes from leaves-rehashed.tsv (recomputed bytes)"); T["failures"] += rc != 0
+for pf in ("merkle/proof_quantum_20251115_054715.json", "merkle/proof_rehashed_concordant.json", "merkle/proof_rehashed_discordant.json"):
+    if os.path.exists(os.path.join(ROOT, pf)):
+        rc, _ = run("python3", "merkle/merkle_proof.py", "verify", pf); say(f"[{'PASS' if rc == 0 else 'FAIL'}] inclusion proof verifies: {os.path.basename(pf)}"); T["failures"] += rc != 0
 if REQ_BLS and T["bls_skipped"]: say(f"[FAIL] BLS skipped {T['bls_skipped']} time(s) with REQUIRE_BLS=1"); T["failures"] += 1
 say("\n=== verification tally ===")
 for k, v in T.items(): say(f"  {k:24s} {v}")
