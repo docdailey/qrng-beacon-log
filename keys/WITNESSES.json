@@ -1,0 +1,22 @@
+{
+  "note": "Witnesses the log asks to cosign each checkpoint (c2sp.org/tlog-witness@v1.0.0). Cosignature lines are appended to the checkpoint by the LOG at publish time; witnesses write nothing anywhere. A witness operated by the log's sponsor is a SECOND SYSTEM, not an independent party \u2014 CLAIMS.md forbids the word 'witnessed' until an operator we do not control has cosigned.",
+  "witnesses": [
+    {
+      "name": "notbefore.net/witness/ryzen",
+      "verifier_key": "notbefore.net/witness/ryzen+59def490+BKnc+7SkFu+BMZSwtL5AzKx2xOs+Ue9+Z8lrIJGoTGan",
+      "url": "http://192.168.68.6:8477",
+      "software": "witness/nbwitness.py (this repository)",
+      "operated_by": "the log's sponsor (Bill), on the operator's LAN",
+      "independent": false,
+      "disclosure": "same sponsor; exercises the protocol path so an independent witness is a configuration change",
+      "enabled": true,
+      "timeout_s": 8,
+      "since_utc": "2026-09-12"
+    }
+  ],
+  "independent_witnesses": [],
+  "witness_network": {
+    "site": "https://witness-network.org",
+    "status": "not yet requested (outreach held by Bill)"
+  }
+}

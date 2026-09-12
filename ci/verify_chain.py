@@ -106,6 +106,10 @@ if cp_id and cp_id.get("enabled"):
         older = sorted(glob.glob(os.path.join(ROOT, "checkpoints", "[0-9]*")))
         args = ["python3", "tlog.py", "verify", "checkpoint", "--origin", cp_id["origin"], "--pub", cp_id["public_key_file"]] + (["--old", older[-2]] if len(older) >= 2 else [])
         rc, out = run(*args); say(f"[{'PASS' if rc == 0 else 'FAIL'}] signed checkpoint ({cp_id['origin']}) verifies: signature, root recomputes from chain/, consistent with the previous checkpoint"); T["failures"] += rc != 0
+        cos = re.findall(r"\[PASS\] cosigned by witness (\S+)", out); T["checkpoint_cosignatures"] = len(cos)
+        wj = json.load(open(os.path.join(ROOT, "keys", "WITNESSES.json"))) if os.path.exists(os.path.join(ROOT, "keys", "WITNESSES.json")) else {}
+        indep = {w["name"] for w in wj.get("independent_witnesses", [])}
+        say(f"[INFO] checkpoint cosigned by {len(cos)} witness(es): {', '.join(cos) or 'none'} — independent: {len([c for c in cos if c in indep])} (same-sponsor witnesses do not count as 'witnessed')")
         if rc: print(out)
         size = int(open(cpf).read().split("\n")[1]); fresh = size == T["pulses"]
         say(f"[{'PASS' if fresh else 'FAIL'}] checkpoint size {size} == {T['pulses']} published pulses (every pulse is covered by the head in the same commit)"); T["failures"] += not fresh
