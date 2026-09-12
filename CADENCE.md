@@ -37,7 +37,7 @@ Only think mints; `pulse.py` refuses on any host whose checkout is not the publi
 | reveal deadline | reveal pushed **≤ 10 min after** target release | `REVEAL_DEADLINE_S`; breach → FAILED marker pushed; watcher attests |
 | host | think | always-on home-LAN Linux; oscpro902 travels |
 
-Operational notes: `think:~/qrng-beacon/cycle.log` is the local record; failures are also public as
+Operational notes: **outages and recovery are in `RECOVERY.md`** (planned-pause checklist, `pulse.py preflight`). `think:~/qrng-beacon/cycle.log` is the local record; failures are also public as
 `FAILED.json` markers. To stop: `systemctl --user disable --now qrng-beacon.timer` on think. A stopped
 cadence leaves no hole — holes only come from a commit without a reveal.
 

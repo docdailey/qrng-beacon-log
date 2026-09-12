@@ -107,6 +107,9 @@ ERR-006 is final: see `ERRATA.md` for the full account (window, sizes, tested hy
   `CADENCE.md` write a `chain/pulse-NNNN.FAILED.json` and push it. `systemd/` holds the timer units.
 - `pulse.py` refuses to mint unless the checkout equals the published head (`origin/main`), so two
   operators cannot fork the chain by accident.
+- **`RECOVERY.md`** — what the chain looks like when the timing bench, the aggregator or the entropy host goes down
+  (silent gap / signed failure / unresolved commit that heals itself), the planned-outage checklist, bring-up order,
+  and `python3 pulse.py preflight`, the read-only readiness check that mints nothing.
 - **`cli/RELEASING.md`** — how the `notbefore` package is released, and why any change to `verify.py`, `keys/` or
   `hosts/EXPECTED.json` is only real for consumers once a new package is on PyPI (CI enforces the re-vendoring).
 - **`watcher.py` — run this if you do not trust us.** It needs no access to our systems: it reads this
