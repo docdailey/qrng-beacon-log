@@ -38,7 +38,9 @@ cd public && git pull --ff-only origin main
 $EDITOR cli/pyproject.toml            # version = "0.2.1"
 $EDITOR cli/notbefore/__init__.py     # __version__ = "0.2.1"
 
-# 2. re-vendor: pins verifier + keys + certs at the CURRENT commit into notbefore/verifier/ and writes VENDORED.json
+# 2. re-vendor: pins verifier + keys + certs at the CURRENT commit into notbefore/verifier/ and writes VENDORED.json.
+#    Do this AFTER `git pull --rebase` and immediately before the push: a rebase changes your commit shas, and a
+#    VENDORED.json naming a sha that never reached origin/main is a pin nobody can resolve (happened 2026-09-12; re-vendored).
 (cd cli && python3 vendor.py)         # prints: vendored 23 files at <sha>
 
 # 3. build + test locally in a clean venv (same suite CI runs; needs git + openssl; network for drand/Rekor refetch)
