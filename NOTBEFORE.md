@@ -374,6 +374,8 @@ Do not implement this until isolation can hold a vector of \(E\) and refuse the 
 
 Breaking changes to \(V\) or \(S\) require a new domain tag. Old \(V\) stay verifiable under old tags.
 
+Package version ↔ spec: `notbefore` `MAJOR.MINOR` tracks this spec's version; PATCH = re-vendored verifier/keys or CLI fixes with no change to any valid value. Any change to the vendored verifier, keys or `hosts/EXPECTED.json` reaches consumers only through a new release — procedure in `cli/RELEASING.md`.
+
 ---
 
 ## 13. Worked check (implementors)

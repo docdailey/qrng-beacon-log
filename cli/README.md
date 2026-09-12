@@ -29,3 +29,5 @@ Eligible pairs start at 0020/0021 (0026/0027 preferred, execution enforced). `ve
 Pulses 0001–0041 carry retroactive anchors (2026-09-12 12:47 UTC); from 0042 anchors are contemporaneous.
 
 MIT. Data in the log: CC BY 4.0.
+
+**Releasing** (operators): `RELEASING.md` — every change to the verifier or keys needs a new package, and the flow there is the only way one gets made.
