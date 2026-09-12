@@ -156,8 +156,11 @@ def require_synced():
     if rc != 0: die("cannot fetch origin to check the published head - " + err[:120])
     local, remote = git("rev-parse", "HEAD")[1], git("rev-parse", "origin/main")[1]
     if local != remote: die(f"checkout {local[:10]} != published head {remote[:10]}; pull first, never mint on a fork")
-    dirty = [l for l in git("status", "--porcelain")[1].splitlines() if not l.endswith("/pending/") and "pending/" not in l]
-    if dirty: die("working tree has unpublished changes: " + "; ".join(dirty[:3]))
+    # Only the chain matters: a minted-but-unpushed pulse (tracked or untracked) is a fork risk.
+    # Logs and scratch files elsewhere in the checkout are not.
+    dirty = [l for l in git("status", "--porcelain")[1].splitlines()
+             if "chain/" in l and "chain/pending/" not in l]
+    if dirty: die("chain has unpublished changes: " + "; ".join(dirty[:3]))
 
 def mark_failed(seq, reason, extra=None):
     """A visible, pushed record of a failed pulse. The chain never hides a hole."""
