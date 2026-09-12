@@ -182,3 +182,12 @@ were stamped from it and are superseded.
 - ✅ "Every v0.5 commit carries at least two RFC 3161 tokens taken at mint, each ≥ 120 s before its round."
 - The aggregator is still a single party that *assembles*; it cannot forge host facts but it can choose not
   to publish. That is what the watcher's COMMIT-RECEIPT and NON-REVEAL records exist to expose.
+
+
+## Added 2026-09-12 — archive after ERR-006 (binding)
+
+- ❌ Do not describe the archive as "verified", "hash-manifested" or "committed" without the ERR-006 qualifier.
+- ✅ Say: "the capture-time manifest is wrong for at least 5.6 % of blocks (clustered after 2025-08-15); a root over
+  individually re-hashed leaves is being built; unverified blocks are excluded from any offering."
+- Never quote `c88c4320…` as the archive's integrity root. Quote `manifest-verified.json` once it exists, with its
+  leaf count, and quote the mismatch count beside it.
