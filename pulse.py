@@ -21,11 +21,13 @@ publishing. See ../PUBLICATION.md.
 import json, base64, hashlib, subprocess, sys, time, os, glob
 from concurrent.futures import ThreadPoolExecutor
 import drand_anchor
+import tsa
 
 HERE      = os.path.dirname(os.path.abspath(__file__))
-CHAIN     = os.path.join(HERE, "..", "chain")
+_PUBLIC   = os.path.isdir(os.path.join(HERE, "chain"))          # public-repo checkout layout
+CHAIN     = os.path.join(HERE, "chain") if _PUBLIC else os.path.join(HERE, "..", "chain")
 PENDING   = os.path.join(CHAIN, "pending")
-LEGACY    = os.path.join(HERE, "..", "samples")
+LEGACY    = None if _PUBLIC else os.path.join(HERE, "..", "samples")
 
 PROTECTLI = "willy@192.168.70.1"      # entropy: ID Quantique Quantis USB
 P550      = "willy@192.168.68.44"      # time: Intel i210 PHC (authoritative)
@@ -140,11 +142,34 @@ def sign_all(pulse_hash):
         open(os.path.join(HERE, "keys", f"{role}.pub"), "w").write(json.dumps(pub, indent=2))
     return sigs
 
+def git(*a):
+    r = subprocess.run(["git", "-C", HERE, *a], capture_output=True, text=True); return r.returncode, r.stdout.strip(), r.stderr.strip()
+
+def require_synced():
+    """Refuse to mint unless this checkout is exactly the published head. Two minters = a forked chain."""
+    if git("rev-parse", "--is-inside-work-tree")[0] != 0:
+        return  # dev layout, not the published repo
+    rc, _, err = git("fetch", "-q", "origin", "main")
+    if rc != 0: die("cannot fetch origin to check the published head - " + err[:120])
+    local, remote = git("rev-parse", "HEAD")[1], git("rev-parse", "origin/main")[1]
+    if local != remote: die(f"checkout {local[:10]} != published head {remote[:10]}; pull first, never mint on a fork")
+    dirty = [l for l in git("status", "--porcelain")[1].splitlines() if not l.endswith("/pending/") and "pending/" not in l]
+    if dirty: die("working tree has unpublished changes: " + "; ".join(dirty[:3]))
+
+def mark_failed(seq, reason, extra=None):
+    """A visible, pushed record of a failed pulse. The chain never hides a hole."""
+    path = os.path.join(CHAIN, f"pulse-{seq:04d}.FAILED.json")
+    json.dump({"seq": seq, "failed_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+               "reason": reason, "detail": extra or {},
+               "meaning": "This pulse did not complete its commit/reveal contract. Consumers must treat it as failed."},
+              open(path, "w"), indent=2)
+    return path
+
 def head():
     files = sorted(glob.glob(os.path.join(CHAIN, "pulse-*.json")))
     if files:
         p = json.load(open(files[-1])); return p["core"]["seq"], p["pulse_hash"], p
-    leg = sorted(glob.glob(os.path.join(LEGACY, "pulse-*.json")))
+    leg = sorted(glob.glob(os.path.join(LEGACY, "pulse-*.json"))) if LEGACY else []
     if leg:
         p = json.load(open(leg[-1])); return p["core"]["seq"], p["pulse_hash"], p
     return 0, "0" * 64, None
@@ -171,6 +196,7 @@ DISCLOSURE = {
 # ---------------------------------------------------------------- commit
 def cmd_commit(lead):
     if lead < MIN_LEAD: die(f"lead {lead} < MIN_LEAD {MIN_LEAD}")
+    require_synced()
     try: now = drand_anchor.fetch()
     except Exception as e: die(f"drand unreachable - {e}")
     if not now["randomness_equals_sha256_signature"]: die("drand randomness != sha256(signature)")
@@ -218,12 +244,17 @@ def cmd_commit(lead):
     os.write(fd, json.dumps({"seq": seq, "entropy_hex": ent.hex(), "commitment": commitment,
                              "target_round": target, "pulse_hash": pulse_hash}).encode()); os.close(fd)
     path = write_pulse(seq, pulse)
-    print(json.dumps({"minted": path, "type": "commit", "seq": seq, "pulse_hash": pulse_hash,
+    # Independent timestamps from >= 2 public TSAs, taken NOW - before the target round exists.
+    stamps = tsa.stamp(path, "at-commit")
+    if len(stamps["tokens"]) < 1:
+        sys.stderr.write("WARNING: no TSA token obtained; the commit's publication time rests on git alone\n")
+    print(json.dumps({"minted": path, "type": "commit", "tsa_tokens": [(t["tsa"], t["time"]) for t in stamps["tokens"]], "seq": seq, "pulse_hash": pulse_hash,
                       "target_round": target, "target_release_utc": core["commitment"]["target_release_utc"],
                       "reveal_after_s": round(target_release - time.time(), 1)}, indent=2))
 
 # ---------------------------------------------------------------- reveal
 def cmd_reveal():
+    require_synced()
     pend = sorted(glob.glob(os.path.join(PENDING, "pulse-*.secret")))
     if not pend: die("no pending commit to reveal")
     sec = json.load(open(pend[0]))
@@ -307,4 +338,6 @@ if __name__ == "__main__":
         lead = int(sys.argv[sys.argv.index("--lead") + 1]) if "--lead" in sys.argv else DEFAULT_LEAD
         cmd_commit(lead)
     elif cmd == "reveal": cmd_reveal()
+    elif cmd == "fail":
+        print(mark_failed(int(sys.argv[2]), sys.argv[3] if len(sys.argv) > 3 else "unspecified"))
     else: cmd_status()

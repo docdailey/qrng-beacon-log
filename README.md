@@ -58,3 +58,14 @@ is in progress; its status is published as it advances. Until it completes, the 
 - Pulses 0001–0009 predate commit-then-reveal and are kept for chain continuity; they contain
   non-routable LAN addresses of the originating hosts, which is deliberate transparency, not a leak.
 - Nothing here is certified by any body. See `CLAIMS.md` for what we do and do not claim.
+
+## Operating it (for operators, and for anyone auditing the operator)
+
+- `beacon-cycle.py` — one hourly commit → TSA-stamp → push → wait → reveal → push cycle; breaches of
+  `CADENCE.md` write a `chain/pulse-NNNN.FAILED.json` and push it. `systemd/` holds the timer units.
+- `pulse.py` refuses to mint unless the checkout equals the published head (`origin/main`), so two
+  operators cannot fork the chain by accident.
+- **`watcher.py` — run this if you do not trust us.** It needs no access to our systems: it reads this
+  repo and drand, and publishes signed `NON-REVEAL` findings under *your* key to *your* repo whenever a
+  commit passes its reveal deadline without a reveal. It also records every reveal it observed, so its
+  own history proves it was watching. `WATCH_REPO=docdailey/qrng-beacon-log OUT_DIR=~/beacon-watch python3 watcher.py`

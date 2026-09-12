@@ -1,0 +1,10 @@
+[Unit]
+Description=qrng-beacon: one commit->publish->reveal->publish cycle (CADENCE.md)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/qrng-beacon
+ExecStart=/usr/bin/python3 %h/qrng-beacon/beacon-cycle.py
+TimeoutStartSec=1500
+Nice=10
