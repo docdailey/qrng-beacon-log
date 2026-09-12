@@ -66,8 +66,8 @@ checks inclusion proofs. A sample proof for one block is included.
 python3 merkle/merkle_proof.py root                                   # recompute root from leaves.tsv
 python3 merkle/merkle_proof.py verify merkle/proof_quantum_20251115_054715.json
 ```
-⚠️ **ERR-006 (2026-09-12): the full re-hash has found that ≥ 5 % of blocks do NOT match their sidecar hash**
-(0 % before 2025-08-15, up to 38 % on 08-25/26). The root above therefore commits to a manifest that is wrong for
+⚠️ **ERR-006 (2026-09-12): the full re-hash has so far found 823 blocks (1.92 % of the archive, 5.6 % of the scanned subset) that do NOT match their sidecar hash**
+(0 % before 2025-08-15, up to 38 % on 08-25/26; scan chronological, no extrapolation justified). The root above therefore commits to a manifest that is wrong for
 those blocks. **Do not rely on it for any block that has not been individually re-verified.** A second root over
 verified leaves only, plus the mismatch list, will be published when the re-hash completes. See `ERRATA.md`.
 
