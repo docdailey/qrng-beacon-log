@@ -65,7 +65,7 @@ def test_13_commit_after_a_skip_is_accepted_by_the_vendored_verifier():
     r = subprocess.run([sys.executable, os.path.join(C.VENDOR, "verify.py"), cp, "--pin", C.KEYS, "--prev", fp, "--no-bls"], capture_output=True, text=True)
     assert "[PASS] state machine: commit follows a reveal, failure, skip or legacy pulse" in r.stdout and "[PASS] chains to previous pulse" in r.stdout, r.stdout[-800:]
     assert r.returncode == 0
-def test_14_spec_version_is_0_3():
+def test_14_version_flag_reports_spec_and_package():
     import notbefore
     rc, out, err = nb("--version"); assert notbefore.SPEC in out and notbefore.__version__ in out
 def test_15_client_side_split_view_detector(tmp_path, monkeypatch):
@@ -229,3 +229,29 @@ def test_27_rule_traverses_failures_without_a_cutoff(tmp_path):
     rc, o, e = nb("execute", str(c), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path), log=str(log))
     assert rc == 0 and "reveal 0035" in e and e.count("passed over by rule") >= 6, e
 
+def test_28_tsa_trust_roots_are_pinned_not_borrowed(tmp_path, monkeypatch):
+    """ERR-014: RFC 3161 tokens verify only against the anchors shipped in verifier/keys/tsa — never the host store,
+    never a download. Real tokens, real openssl: right pins pass with the system store hidden; wrong root fails;
+    missing root fails closed; no pins at all fails closed; and the vendored source carries no system-store fallback."""
+    import shutil, importlib, inspect
+    _tsa = importlib.import_module("notbefore.verifier.tsa")
+    code = "\n".join(l.split("#", 1)[0] for l in inspect.getsource(_tsa).splitlines())      # comments may mention the host store; code may not
+    for banned in ("SYS_CA", "_fetch", "/etc/ssl", "cert.pem", "cacert", "CApath", "CAstore"):      # stamp() may use the network to ask a TSA; verify() may not fetch trust
+        assert banned not in code, f"vendored tsa.py still references {banned!r}"
+    pin_dir = os.path.join(os.path.dirname(_tsa.__file__), "keys", "tsa"); pins = json.load(open(os.path.join(pin_dir, "PINS.json")))
+    assert set(pins["tsas"]) == set(_tsa.TSAS), "every TSA we stamp with must have a pinned root"
+    for name, cfg in pins["tsas"].items():
+        for f in [cfg["root"], *cfg["intermediates"]]: assert os.path.exists(os.path.join(pin_dir, f)), f"{name}: pinned file {f} missing from the package"
+    seq = max(int(fn[6:10]) for fn in os.listdir(os.path.join(LOG, "chain")) if fn.endswith(".digicert.tsr"))
+    p = tmp_path / f"pulse-{seq:04d}.json"
+    for ext in ("", ".freetsa.tsr", ".digicert.tsr"): shutil.copy2(os.path.join(LOG, "chain", p.name + ext), str(p) + ext)
+    monkeypatch.setenv("SSL_CERT_FILE", os.devnull); monkeypatch.setenv("SSL_CERT_DIR", str(tmp_path / "no-such-dir"))   # hide the host store from openssl
+    ok, res = _tsa.verify(str(p)); assert ok and {r["tsa"] for r in res} == {"freetsa", "digicert"} and all(r["digest_and_chain_verified"] for r in res), res
+    alt = tmp_path / "pins"; shutil.copytree(pin_dir, alt); monkeypatch.setattr(_tsa, "PIN_DIR", str(alt))
+    bad = dict(pins); bad["tsas"] = json.loads(json.dumps(pins["tsas"])); bad["tsas"]["digicert"]["root"] = pins["tsas"]["freetsa"]["root"]   # wrong root
+    json.dump(bad, open(alt / "PINS.json", "w")); ok, res = _tsa.verify(str(p)); by = {r["tsa"]: r for r in res}
+    assert not ok and by["freetsa"]["digest_and_chain_verified"] and not by["digicert"]["digest_and_chain_verified"], res
+    json.dump(pins, open(alt / "PINS.json", "w")); os.remove(alt / pins["tsas"]["digicert"]["root"])                        # missing root file
+    ok, res = _tsa.verify(str(p)); by = {r["tsa"]: r for r in res}; assert not ok and "fail closed" in (by["digicert"]["detail"] or ""), res
+    empty = tmp_path / "empty"; empty.mkdir(); monkeypatch.setattr(_tsa, "PIN_DIR", str(empty))                            # no pins at all
+    ok, res = _tsa.verify(str(p)); assert not ok and len(res) == 2 and not any(r["digest_and_chain_verified"] for r in res), res

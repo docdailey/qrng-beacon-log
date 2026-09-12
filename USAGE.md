@@ -5,7 +5,7 @@ the live log on 2026-09-12 with `notbefore` 0.4.0 (spec 0.4); the outputs are re
 
 ## The workflow
 
-1. **Pre-register**, before the hour exists: *"the split will be derived from NotBefore pulse N with purpose X"* —
+1. **Commit**, before the hour exists (`notbefore plan` does this as a timestamped contract; a public preregistration is where you *publish* it): *"the split will be derived from NotBefore pulse N with purpose X"* —
    N is a future reveal seq (they are hourly), X is a string you will not reuse for anything else.
 2. **Wait** for the hour to pass.
 3. **Run** the command. It verifies the pair first and refuses to derive anything if verification fails.

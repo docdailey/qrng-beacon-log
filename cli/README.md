@@ -36,8 +36,9 @@ machine-readable result on stdout.
 `seed`, `shuffle` and `split` write a **transcript** JSON (`notbefore-<seq>-<purpose>.json`) — the engineering
 artifact that lets anyone reproduce the result from the public log.
 
-**Trust model.** The verifier, the signing keys, the drand group key, the Rekor log key, the freetsa CA and the
-expected host configuration are **vendored inside this package**, pinned at a named commit of the log repository
+**Trust model.** The verifier, the signing keys, the drand group key, the Rekor log key, **both RFC 3161 trust chains** (FreeTSA root + signer, DigiCert Trusted
+Root G4 + timestamping CA — the verifier consults neither the system store nor the network) and the expected host
+configuration are **vendored inside this package**, pinned at a named commit of the log repository
 (`notbefore --version` prints it). The CLI executes only those files; the log is read as data. Updating the
 verifier means updating the package — deliberately.
 

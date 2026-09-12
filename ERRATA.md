@@ -6,6 +6,26 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-014 — the TSA verifier trusted less than the documentation claimed: FreeTSA fetched-on-absence, DigiCert via the system store (2026-09-12)
+
+**What was wrong.** `NOTBEFORE.md`, the package README and `cli/RELEASING.md` said the FreeTSA CA was "vendored and
+pinned". The vendored files were indeed shipped, but `tsa.py`'s code path would download them if absent, and
+DigiCert tokens were verified against whatever `/etc/ssl` bundle the machine had. A verifier that pins its own
+verification code and keys but defers its timestamp trust to the host's certificate store is not what the docs
+described. Found by external code review.
+
+**Fix.** `keys/tsa/` now holds the four trust anchors as tracked files — FreeTSA root (`A6:37:9E:7C…`) and signer,
+DigiCert Trusted Root G4 (`55:2F:7B:DC…`, fetched from DigiCert's repository and cross-checked against the macOS
+system root store) and the DigiCert Trusted G4 TimeStamping RSA4096 SHA256 2025 CA1 intermediate (`CA:0B:15:54…`,
+taken from a live token) — with `PINS.json` recording fingerprints, sources and expiry. `tsa.py verify` uses only
+these (`-CAfile <pinned root>`, pinned intermediate as `-untrusted`; `openssl ts` builds its store from the given
+files only and never loads the default paths — confirmed on OpenSSL 3.0.13 and 3.6.3 by offering the wrong root while
+the right one sat in the system store), never downloads, and fails closed when a pin is missing. Tested: every existing token still verifies (newest pulse, first v0.5 pair, the
+retroactive tokens on 0010, a decision contract); hiding the DigiCert root or offering the wrong root makes that
+TSA's token FAIL. Consequence, stated: when a TSA rotates its chain, tokens fail loudly until a release pins the new
+chain — that is the behaviour a pinned verifier should have. Shipped as `notbefore` 0.7.1; the repo-root verifier
+(CI) uses the same files.
+
 ## ERR-013 — `execute` gated decision contracts on the EARLIEST TSA token and ignored token failures; `plan` exited 0 with fewer than two tokens (2026-09-12)
 
 **Affected:** `notbefore` 0.6.0 (on PyPI ~20:32–20:5x UTC), the first release with decision contracts. Found by

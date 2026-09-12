@@ -17,7 +17,7 @@ the build until `vendor.py` has been re-run, so this cannot be forgotten silentl
 | `keys/*` (`KEYS.json`, role `.pub`s, `drand-quicknet.json`, `anchor.pub`, `rekor.pub`) | key rotation — old keys stay listed with their seq windows, so old releases keep verifying old pulses |
 | `hosts/*.py` | tooling-drift comparison (informational) |
 | `ci/anchor_lib.py`, `ci/KNOWN_NONCOMPLIANT.json` | anchor verification; the list of pulses that are expected to fail |
-| `tsa-certs/freetsa-*.pem/.crt` | the pinned freetsa CA / TSA certificate (fetched by `vendor.py` if not cached) |
+| `keys/tsa/*` | the pinned RFC 3161 trust anchors (FreeTSA root + signer, DigiCert Trusted Root G4 + timestamping CA) — the verifier trusts nothing else; a TSA chain rotation is a release |
 
 A change to `NOTBEFORE.md` that alters \(V\), \(S\), shuffle or split **requires a new domain tag** (spec §12) *and* a
 new minor version; old releases keep producing the old, still-valid values.
@@ -46,7 +46,7 @@ $EDITOR cli/notbefore/__init__.py     # __version__ = "0.2.1"
 
 # 3. build + test locally in a clean venv (same suite CI runs; needs git + openssl; network for drand/Rekor refetch)
 (cd cli && rm -rf dist && uv build && uv venv /tmp/nbv && VIRTUAL_ENV=/tmp/nbv uv pip install "dist/notbefore-0.2.1-py3-none-any.whl[anchors,test]" \
-   && /tmp/nbv/bin/python -m pytest -q tests)          # NOTBEFORE.md §14: must be 12/12
+   && /tmp/nbv/bin/python -m pytest -q tests)          # NOTBEFORE.md §14: the whole suite must pass (28 tests as of 0.7.1)
 
 # 4. commit + push main; wait for the `notbefore-cli` workflow (build, vendored-files check, §14 suite) to go green
 git add cli && git commit -m "notbefore 0.2.1: <what changed and why a release was needed>" && git push origin main
@@ -73,8 +73,10 @@ also uploads Sigstore attestations for the wheel and sdist (PEP 740), so the pac
 
 ## Failure modes seen or expected
 
-- **"vendored files identical to repo root" step fails** → a vendored source changed; run step 2 and commit. If it
-  fails on `tsa-certs/*` only, freetsa rotated its certificate: verify the new one out of band before committing.
+- **"vendored files identical to repo root" step fails** → a vendored source changed; run step 2 and commit. If a
+  TSA rotates its chain, tokens start failing `tsa.py verify` everywhere (that is the pinned behaviour, ERR-014):
+  extract the new chain from a fresh token, confirm the new root out of band (vendor repository + a second trust
+  store), add it under `keys/tsa/` with its fingerprint in `PINS.json`, keep the old root while old tokens exist, release.
 - **Tag pushed on an untested commit** → the tag still runs the full suite first; a red suite blocks publishing.
 - **Version mismatch** between `pyproject.toml` and `__init__.py` → `notbefore --version` lies; check both in step 1.
 - **Push rejected non-fast-forward** → think pushed a pulse; `git pull --rebase origin main` and push again (docs and

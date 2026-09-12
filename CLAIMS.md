@@ -183,6 +183,10 @@ were stamped from it and are superseded.
   the aggregator signed only the assembly." Before 0018: digest signatures only (ERR-005).
 - ✅ "Failures are signed chain events" (v0.5). ❌ Never describe an unsigned `FAILED.json` as a chain event.
 - ✅ "Every v0.5 commit carries at least two RFC 3161 tokens taken at mint, each ≥ 120 s before its round."
+- ✅ Since 2026-09-12 (ERR-014): "RFC 3161 tokens are verified only against trust anchors pinned in `keys/tsa/`
+  (FreeTSA root + signer, DigiCert Trusted Root G4 + timestamping CA, fingerprints in `PINS.json`) — never the
+  host's certificate store, never a download." ❌ Never say a token is "trusted by the system" or "publicly
+  trusted"; the verifier trusts exactly the roots the release pins, and a TSA chain rotation is a release.
 - The aggregator is still a single party that *assembles*; it cannot forge host facts but it can choose not
   to publish. That is what the watcher's COMMIT-RECEIPT and NON-REVEAL records exist to expose.
 

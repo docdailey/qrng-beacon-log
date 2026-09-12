@@ -61,7 +61,7 @@ notbefore verify 49</pre>
   and emits a reproducible JSON transcript. It does not require trusting this site.</p>
 
   <h2>Use it</h2>
-<p>Pre-register the pulse and a purpose string before the hour exists, wait, then derive. A reviewer runs the same
+<p>Commit the pulse and a purpose string before the hour exists (<code>notbefore plan</code> timestamps that commitment), wait, then derive. A reviewer runs the same
 command and gets byte-identical output; the transcript JSON is the artifact to keep.</p>
 <pre>notbefore split  45 --purpose cohort-allocation-2026-09 --frac 0.8 cohort.txt   # cohort.txt.A / .B
 notbefore sample 45 --purpose chart-audit-2026-09 --k 12 cohort.txt

@@ -166,7 +166,7 @@ def _explain(R, src):
             f"(NOTBEFORE.md §4.2); it could not have been known before the round nor chosen after it. Verification with `notbefore verify {R.seq}` "
             f"(pinned vendored verifier, {vendored_meta().get('git_sha','?')[:12]}) passed: host signatures, offline BLS check of the drand round, "
             f"{R.tsa_pass} RFC 3161 tokens on the commit, publication anchors ({R.anchors}), transparency-log checkpoint ({R.tlog}). "
-            f"Derived seeds are SHA-256(\"notbefore/derive/v1\" || V || purpose) with a pre-registered purpose string; the transcript JSON reproduces the allocation exactly.")
+            f"Derived seeds are SHA-256(\"notbefore/derive/v1\" || V || purpose) with a purpose string committed in advance; the transcript JSON reproduces the allocation exactly.")
 
 def _read_records(path):
     raw = open(path, "rb").read()

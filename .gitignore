@@ -6,8 +6,6 @@ tsa-certs/
 __pycache__/
 *.pyc
 
-# vendored inside the CLI package (the repo-root tsa-certs/ cache stays ignored)
-!cli/notbefore/verifier/tsa-certs/
 cli/dist/
 cli/.venv/
 cli/*.egg-info/
