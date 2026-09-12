@@ -277,6 +277,53 @@ def cmd_abort_unpublished():
             ssh("protectli", f"finalize {s_} {'0'*64}"); done.append(f)
     print(json.dumps({"head_seq": seq, "head_type": ptype(hp), "entropy_host_pending_before": pend, "aborted": done}))
 
+def cmd_preflight():
+    """Readiness check before (re)enabling the cadence, e.g. after the timing bench was down. MINTS NOTHING.
+    Answers: would a commit be accepted right now, and if not, which dependency is the reason? Side effects are the same
+    as a refused commit attempt: each measurement host signs one statement at the NEXT seq bound to the all-zero
+    binding; the entropy host is only asked `pending`; two throw-away TSA tokens are requested on a scratch file."""
+    import tempfile, shutil
+    rows = []
+    def row(name, ok, detail):
+        rows.append(ok); print(f"[{'OK  ' if ok else ('FAIL' if ok is False else 'WARN')}] {name:<13} {detail}", flush=True)
+    # 1. checkout == published head, no unresolved commit
+    rc, _, _ = git("fetch", "-q", "origin", "main")
+    synced = rc == 0 and git("rev-parse", "HEAD")[1] == git("rev-parse", "origin/main")[1]
+    row("git", synced, "checkout equals origin/main" if synced else "checkout is NOT the published head (pull first; cannot fetch = no GitHub)")
+    seq, ph, hp = head(); nxt = seq + 1
+    row("chain head", ptype(hp) != "commit", f"seq {seq} type {ptype(hp)}" + ("" if ptype(hp) != "commit" else " — UNRESOLVED COMMIT: let the cycle (recover) resolve it before anything else"))
+    # 2. drand reachable and BLS-verifying
+    try: d = drand_verified(); row("drand", True, f"round {d['round']} BLS-verified under the pinned group key")
+    except SystemExit: row("drand", False, "unreachable or failed verification (see REFUSING line above)")
+    except Exception as e: row("drand", False, str(e)[:120])
+    # 3. entropy host
+    try: pend = json.loads(ssh("protectli", "pending")); row("entropy", not pend, "protectli reachable; pending " + json.dumps(pend))
+    except Exception as e: row("entropy", False, str(e)[:140])
+    # 4. measurement hosts: the exact statement a commit would collect, at the next seq, dummy binding
+    for n in ("gnss", "time", "witness"):
+        role, host = S.STATEMENTS[n]
+        try:
+            st = check_statement(n, json.loads(ssh(host, f"attest commit {nxt} {'0'*64} {S.CHAIN_HASH}")), nxt, "commit", "0" * 64)
+            m = st["statement"]["measurement"]
+            if n == "gnss":
+                age = time.time() - float(m["anchor"]["utc_unix_s"])
+                row(n, age < 120, f"{host}: anchor epoch {age:.0f} s old (qErr {m['anchor'].get('sawtooth_qerr_ns_this_epoch')} ns); needs f9t logger + timehat DB fresh")
+            else:
+                g = m.get("epoch_guard", {}); ok = g.get("epoch_ok") is True and g.get("chrony_selects_refclock") is True and not g.get("ALERT")
+                row(n, ok, f"{host}: epoch_ok={g.get('epoch_ok')} chrony_selects_{g.get('expected_refid','refclock')}={g.get('chrony_selects_refclock')}" + (f" ALERT: {g['ALERT'][:80]}" if g.get("ALERT") else ""))
+        except SystemExit: row(n, False, f"{host}: statement rejected by check_statement (see REFUSING line above: key, binding or execution self-report)")
+        except Exception as e: row(n, False, f"{host}: {str(e)[:140]}")
+    # 5. TSA: at least MIN_TSA_TOKENS of the configured TSAs must answer, or a commit writes nothing
+    d_ = tempfile.mkdtemp(prefix="preflight-"); f = os.path.join(d_, "preflight.bin"); open(f, "wb").write(b"qrng-beacon-log preflight " + str(int(time.time())).encode())
+    try:
+        st = tsa.stamp(f, "preflight"); got = [t["tsa"] for t in st["tokens"]]
+        row("tsa", len(got) >= S.MIN_TSA_TOKENS, f"{len(got)}/{len(tsa.TSAS)} tokens ({', '.join(got) or 'none'}); a commit needs {S.MIN_TSA_TOKENS}")
+    except Exception as e: row("tsa", False, str(e)[:120])
+    finally: shutil.rmtree(d_, ignore_errors=True)
+    ready = all(r is True for r in rows)
+    print("\nPREFLIGHT " + ("READY — a commit would be accepted now; the timer may be enabled" if ready else "NOT READY — fix every FAIL above before enabling the timer (a cycle would refuse and mint nothing)"))
+    sys.exit(0 if ready else 1)
+
 def cmd_status():
     seq, h, p = head(); print(f"head: seq {seq}  type {ptype(p)}  hash {h[:16]}")
     try: print("entropy host pending:", ssh("protectli", "pending"))
@@ -290,4 +337,5 @@ if __name__ == "__main__":
     elif cmd == "finalize": cmd_finalize()
     elif cmd == "abort-unpublished": cmd_abort_unpublished()
     elif cmd == "recover": cmd_recover()
+    elif cmd == "preflight": cmd_preflight()
     else: cmd_status()
