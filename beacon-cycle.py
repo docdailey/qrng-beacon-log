@@ -37,12 +37,25 @@ def checkpoint():
         if "not enabled" in str(e): return
         log(f"checkpoint NOT written: {str(e)[:200]}")
 
+def push_with_rebase(attempts=3):
+    """Someone else (docs, the site) may push to main while a cycle runs. Our commits touch only chain/ and the
+    checkpoint files, so rebasing onto the new head is conflict-free; a rejected push is retried after a rebase
+    instead of costing a reveal (ERR-010, 2026-09-12 16:00Z cycle)."""
+    for i in range(attempts):
+        r = subprocess.run(["git", "push", "-q", "origin", "main"], cwd=REPO, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        if r.returncode == 0: return
+        msg = (r.stderr or r.stdout).strip().splitlines(); log(f"push rejected ({msg[-1][:80] if msg else '?'}); rebasing onto origin/main and retrying ({i+1}/{attempts})")
+        rb = subprocess.run(["git", "pull", "-q", "--rebase", "origin", "main"], cwd=REPO, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        if rb.returncode != 0:
+            subprocess.run(["git", "rebase", "--abort"], cwd=REPO, capture_output=True); raise RuntimeError("rebase onto origin/main failed: " + (rb.stderr or rb.stdout).strip()[:200])
+    raise RuntimeError(f"git push rejected {attempts} times")
+
 def publish(msg):
     run("git", "add", "-A", "chain")
     if run("git", "status", "--porcelain", "chain", check=False):
         checkpoint(); run("git", "add", "-A", "chain", "checkpoint", "checkpoints", check=False)
         run("git", "commit", "-q", "-m", msg)
-        run("git", "push", "-q", "origin", "main")
+        push_with_rebase()
     return time.time()
 
 def fail(seq, reason, extra=None):

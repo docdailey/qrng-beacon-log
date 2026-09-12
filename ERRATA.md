@@ -6,6 +6,30 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-010 — a doc push during the minting window made the 16:00 UTC cycle refuse its own reveal; rescued by hand inside the deadline (2026-09-12)
+
+**What happened.** Commit 0048 was minted and pushed at 16:01:47 UTC. At 16:04:49 claude-main pushed two
+documentation/CLI commits to `main` — inside the :00–:07 window the operator notes themselves say never to push in —
+and at 16:07:27 Bill pushed a site fix. `pulse.py reveal` at 16:05:31 refused: *"checkout is not the published
+head; pull first, never mint on a fork"*; the signed-failure path refused for the same reason, so for two minutes the
+chain head was an unresolved commit with no reveal and no failure. Rescue: think fast-forwarded to `origin/main` and
+`beacon-cycle.py` resumed the commit (16:07); the reveal minted but its push was rejected by the second concurrent
+push; `git pull --rebase && git push` landed **REVEAL 0049 at 16:08:46 UTC, 199 s after the round released** — inside
+the 600 s contract — and the entropy host finalized (E erased). Pulses 0048/0049 are valid; no value was lost.
+
+**What was wrong.** The aggregator treated *any* difference between its checkout and `origin/main` as a fork. Being
+merely **behind** a head that contains only other people's docs is not a fork, and with a second person now pushing
+to `main` (the notbefore.net site lives in this repository) a "never push :00–:07" convention is not a safety
+property.
+
+**Fix.** `require_synced()` fast-forwards when the checkout is a strict ancestor of `origin/main` with a clean
+chain, and still refuses when it has commits origin lacks (diverged). `beacon-cycle.publish()` retries a rejected push
+after `git pull --rebase` (up to 3×; our commits touch only `chain/` and the checkpoint files, so the rebase is
+conflict-free; a failed rebase is aborted and raised). The window rule remains a courtesy, no longer load-bearing.
+
+**Also fixed by this incident's review:** `recover` would have stalled on a *local* unpushed reveal at the next
+cycle (`git pull --ff-only` fails on divergence); the rebase-retry covers that case too.
+
 ## ERR-009 — the split-view check raised a false "possible hidden branch" on an anchor still in flight; a transient Rekor network error failed a run (2026-09-12)
 
 **Affected:** `ci/verify_anchors.py` between `dfaf75e` (12:50 UTC) and the fix; CI runs **34698076944** (14:01 UTC,
@@ -36,6 +60,11 @@ run — those are exactly the sixteen commit pulses ≤ 0041 whose anchors are r
 they are now `commit_rekor_retroactive`, and `commit_rekor_late` counts only commits ≥ 0042 whose anchor missed the
 release (0 so far; every contemporaneous commit has anchored ~2 min before its round). Tested against the live
 branch with pulse 0045's record hidden (in flight → PASS with one WAIT) and pulse 0030's hidden (overdue → FAIL).
+
+**Second shape, same day (16:07 UTC run on `b23b5e6`):** the verify job's *checkout* was older than a pulse that was
+pushed and anchored seconds later (0049), so 0049's Rekor entry matched no pulse in that checkout. Fix: before calling
+an entry unexplained, the check fetches `origin/main` and tests the next pulses' statement hashes; and an entry younger
+than the grace period that still matches nothing is a `[WAIT]`, becoming the alarm only if it remains unexplained.
 
 **Not changed:** the CLI (`notbefore`) does not enumerate Rekor entries and was not affected; its per-pulse refetch
 already degraded to a warning.

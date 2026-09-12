@@ -65,6 +65,11 @@ a `.revealing` below the head is finalized against its published resolver. The o
 the published chain — read `cycle.log`, find whether the pulse was minted but not pushed (`git status` in
 `~/qrng-beacon`), push it if so, else `pulse.py fail`.
 
+### 2e. Someone pushes to `main` while a cycle runs → **handled (since ERR-010)**
+The cycle fast-forwards when it is merely behind, and a rejected push is rebased and retried. Before 2026-09-12 16:09
+UTC this refused the reveal (ERR-010). Still avoid pushing during :00–:07 when you can — a rebase in the reveal path
+is a retry, not a guarantee.
+
 ## 3. Planned outage (antenna move, bench power, switch work) — checklist
 
 1. **Pick the window.** Never start between **:00 and :07** (a cycle is in flight). Best: **:08–:50**.

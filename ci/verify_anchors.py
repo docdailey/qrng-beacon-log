@@ -126,6 +126,23 @@ if REFETCH:
                 say(f"[FAIL] Rekor entry {u[:16]}… under the anchor key could not be fetched 3x: {err}"); unexplained.append(u); continue
             h, _ = L.entry_hash_and_key(e)
             when = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e["integratedTime"]))
+            if h not in expected_hash:
+                # This checkout may be OLDER than what is anchored (the verify job checked out main before a pulse
+                # that was pushed seconds later got anchored). Look at the LIVE chain before calling it a hidden branch.
+                try:
+                    subprocess.run(["git", "fetch", "-q", "origin", "main"], cwd=ROOT, capture_output=True, timeout=60)
+                    for s_ in range(T["pulses"] + 1, T["pulses"] + 12):
+                        r = subprocess.run(["git", "show", f"origin/main:chain/pulse-{s_:04d}.json"], cwd=ROOT, capture_output=True)
+                        if r.returncode != 0: break
+                        tmp = os.path.join(A, f".live-pulse-{s_:04d}.json"); open(tmp, "wb").write(r.stdout)
+                        st_, _ = L.statement_for(tmp); os.remove(tmp)
+                        if L.sha256(st_) == h:
+                            say(f"[WAIT] Rekor entry logIndex {e['logIndex']} ({when}) is pulse {s_:04d}'s anchor; that pulse is newer than this checkout"); flight.append(u); break
+                    else: pass
+                except Exception: pass
+                if u in flight: continue
+                if time.time() - e["integratedTime"] < GRACE_S:
+                    say(f"[WAIT] Rekor entry logIndex {e['logIndex']} ({when}) under the anchor key matches nothing published yet ({(time.time()-e['integratedTime'])/60:.0f} min old; alarm if still unexplained after {GRACE_S//60} min)"); flight.append(u); continue
             if h in expected_hash:
                 s_ = expected_hash[h]; age = in_flight.get(s_)   # seq (int) for pulses, 'checkpoint NNNNNN' for checkpoints
                 if age is not None and age > GRACE_S:

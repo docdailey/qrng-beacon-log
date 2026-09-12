@@ -53,9 +53,16 @@ def require_synced(allow_offline=False):
     if rc != 0:
         if allow_offline: sys.stderr.write("warning: cannot fetch origin; proceeding on the local head\n"); return True
         die("cannot fetch origin - " + err[:120])
-    if git("rev-parse", "HEAD")[1] != git("rev-parse", "origin/main")[1]: die("checkout is not the published head; pull first, never mint on a fork")
     dirty = [l for l in git("status", "--porcelain")[1].splitlines() if "chain/" in l and "chain/pending/" not in l]
     if dirty: die("chain has unpublished changes: " + "; ".join(dirty[:3]))
+    if git("rev-parse", "HEAD")[1] != git("rev-parse", "origin/main")[1]:
+        # Behind the published head with nothing local (someone pushed docs/site while a cycle ran): fast-forward and
+        # continue — that is not a fork. Diverged (local commits origin does not have) IS refused. ERR-010.
+        if git("merge-base", "--is-ancestor", "HEAD", "origin/main")[0] == 0:
+            rc, _, err = git("merge", "--ff-only", "origin/main")
+            if rc != 0: die("cannot fast-forward to the published head - " + err[:120])
+            sys.stderr.write("note: checkout was behind origin/main; fast-forwarded\n")
+        else: die("checkout has commits the published head does not (diverged); never mint on a fork - reconcile first")
     return False
 
 # ---------------------------------------------------------------- statements
