@@ -24,7 +24,7 @@ contact https://notbefore.net/  (docdailey on GitHub)
 
 (`origin` is omitted: it equals the vkey key name, as they recommend for new logs.)
 
-## The request (drafted in Bill's Gmail 2026-09-12; sending is Bill's call — outreach is held until he says go)
+## The request — SENT by Bill 2026-09-12 (~17:40 UTC) to participate@lists.witness-network.org
 
 To: participate@lists.witness-network.org · Subject: *Participation request — notbefore.net/log (staging list)*
 

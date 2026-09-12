@@ -34,7 +34,9 @@
   are published beside every pulse. Rekor entries with inclusion proofs, and
   OpenTimestamps submissions, live on the repository's <code>anchors</code> branch and
   are checked by the CLI from git — <em>this site does not serve them.</em>
-  OpenTimestamps proofs are currently <strong>pending</strong> Bitcoin confirmation.</p>
+  OpenTimestamps proofs complete once their calendar transaction has six Bitcoin confirmations (a few hours);
+  at any moment the newest few are still pending. The live count is in every <code>verify-chain</code> run
+  (<code>ots_complete</code> / <code>ots_pending</code>).</p>
 
   <h2>Log checkpoint</h2>
   <p>The log is an RFC&nbsp;6962 Merkle tree over every pulse, published as a
