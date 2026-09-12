@@ -58,6 +58,19 @@ def build_parser():
     pn = sub.add_parser("pin", help="write notbefore.lock pinning the log commit, CLI version and vendored verifier for bit-stable re-runs")
     pn.add_argument("--out", default="notbefore.lock")
     dt = sub.add_parser("diff-transcript", help="compare two transcripts: did the input, the pulse, the purpose or the tool change?"); dt.add_argument("a"); dt.add_argument("b")
+    pl = sub.add_parser("plan", help="write a decision contract (selection rule, purpose, operation, parameters, input sha256) and register it with two RFC 3161 TSAs BEFORE the pulse exists")
+    pl.add_argument("--after", required=True, help="ISO-8601 UTC: use the first eligible reveal whose drand round released at or after this instant (e.g. 2026-10-01T00:00Z)")
+    pl.add_argument("--purpose", required=True); pl.add_argument("--out", default=None, help="contract path (default notbefore-plan-<purpose>.json)")
+    for name, kw in (("--sample", dict(type=int, metavar="K")), ("--split", dict(type=float, metavar="FRAC")), ("--assign", dict(type=int, metavar="ARMS")), ("--shuffle", dict(action="store_true")),
+                     ("--id", dict(action="store_true")), ("--range", dict(nargs=2, type=int, metavar=("LO", "HI"))), ("--bytes", dict(type=int, metavar="N")), ("--seed", dict(action="store_true"))):
+        pl.add_argument(name, **kw)
+    pl.add_argument("--hexlen", type=int, default=16); pl.add_argument("--note"); pl.add_argument("--no-register", action="store_true", help="write the contract without TSA tokens (execute will refuse it unless --allow-unregistered)")
+    pl.add_argument("file", nargs="?", help="input records (one per line) for sample/split/assign/shuffle/id")
+    ex = sub.add_parser("execute", help="run a registered decision contract: no choices are accepted here")
+    ex.add_argument("contract"); ex.add_argument("--input", help="path of the committed input file if it moved (its sha256 must still match)")
+    ex.add_argument("--allow-unregistered", action="store_true", help="run a contract that carries no TSA tokens (no third-party evidence it predates the pulse; the transcript says so)")
+    ex.add_argument("--transcript", help="transcript path (default notbefore-executed-<contract sha>.json; '-' stdout; 'none')")
+    for fl in (("--json",), ("--offline",), ("-q", "--quiet")): ex.add_argument(*fl, action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     cp = sub.add_parser("checkpoint", help="show and verify the log's current signed checkpoint against the vendored identity and this machine's cached head")
     for fl in (("--json",), ("--offline",), ("-q", "--quiet")): cp.add_argument(*fl, action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     sp = sub.add_parser("split", help="shuffle, then split FILE into A (first floor(frac·k)) and B"); common(sp, purpose=True, file=True)
@@ -76,6 +89,61 @@ def _print_check(R, a):
         for v in R.verbose: sys.stderr.write("\n--- verifier output ---\n" + v)
     if not a.quiet or not R.ok:
         sys.stderr.write(("VERIFIED" if R.ok else "NOT VERIFIED") + f" — NotBefore {R.seq} (commit {R.commit_seq}), log {str(R.log_git_sha)[:12]}\n")
+
+def _plan(a):
+    from . import contract as C
+    ops = [(n, v) for n, v in (("sample", a.sample), ("split", a.split), ("assign", a.assign), ("shuffle", a.shuffle or None), ("id", a.id or None), ("range", a.range), ("bytes", a.bytes), ("seed", a.seed or None)) if v not in (None, False)]
+    if len(ops) != 1: _err("plan needs exactly one operation: --sample K | --split FRAC | --assign ARMS | --shuffle | --id | --range LO HI | --bytes N | --seed"); return 2
+    op, v = ops[0]
+    params = {"sample": lambda: {"k": v}, "split": lambda: {"frac": v}, "assign": lambda: {"arms": v}, "shuffle": lambda: {}, "id": lambda: {"hexlen": a.hexlen},
+              "range": lambda: {"lo": v[0], "hi": v[1]}, "bytes": lambda: {"n": v}, "seed": lambda: {}}[op]()
+    try: c = C.make(a.after, a.purpose, op, params, a.file, a.note)
+    except (ValueError, D.PurposeError, FileNotFoundError) as e: _err(str(e)); return 2
+    out = a.out or f"notbefore-plan-{c['purpose'].replace('/', '_').replace(':', '_')}.json"
+    h = C.write(c, out); _err(f"contract written: {out}  sha256 {h}")
+    if not a.no_register:
+        meta = C.register(out); toks = meta.get("tokens", [])
+        for t in toks: _err(f"registered: {t['tsa']} {t['time']}")
+        if len(toks) < 2: _err(f"WARNING: only {len(toks)} TSA token(s) obtained ({meta.get('error', '')}); re-run `plan` later or keep this file and its .tsr files together")
+    else: _err("NOT registered (--no-register): there is no third-party evidence of when this contract existed")
+    _err("publish the sha256 anywhere public (a preregistration, a commit, a mail) — then wait for the pulse and run: notbefore execute " + out)
+    print(json.dumps({"contract": out, "sha256": h, "after_utc": c["selection"]["after_utc"], "operation": op, "params": c["params"]}) if a.json else h); return 0
+
+def _execute(a, src):
+    from . import contract as C
+    import time as _t
+    c = json.load(open(a.contract)); raw = open(a.contract, "rb").read()
+    if c.get("spec") != C.CONTRACT_SPEC: _err(f"not a {C.CONTRACT_SPEC} contract"); return 2
+    csha = hashlib.sha256(raw).hexdigest()
+    if C.canon(c) != raw: _err("contract file is not in canonical form (edited by hand?) — refusing"); return 1
+    lines = []
+    earliest, toks, tok_ok = C.verify_registration(a.contract)
+    if toks: lines += [f"[PASS] contract registered: {n} {ts}" for n, ts, _ in toks]
+    elif a.allow_unregistered: lines.append("[WARN] contract carries NO RFC 3161 token — nothing but your word says it predates the pulse (running because --allow-unregistered)")
+    else: _err("contract is not registered (no .tsr tokens beside it). Re-run `plan` before the pulse, or pass --allow-unregistered for a dry run."); return 1
+    after = int(c["selection"]["after_unix_s"])
+    seq, rel, R = C.select_pulse(src, after, refetch=not a.offline, anchors=not a.no_anchors, R_lines=lines)
+    if seq is None: _err("\n".join(lines)); _err(f"no eligible reveal released at or after {c['selection']['after_utc']} yet (or the next five failed) — wait for the hour"); return 1
+    lines.append(f"[PASS] selected by rule '{C.RULE}': reveal {seq:04d} (round released {_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime(rel))} >= after {c['selection']['after_utc']})")
+    if earliest is not None:
+        ok_t = earliest < rel; lines.append(f"[{'PASS' if ok_t else 'FAIL'}] every registration token ({_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime(earliest))} earliest) predates the round release by {rel-earliest} s")
+        if not ok_t: [_err(l) for l in lines]; _err("the contract was registered AFTER the selected pulse's round released: the decision could have been chosen with knowledge of V"); return 1
+    P = c["purpose"]; S = D.seed(R.attested_value, P)
+    try: body, extra = C.run_operation(c, S, a.input or (c.get("input", {}).get("file")))
+    except (ValueError, FileNotFoundError) as e: [_err(l) for l in lines]; _err(str(e)); return 1
+    t = D.transcript(R, P, S, {"operation": c["operation"], **{k: v for k, v in c["params"].items()}, "contract_sha256": csha, "contract_file": os.path.basename(a.contract),
+                                "contract_registered": [{"tsa": n, "time": ts} for n, ts, _ in toks], "contract_registered_earliest_unix_s": earliest, "selected_by_rule": C.RULE,
+                                "after_utc": c["selection"]["after_utc"], "input_sha256": c.get("input", {}).get("sha256"), "record_count": c.get("input", {}).get("record_count"),
+                                "output_sha256": D.sha256_hex(body.encode()), **({"A": {"count": extra["A_count"], "sha256": D.sha256_hex(body.encode())}, "B": {"count": extra["B_count"], "sha256": D.sha256_hex(("\n".join(extra["B"]) + "\n").encode())}} if c["operation"] == "split" else {})})
+    for l in R.lines + lines:
+        if not a.quiet or l.startswith(("[FAIL]", "[WARN]")): sys.stderr.write(l + "\n")
+    dest = a.transcript or f"notbefore-executed-{csha[:16]}.json"
+    if dest == "-": print(json.dumps(t, indent=1, sort_keys=True))
+    elif dest != "none": json.dump(t, open(dest, "w"), indent=1, sort_keys=True); _err(f"transcript written: {dest}")
+    if c["operation"] == "split":
+        base = os.path.basename(c["input"]["file"]); open(base + ".A", "w").write(body); open(base + ".B", "w").write("\n".join(extra["B"]) + "\n"); _err(f"A: {extra['A_count']} -> {base}.A   B: {extra['B_count']} -> {base}.B")
+    else: sys.stdout.write(body)
+    return 0
 
 def _explain(R, src):
     import time as _t
@@ -123,6 +191,8 @@ def main(argv=None):
     except LogError as e:
         _err(str(e)); return 1
     try:
+        if a.cmd == "plan": return _plan(a)
+        if a.cmd == "execute": return _execute(a, src)
         if a.cmd == "pin":
             ident = {}
             try:

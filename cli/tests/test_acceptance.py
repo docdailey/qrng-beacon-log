@@ -167,3 +167,24 @@ def test_23_cosignature_reporting_and_quorum():
     rc, out, err = nb("--offline", "checkpoint"); assert rc == 0 and "cosigned by witness notbefore.net/witness/" in err and "same sponsor" in err, err
     rc, out, err = nb("--offline", "--witness-quorum", "1", "verify", "23"); assert rc == 1 and "0 independent cosignature(s) >= quorum 1" in err, err
 
+def test_24_decision_contract_plan_execute(tmp_path):
+    """The consumer's commitment: a canonical contract registered with two TSAs before the pulse; execute takes no choices,
+    selects the pulse by rule, requires the registration to predate the round, and reproduces the allocation."""
+    f = tmp_path / "eligible.txt"; f.write_text("\n".join(f"chart-{i:03d}" for i in range(30)) + "\n")
+    out = tmp_path / "plan.json"
+    # an `after` in the past selects a known pulse deterministically: the first eligible reveal released at/after 0022's release
+    rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:audit", "--sample", "12", "--out", str(out), str(f), cwd=str(tmp_path))
+    assert rc == 0 and len(o.strip()) == 64, e
+    c = json.load(open(out)); assert c["operation"] == "sample" and c["params"] == {"k": 12} and c["input"]["record_count"] == 30 and c["selection"]["after_unix_s"] == 1789182000
+    assert os.path.exists(str(out) + ".tsa.json"), "TSA registration files missing"
+    # execute: registered today, so every token is AFTER a 2026-09-12T03:0x pulse release -> must REFUSE (decision after the value)
+    rc, o, e = nb("execute", str(out), "--input", str(f), "--transcript", "none", cwd=str(tmp_path)); assert rc == 1 and "registered AFTER the selected pulse" in e, e
+    # the same contract, unregistered, allowed as a dry run: deterministic selection + output
+    out2 = tmp_path / "plan2.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:audit", "--sample", "12", "--out", str(out2), "--no-register", str(f), cwd=str(tmp_path)); assert rc == 0
+    rc1, o1, e1 = nb("execute", str(out2), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "t1.json"), cwd=str(tmp_path)); assert rc1 == 0, e1
+    rc2, o2, e2 = nb("execute", str(out2), "--input", str(f), "--allow-unregistered", "--transcript", "none", cwd=str(tmp_path)); assert o1 == o2 and len(o1.split()) == 12
+    assert "selected by rule" in e1 and "reveal 0023" in e1, e1           # 0022 released 03:05:27Z -> first eligible reveal at/after 03:00 is 0023
+    t = json.load(open(tmp_path / "t1.json")); assert t["contract_sha256"] and t["selected_by_rule"] and t["seq"] == 23
+    # tampering with the committed input is refused
+    f.write_text("\n".join(f"chart-{i:03d}" for i in range(29)) + "\nchart-999\n")
+    rc, o, e = nb("execute", str(out2), "--input", str(f), "--allow-unregistered", "--transcript", "none", cwd=str(tmp_path)); assert rc == 1 and "not the committed bytes" in e

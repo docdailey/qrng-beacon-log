@@ -111,6 +111,38 @@ notbefore: pinned by notbefore.lock: log 77931e25abea
 With the lock, the log is read at exactly that commit, so "main moved" cannot change a result — and it cannot hide
 a split view either: the checkpoint check still runs against the head this machine saw before.
 
+## Commit your decision first: `plan` → wait → `execute`
+
+The workflow above relies on you having *said* the pulse and purpose in advance. `plan` makes that a first-class,
+timestamped object; `execute` then accepts no choices at all.
+
+```
+$ notbefore plan --after 2026-10-01T00:00Z --purpose chart-audit-2026-q4 --sample 50 eligible.txt
+contract written: notbefore-plan-chart-audit-2026-q4.json  sha256 3f9c…
+registered: freetsa Sep 12 20:41:07 2026 GMT
+registered: digicert Sep 12 20:41:07 2026 GMT
+publish the sha256 anywhere public — then wait for the pulse and run: notbefore execute notbefore-plan-chart-audit-2026-q4.json
+```
+
+The contract is canonical JSON — selection rule (`first-eligible-reveal-released-at-or-after 2026-10-01T00:00Z`),
+purpose, operation `sample`, `k = 50`, and the SHA-256 and line count of `eligible.txt` — and the two `.tsr` files
+beside it are third-party proof of when it existed. Publish the hash (a commit, a registry, a dated email).
+
+```
+$ notbefore execute notbefore-plan-chart-audit-2026-q4.json       # after 2026-10-01
+[PASS] contract registered: freetsa Sep 12 20:41:07 2026 GMT
+[PASS] contract registered: digicert Sep 12 20:41:07 2026 GMT
+[PASS] selected by rule 'first-eligible-reveal-released-at-or-after': reveal 0489 (round released 2026-10-01T00:05:27Z >= after 2026-10-01T00:00:00Z)
+[PASS] every registration token (2026-09-12T20:41:07Z earliest) predates the round release by 1566860 s
+… the pair's verification lines …
+transcript written: notbefore-executed-3f9c….json
+```
+
+`execute` refuses if the tokens are *after* the selected round (the decision could have been made knowing V), if
+the input bytes differ from the committed SHA-256, or if the contract file was edited. Failure/skip hours and
+non-compliant seqs are passed over by the rule, not by you. A contract without tokens runs only with
+`--allow-unregistered`, and the transcript says so.
+
 ## The other derived functions (same S, one more deterministic step)
 
 ```

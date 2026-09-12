@@ -1,6 +1,6 @@
 # NotBefore — specification
 
-**Status:** draft 0.4, 2026-09-12 — 0.3 plus the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
+**Status:** draft 0.5, 2026-09-12 — 0.4 plus **decision contracts** (§7.11: the consumer's commitment, registered before the pulse); 0.4 added the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
 **Implements over:** `qrng-beacon-log` protocol v0.5 (live log)  
 **Normative language:** MUST / MUST NOT / SHOULD / MAY
 
@@ -302,6 +302,31 @@ order, one per line, **without** the line. A pseudonym is not a secret: anyone w
 for \(c = 0,1,\dots\). Suitable to seed a local CSPRNG for a reproducible simulation. **Public if \(P\) is public** —
 never use it as key material.
 
+### 7.11 Decision contracts — the consumer's commitment (spec 0.5)
+The log commits its entropy before the public randomizer; this closes the other side: the **consumer commits the
+decision before the NotBefore value exists**. `notbefore plan` writes a canonical JSON contract
+(`notbefore/contract/1`): a selection rule, the purpose, the operation and every parameter, and the input file's
+SHA-256 and record count. Its bytes are timestamped by two public RFC 3161 TSAs (freetsa, DigiCert) — the same kind
+of third-party evidence the log's commits carry — and its SHA-256 is for the user to publish wherever a
+preregistration lives.
+
+**Selection rule** `first-eligible-reveal-released-at-or-after(after_utc)`: walk reveals in seq order; the first one
+whose drand round released at or after `after` **and** whose pair verifies under the pinned verifier is the pulse.
+Failure and skip hours and KNOWN-NONCOMPLIANT seqs are passed over by the rule, never by a person.
+
+**Execution** `notbefore execute contract.json` accepts no choices. It MUST: verify the contract is canonical
+(byte-identical to its hash); verify its TSA tokens; select the pulse by the rule; **refuse if any token time is not
+strictly before that pulse's round release** (the decision would have been made with knowledge of \(V\)); refuse if
+the input bytes differ from the committed SHA-256; then run the operation with the contract's parameters and write a
+transcript carrying the contract hash, the registration times and the selection. An unregistered contract runs only
+with `--allow-unregistered` and its transcript says so.
+
+**What it proves.** That this exact decision — rule, purpose, operation, parameters, input — existed at the TSA
+times, before the value it depends on was knowable; combined with the log's own commitment, neither party chose
+after seeing the thing that mattered. **What it does not prove:** that the *only* contract registered was this one.
+A user can still register several and publish one; the defence is the same as for any preregistration — publish the
+contract hash where it cannot be quietly withdrawn (a repository commit, a registry, a dated message).
+
 ### 7.5 Transcript (MUST keep)
 
 ```json
@@ -339,6 +364,8 @@ notbefore assign   <seq> --purpose <P> --arms 2 <file>     # record<TAB>arm, arm
 notbefore id       <seq> --purpose <P> --from <file>       # pseudonym per line (--len 16)
 notbefore range    <seq> --purpose <P> --lo 1 --hi 6       # one uniform integer
 notbefore bytes    <seq> --purpose <P> --n 32              # hex bytes (public)
+notbefore plan --after <UTC> --purpose <P> --sample 12 <file>   # decision contract + RFC 3161 registration (also --split/--assign/--id/--range/--bytes/--seed)
+notbefore execute <contract.json>                          # no choices: rule-selected pulse, registration must predate the round, committed input only
 notbefore explain  <seq>                                   # methods-section paragraph: commit/TSA/round/release/V/eligibility
 notbefore checkpoint                                       # the log's signed head, verified; site cross-check; cached-head consistency
 notbefore pin                                              # write notbefore.lock (log sha, CLI, verifier); --lock makes re-runs bit-stable
@@ -406,7 +433,8 @@ Do not implement this until isolation can hold a vector of \(E\) and refuse the 
 
 | Item | Version |
 |---|---|
-| This spec | `notbefore/spec/0.4` |
+| This spec | `notbefore/spec/0.5` |
+| Decision contract | `notbefore/contract/1` |
 | Id / range / bytes domains | `notbefore/id/v1`, `notbefore/range/v1`, `notbefore/bytes/v1` |
 | Derive domain | `notbefore/derive/v1` |
 | Shuffle domain | `notbefore/shuffle/v1` |
@@ -463,6 +491,8 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 ---
 
 ## 16. Changelog
+
+**0.5 (2026-09-12).** Decision contracts (§7.11): `plan` (canonical contract, two RFC 3161 tokens, published hash) and `execute` (choice-free; rule-selected pulse; registration must predate the round; committed input only). Prompted by a review pointing out that the operator's commitment was first-class while the consumer's preregistration was prose. \(V\), \(S\) and all derived functions unchanged.
 
 **0.4 (2026-09-12).** Derived functions on the same \(S\): `sample` (§7.6), `assign` (§7.7), `id` (§7.8), `range` (§7.9), `bytes` (§7.10) with their domains; tool commands `explain`, `pin`/`--lock`, `diff-transcript`, `checkpoint` (§8). \(V\), \(S\), shuffle and split unchanged. Status line and §8 no longer name a stale package version or a `--pin` flag that the CLI never had.
 
