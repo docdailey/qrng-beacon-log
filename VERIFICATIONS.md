@@ -34,7 +34,9 @@ live GitHub/drand refetch (blocked in that environment; BLS verified offline).
 **Follow-up, same verifier, checkpoint `81d8a93`:** all four findings closed **at source level** (a third reviewer
 correctly noted that no published pulse yet carried the hardened code). **First published cycle carrying the hardened
 code: 0024/0025** (04:00:26–04:06:58 UTC, unattended, `Result=success`; all four statements carry the `execution`
-self-report; `E` removed at finalize). Enforcement of the self-report begins at seq 26. The signed `execution` self-report
+self-report; `E` removed at finalize). Enforcement of the self-report begins at seq 26. **First pair minted under enforcement: 0026/0027** (05:00:26–05:06:53 UTC,
+unattended, `Result=success`; `recover` ran first as a no-op; all four self-reports in 0027 pass the enforced check;
+`E` removed at finalize). The signed `execution` self-report
 "materially strengthens evidence, while correctly remaining short of hardware/remote attestation." Remaining open
 boundaries, in the verifier's words: (1) independent pre-round watcher identity/publication; (2) the ERR-006
 recomputed-byte manifest; (3) verification of the first unattended hardened cycle. Assessment: "moved from credible
