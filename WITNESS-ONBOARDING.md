@@ -24,22 +24,18 @@ contact https://notbefore.net/  (docdailey on GitHub)
 
 (`origin` is omitted: it equals the vkey key name, as they recommend for new logs.)
 
-## The request, ready to send (Bill decides when — outreach is held until he says go)
+## The request (drafted in Bill's Gmail 2026-09-12; sending is Bill's call — outreach is held until he says go)
 
-> **Subject:** Participation request — notbefore.net/log (staging)
->
-> Origin line: `notbefore.net/log`
-> Public key (vkey, Ed25519 0x01): `notbefore.net/log+8b627e7f+AfPQekreiy4JUcf8TEcJs4Mj00EHL7JvHUSSLXeyZVLs`
-> add-checkpoint rate: two per hour (one per published pulse: commit at :01, reveal at :06), plus rare back-fills; request `qpd 60`.
-> List: **staging** — a real, running log with real users; we are happy to dogfood.
-> Contact: https://notbefore.net/ · GitHub docdailey/qrng-beacon-log · [Bill's email]
-> What the log is: an hourly commit-then-reveal randomness beacon (hardware QRNG, drand quicknet round as the public
-> anchor, two RFC 3161 timestamps per commit, per-pulse Rekor + OpenTimestamps anchors, host-attested statements).
-> The Merkle tree is RFC 6962 over every published pulse record (`checkpoint` / `checkpoints/NNNNNN` at the repo root
-> and at https://notbefore.net/checkpoint; consistency proofs computed by `tlog.py`). Checkpoints are signed in the
-> same commit as the pulse; the log has never been rewritten (append-only is CI-enforced and Rekor-anchored).
-> Current size ~50 pulses, ~17,500/year. Expected lifetime: indefinite; the origin is permanent by policy.
-> Spec/docs: https://notbefore.net/TLOG.md · verifier: `pip install notbefore` (`notbefore checkpoint`).
+To: participate@lists.witness-network.org · Subject: *Participation request — notbefore.net/log (staging list)*
+
+Contents: origin line; vkey (Ed25519 0x01, key name = origin); the log-list entry (`vkey … / qpd 60 / contact
+docdailey@gmail.com`); add-checkpoint rate (two per hour — commit at :01, reveal at :06 — plus rare back-fills; ~48/day,
+qpd 60 for headroom); list = **staging**, real log, happy to dogfood; contact (email, https://notbefore.net/, the
+repository); what the log is (hourly commit-then-reveal beacon, RFC 3161 + Rekor + OTS anchors, RFC 6962 tree,
+checkpoints at `/checkpoint` and `/checkpoints/NNNNNN`, ~52 entries, ~17,500/year, permanent origin and key policy);
+implementation notes (tlog-witness v1 client exercised hourly against our own witness; RFC 6962 / signed-note /
+cosignature vectors in `tlog.py selftest`; invitation to report non-conformance); commitment to configure the staging
+witnesses' endpoints on approval.
 
 ## After approval
 
