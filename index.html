@@ -40,7 +40,12 @@ notbefore verify</pre>
 
   <h2>Published data</h2>
   <ul>
-    <li><a href="/chain/">chain/</a> — every pulse record, signed</li>
+    <li><code>/chain/pulse-NNNN.json</code> — every pulse record, signed.
+        e.g. <a href="/chain/pulse-0001.json">pulse-0001</a>;
+        full listing on <a href="https://github.com/docdailey/qrng-beacon-log/tree/main/chain">GitHub</a>.
+        <span class="note">A signed, machine-readable index is published as the log
+        checkpoint — see <a href="/TLOG.md">TLOG.md</a>. An unsigned directory listing
+        would carry no guarantee, so there isn't one.</span></li>
     <li><a href="/PROTOCOL.md">PROTOCOL.md</a> — pulse format and verification, normative</li>
     <li><a href="/NOTBEFORE.md">NOTBEFORE.md</a> — what the guarantee is, and is not</li>
     <li><a href="/CLAIMS.md">CLAIMS.md</a> · <a href="/ERRATA.md">ERRATA.md</a> —
