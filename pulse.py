@@ -1,355 +1,213 @@
 #!/usr/bin/env python3
 """
-pulse.py — attested randomness chain with COMMIT-THEN-REVEAL (v0.4).
+pulse.py — v0.5 AGGREGATOR. Assembles statements that each role host produced AND SIGNED ITSELF;
+the aggregator can neither invent a host's facts nor alter them without breaking that host's signature.
 
-  pulse.py commit [--lead N]   mint a COMMIT pulse: publishes sha256(entropy) bound to a FUTURE
-                               drand round R = now + N (default 20 rounds = 60 s). The entropy
-                               itself is held back in chain/pending/ (mode 600) until reveal.
-  pulse.py reveal              mint the REVEAL pulse for the oldest pending commit. Fails closed
-                               unless drand has actually released round R.
-  pulse.py status              show chain head and pending commits.
+  pulse.py commit [--lead N]   entropy host generates+holds E and signs {commitment, target_round};
+                               gnss/time/witness hosts sign their own measurements bound to the commitment;
+                               drand round at commit is BLS-verified here; >=2 RFC 3161 tokens or NOTHING is written.
+  pulse.py reveal              refuses until drand released the target round (BLS-verified); entropy host releases E
+                               and signs; other hosts sign fresh measurements bound to the commit pulse hash.
+  pulse.py fail <reason>       signed FAILURE pulse for the pending commit (entropy host abandons E, signs that).
+  pulse.py status
 
-Why two phases: mixing drand alone proves a value was not computable BEFORE round R, but a
-single publisher could still mint many candidates AFTER R and publish a favourite. Committing
-sha256(entropy) BEFORE R exists removes that freedom: once R releases, the entropy is already
-fixed, and R itself was unknowable when the commitment was made. Nobody - including us - can
-know the attested value before R releases, and we cannot select the entropy after.
-
-The commitment only proves what it claims if it is PUBLISHED before R. Signing is not
-publishing. See ../PUBLICATION.md.
+State machine (enforced): head ∈ {legacy, reveal, failure} -> commit -> (reveal | failure) -> commit ...
+At most one pending commit. The chain is append-only. Only a checkout equal to the published head may mint.
+Canonical form: hosts/attest_lib.canon — no floats, no integers beyond 2^53; violations abort.
 """
-import json, base64, hashlib, subprocess, sys, time, os, glob, re
+import json, base64, hashlib, subprocess, sys, time, os, glob, re, decimal
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "hosts"))
+import attest_lib as A, drand_anchor, tsa, bls_drand, schema as S
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+HERE   = os.path.dirname(os.path.abspath(__file__))
+PUBLIC = os.path.isdir(os.path.join(HERE, "chain"))
+CHAIN  = os.path.join(HERE, "chain") if PUBLIC else os.path.join(HERE, "..", "chain")
+KEYS   = os.path.join(HERE, "keys", "KEYS.json")
+SSH = {"protectli": "willy@192.168.70.1", "p550": "willy@192.168.68.44", "k3": "root@192.168.68.24", "f9t": "willy@192.168.68.46"}
+PROBE = {"time": "sudo -n python3 ~/beacon/stamp_probe.py /dev/ptp0", "witness": "python3 ~/beacon/stamp_probe.py /dev/ptp1",
+         "gnss": "python3 ~/beacon/gnss_probe.py"}
+DEFAULT_LEAD, MIN_LEAD = 100, 60
 _PULSE_RE = re.compile(r"^pulse-\d{4}\.json$")
-def pulse_files(d):
-    return sorted(f for f in glob.glob(os.path.join(d, "pulse-*.json")) if _PULSE_RE.match(os.path.basename(f)))
-from concurrent.futures import ThreadPoolExecutor
-import drand_anchor
-import tsa
 
-HERE      = os.path.dirname(os.path.abspath(__file__))
-_PUBLIC   = os.path.isdir(os.path.join(HERE, "chain"))          # public-repo checkout layout
-CHAIN     = os.path.join(HERE, "chain") if _PUBLIC else os.path.join(HERE, "..", "chain")
-PENDING   = os.path.join(CHAIN, "pending")
-LEGACY    = None if _PUBLIC else os.path.join(HERE, "..", "samples")
-
-PROTECTLI = "willy@192.168.70.1"      # entropy: ID Quantique Quantis USB
-P550      = "willy@192.168.68.44"      # time: Intel i210 PHC (authoritative)
-K3        = "root@192.168.68.24"       # time witness: Milk-V, monitored peer
-F9T       = "willy@192.168.68.46"      # GNSS telemetry from timehat DB
-
-COMMIT_DOMAIN = b"grok_antics/commit/v1"
-MIX_DOMAIN    = b"grok_antics/pulse-mix/v1"
-DEFAULT_LEAD  = 100       # rounds; x3 s = 300 s - room to TSA-stamp and push >=120 s before the round
-MIN_LEAD      = 60        # 180 s; anything shorter cannot honour the 120 s publication margin
-
-# ---------------------------------------------------------------- helpers
-def ssh(host, cmd, timeout=120):
-    r = subprocess.run(["ssh", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes", host, cmd],
-                       capture_output=True, text=True, timeout=timeout)
-    if r.returncode != 0:
-        raise RuntimeError(f"ssh {host} failed: {r.stderr.strip()[:200]}")
+def die(m): sys.stderr.write("REFUSING TO MINT: %s\n" % m); sys.exit(2)
+def ssh(host, cmd, timeout=150):
+    r = subprocess.run(["ssh", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes", SSH[host], cmd], capture_output=True, text=True, timeout=timeout)
+    if r.returncode != 0: raise RuntimeError(f"{host}: {r.stderr.strip()[:200]}")
     return r.stdout.strip()
-
-def canonical(obj) -> bytes:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
-
-def iso(ns):
-    s, rem = divmod(int(ns), 1_000_000_000)
-    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(s)) + f".{rem:09d}Z"
-
-def die(msg):
-    sys.stderr.write("REFUSING TO MINT: %s\n" % msg); sys.exit(2)
-
-def get_entropy(n=32):
-    d = json.loads(ssh(PROTECTLI,
-        f"curl -s -m 20 'http://127.0.0.1:8080/api/v1/random/bytes?count={n}&format=base64&correction=none'"))
-    if not d.get("success"):
-        raise RuntimeError(f"QRNG API error: {d}")
-    b = base64.b64decode(d["data"]["bytes"])
-    if len(b) != n:
-        raise RuntimeError(f"expected {n} bytes, got {len(b)}")
-    return b
-
-def get_stamp(host, phc, sudo):
-    pre = time.time_ns()
-    out = json.loads(ssh(host, f"{'sudo -n ' if sudo else ''}python3 ~/beacon/stamp_probe.py {phc}"))
-    post = time.time_ns()
-    return out, {"local_pre_ns": pre, "local_post_ns": post, "acquisition_window_ns": post - pre}
-
-def get_time_block():
-    """Hardware-anchored time (p550 i210 primary, k3 witness, GNSS epoch from timehat). Fails closed."""
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        f_pri = ex.submit(get_stamp, P550, "/dev/ptp0", True)
-        f_wit = ex.submit(get_stamp, K3,   "/dev/ptp1", False)
-        f_gns = ex.submit(lambda: json.loads(ssh(F9T, "python3 ~/beacon/gnss_probe.py")))
-        pri, pri_acq = f_pri.result(); wit, wit_acq = f_wit.result(); gnss = f_gns.result()
-    g = pri.get("epoch_guard", {})
-    if g.get("epoch_ok") is False:
-        die("i210 PHC epoch guard FAILED (%s) - %s" % (g.get("phc_minus_realtime_minus_tai_s"), g.get("ALERT")))
-    if g.get("chrony_selects_iphc") is False:
-        die("chrony no longer selects IPHC - %s" % g.get("chrony_iphc_line"))
-    a = gnss["anchor"]; aq = gnss["anchor_quality"]
-    # public record: hostnames, never LAN addresses
-    gnss["database"]["host"] = "nas1"
-    return {
-        "utc": iso(int(a["utc_unix_s"] * 1e9)), "tai": iso(int(a["tai_unix_s"] * 1e9)),
-        "tai_minus_utc_s": a["tai_minus_utc_s"],
-        "tai_source": "GNSS broadcast leapS + 19; cross-checked against p550 kernel adjtimex = %s" % pri["tai_minus_utc_s"],
-        "anchor": a, "anchor_quality": aq, "timehat_db": gnss["database"],
-        "clock_chain": {
-            "stamper": "Intel i210 (PCI 01:00.0) PHC /dev/ptp0 on p550; TP1 captured on SDP0 via ts2phc EXTTS",
-            "reference": "u-blox ZED-F9T TP1 PPS, falling edge, 100 ms",
-            "i210_discipline": pri["discipline"], "bmc_crosscheck": pri.get("mesh_crosscheck"),
-            "epoch_guard": g, "chrony_primary": pri["chrony"], "chrony_witness": wit["chrony"],
-            "witness_discipline": wit["discipline"],
-        },
-        "orchestration": {
-            "note": "Software latency of assembling this record. A FRESHNESS limit, never added to the anchor.",
-            "primary_observation": {"host": "p550", "observed_utc": iso(pri["stamp"]["utc_ns"]),
-                                    "read_cost_ns": pri["stamp"]["chosen_read_cost_ns"], "acquisition": pri_acq},
-            "witness_observation": {"host": "k3", "observed_utc": iso(wit["stamp"]["utc_ns"]),
-                                    "read_cost_ns": wit["stamp"]["chosen_read_cost_ns"], "acquisition": wit_acq},
-            "observation_minus_anchor_s": round(pri["stamp"]["utc_ns"] / 1e9 - a["utc_unix_s"], 3),
-        },
-        "precision": {
-            "model": "anchored",
-            "anchor_uncertainty": {
-                "receiver_sawtooth_sd_ns": aq["sawtooth_sd_ns"],
-                "sawtooth_this_epoch_ns": a["sawtooth_qerr_ns_this_epoch"],
-                "sawtooth_applied_in_servo": False,
-                "phc_sawtooth_residual_note": ("This epoch's TP1 edge fell %s ns from ideal (sign: corrected = raw + qErr, "
-                                               "notebook 212). The servo does not correct it; it is reported so a consumer can." % a["sawtooth_qerr_ns_this_epoch"]),
-                "i210_servo_last_offset_ns": pri["discipline"].get("last_offset_ns"),
-                "i210_servo_residual_ns_rms": pri["discipline"].get("offset_ns_rms"),
-                "i210_servo_rms_samples": pri["discipline"].get("samples"),
-                "i210_servo_rms_note": "RMS is null unless computed over >=3 window samples; last_offset_ns is signed and instantaneous - they are different quantities",
-                "dominant_term": "ts2phc servo residual plus uncalibrated path delays",
-                "not_dominant": "userspace clock read cost - it does not enter the anchor",
-            },
-            "calibrated_terms": ["GNSS antenna cable delay 69 ns, MEASURED (notebook 213/215)",
-                                 "BMC EXTI+PHC-read latency trimmed via ptptgt 900 (notebook 214)"],
-            "uncalibrated_terms": ["PPS coax length F9T TP1 -> i210 SDP0", "i210 SDP0 input latency",
-                                   "i210-monitor path asymmetry, bounded +/-445 ns", "6T-vs-F9T receiver difference"],
-            "absolute_utc_limit": "F9T is L1-ONLY today (0 signals on L2): absolute UTC carries an uncorrected ionospheric term. L1/L2 (TW3972) is roadmap.",
-            "absolute_accuracy_claimed": False,
-        },
-    }
-
-def sign_all(pulse_hash):
-    sigs = {}
-    for name, host, role, signer in (("entropy", PROTECTLI, "entropy_signer", "protectli"),
-                                     ("time", P550, "time_attester", "p550"),
-                                     ("time_witness", K3, "time_witness", "k3")):
-        sig = ssh(host, f"python3 ~/beacon/sign.py {role} {pulse_hash}")
-        pub = json.loads(ssh(host, f"cat ~/beacon/{role}.pub"))
-        sigs[name] = {"signer": signer, "role": role, "alg": "ed25519", "key_id": pub["key_id"],
-                      "public_key_b64": pub["public_key_b64"], "sig_b64": sig}
-        os.makedirs(os.path.join(HERE, "keys"), exist_ok=True)
-        open(os.path.join(HERE, "keys", f"{role}.pub"), "w").write(json.dumps(pub, indent=2))
-    return sigs
-
 def git(*a):
     r = subprocess.run(["git", "-C", HERE, *a], capture_output=True, text=True); return r.returncode, r.stdout.strip(), r.stderr.strip()
+def pulse_files(): return sorted(f for f in glob.glob(os.path.join(CHAIN, "pulse-*.json")) if _PULSE_RE.match(os.path.basename(f)))
+def head():
+    fs = pulse_files()
+    if not fs: return 0, "0" * 64, None
+    p = json.load(open(fs[-1])); return p["core"]["seq"], p["pulse_hash"], p
+def ptype(p): return (p or {}).get("core", {}).get("type", "legacy")
+def D(x): return decimal.Decimal(str(x))
 
 def require_synced():
-    """Refuse to mint unless this checkout is exactly the published head. Two minters = a forked chain."""
-    if git("rev-parse", "--is-inside-work-tree")[0] != 0:
-        return  # dev layout, not the published repo
+    if git("rev-parse", "--is-inside-work-tree")[0] != 0: return
     rc, _, err = git("fetch", "-q", "origin", "main")
-    if rc != 0: die("cannot fetch origin to check the published head - " + err[:120])
-    local, remote = git("rev-parse", "HEAD")[1], git("rev-parse", "origin/main")[1]
-    if local != remote: die(f"checkout {local[:10]} != published head {remote[:10]}; pull first, never mint on a fork")
-    # Only the chain matters: a minted-but-unpushed pulse (tracked or untracked) is a fork risk.
-    # Logs and scratch files elsewhere in the checkout are not.
-    dirty = [l for l in git("status", "--porcelain")[1].splitlines()
-             if "chain/" in l and "chain/pending/" not in l]
+    if rc != 0: die("cannot fetch origin - " + err[:120])
+    if git("rev-parse", "HEAD")[1] != git("rev-parse", "origin/main")[1]: die("checkout is not the published head; pull first, never mint on a fork")
+    dirty = [l for l in git("status", "--porcelain")[1].splitlines() if "chain/" in l and "chain/pending/" not in l]
     if dirty: die("chain has unpublished changes: " + "; ".join(dirty[:3]))
 
-def mark_failed(seq, reason, extra=None):
-    """A visible, pushed record of a failed pulse. The chain never hides a hole."""
-    path = os.path.join(CHAIN, f"pulse-{seq:04d}.FAILED.json")
-    json.dump({"seq": seq, "failed_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-               "reason": reason, "detail": extra or {},
-               "meaning": "This pulse did not complete its commit/reveal contract. Consumers must treat it as failed."},
-              open(path, "w"), indent=2)
-    return path
+# ---------------------------------------------------------------- statements
+def key_allowed(role, pk_b64, seq):
+    for k in json.load(open(KEYS))["keys"]:
+        if k["role"] == role and k["public_key_b64"] == pk_b64:
+            lo, hi = k.get("valid_from_seq") or 0, k.get("valid_to_seq")
+            return lo <= seq and (hi is None or seq <= hi)
+    return False
 
-def head():
-    files = pulse_files(CHAIN)
-    if files:
-        p = json.load(open(files[-1])); return p["core"]["seq"], p["pulse_hash"], p
-    leg = pulse_files(LEGACY) if LEGACY else []
-    if leg:
-        p = json.load(open(leg[-1])); return p["core"]["seq"], p["pulse_hash"], p
-    return 0, "0" * 64, None
+def check_statement(name, signed, seq, phase, binding):
+    """Aggregator-side defence in depth: a host statement must be self-consistent before we build on it."""
+    role, host = S.STATEMENTS[name]; st, sig = signed["statement"], signed["signature"]
+    if st.get("v") != S.VERSION or st.get("role") != role or st.get("host") != host: die(f"{name}: wrong v/role/host")
+    if st.get("seq") != seq or st.get("phase") != phase or st.get("binding") != binding or st.get("chain_hash") != S.CHAIN_HASH:
+        die(f"{name}: statement not bound to this pulse (seq/phase/binding/chain)")
+    if sig.get("alg") != "ed25519" or hashlib.sha256(base64.b64decode(sig["public_key_b64"])).hexdigest()[:16] != sig["key_id"]: die(f"{name}: bad key_id")
+    if not key_allowed(role, sig["public_key_b64"], seq): die(f"{name}: signing key not in KEYS.json for role {role} at seq {seq}")
+    Ed25519PublicKey.from_public_bytes(base64.b64decode(sig["public_key_b64"])).verify(base64.b64decode(sig["sig_b64"]), A.canon(st))
+    return signed
 
-def write_pulse(seq, pulse):
-    path = os.path.join(CHAIN, f"pulse-{seq:04d}.json")
-    if os.path.exists(path):
-        die(f"{path} already exists - the chain is append-only")
-    tmp = path + ".tmp"; json.dump(pulse, open(tmp, "w"), indent=2); os.replace(tmp, path)
-    return path
+def collect(seq, phase, binding, names):
+    out = {}
+    for n in names:
+        if n == "entropy": continue
+        role, host = S.STATEMENTS[n]
+        raw = ssh(host, f"python3 ~/beacon/attest_host.py {role} {host} {seq} {phase} {binding} {S.CHAIN_HASH} -- {PROBE[n]}")
+        out[n] = check_statement(n, json.loads(raw), seq, phase, binding)
+    return out
 
-def mix(entropy, drand):
-    buf = MIX_DOMAIN + entropy + bytes.fromhex(drand["randomness"]) + bytes.fromhex(drand["chain_hash"]) + int(drand["round"]).to_bytes(8, "big")
-    return {"algorithm": "SHA256(domain || entropy || drand_randomness || chain_hash || round_be8)",
-            "domain_tag": MIX_DOMAIN.decode(), "preimage_len_bytes": len(buf),
-            "attested_value": hashlib.sha256(buf).hexdigest()}
+def drand_verified(rnd=None):
+    d = drand_anchor.fetch(rnd)
+    if not d["randomness_equals_sha256_signature"]: die("drand randomness != sha256(signature)")
+    ok, why = bls_drand.verify_pinned(d["round"], d["signature"], d["chain_hash"])
+    if not ok: die("drand BLS verification failed: " + why)
+    d["round_release_unix_s"] = S.release_time(d["round"]); d["bls_verified_by_aggregator"] = True
+    return d
 
-DISCLOSURE = {
-    "signed_payload": "sha256 of canonical(core); all signatures cover the same digest",
-    "time_precision_vs_accuracy": "We claim precision and a traceable discipline chain, NOT calibrated absolute accuracy versus UTC(k).",
-    "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md.",
-}
+def tooling(statements):
+    t = {"aggregator": A.tool_binding(os.path.join(HERE, "pulse.py"), os.path.join(HERE, "hosts", "attest_lib.py"),
+                                       os.path.join(HERE, "schema.py"), os.path.join(HERE, "verify.py"))}
+    for n, s in statements.items(): t[n] = s["statement"].get("tools")
+    return t
 
-# ---------------------------------------------------------------- commit
+def seal(core):
+    """pulse_hash over canon(core); aggregator signs the digest. Writes to a temp path, TSA-stamps, requires
+    >= MIN_TSA_TOKENS, then atomically renames into the chain. Returns final path."""
+    core = A.normalize(core); ph = hashlib.sha256(A.canon(core)).hexdigest()
+    priv = A.load_private("aggregator"); raw, b64, kid = A.pub_of(priv)
+    if not key_allowed("aggregator", b64, core["seq"]): die("aggregator key not in KEYS.json for this seq")
+    pulse = {"core": core, "pulse_hash": ph,
+             "signatures": {"aggregator": {"alg": "ed25519", "key_id": kid, "public_key_b64": b64, "signer": "think", "role": "aggregator",
+                                           "sig_b64": base64.b64encode(priv.sign(bytes.fromhex(ph))).decode(), "over": "pulse_hash bytes",
+                                           "attests": "assembly only; each host's facts are attested by that host's own signature inside core.statements"}},
+             "disclosure": {"protocol": "PROTOCOL.md v0.5", "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md."}}
+    final = os.path.join(CHAIN, f"pulse-{core['seq']:04d}.json"); tmp = os.path.join(CHAIN, f".pulse-{core['seq']:04d}.json.tmp")
+    if os.path.exists(final): die(f"{final} exists - append-only")
+    json.dump(pulse, open(tmp, "w"), indent=2)
+    if core["type"] == "commit":
+        st = tsa.stamp(tmp, "at-commit")
+        if len(st["tokens"]) < S.MIN_TSA_TOKENS:
+            for f in glob.glob(tmp + "*"): os.remove(f)
+            return None, ph, st
+        for t in st["tokens"]:
+            os.replace(os.path.join(CHAIN, t["file"]), final + "." + t["tsa"] + ".tsr")
+        meta = json.load(open(tmp + ".tsa.json")); meta["pulse"] = os.path.basename(final)
+        json.dump(meta, open(final + ".tsa.json", "w"), indent=2); os.remove(tmp + ".tsa.json")
+    os.replace(tmp, final)
+    return final, ph, None
+
+# ---------------------------------------------------------------- commands
 def cmd_commit(lead):
     if lead < MIN_LEAD: die(f"lead {lead} < MIN_LEAD {MIN_LEAD}")
     require_synced()
-    pend = glob.glob(os.path.join(PENDING, "pulse-*.secret"))
-    if pend: die("a commit is already pending (%s); reveal it or record a failure before committing again"
-                 % ", ".join(os.path.basename(x) for x in pend))
-    try: now = drand_anchor.fetch()
-    except Exception as e: die(f"drand unreachable - {e}")
-    if not now["randomness_equals_sha256_signature"]: die("drand randomness != sha256(signature)")
-    target = now["round"] + lead
-    target_release = drand_anchor.round_time(target)
-    if target_release <= time.time() + MIN_LEAD * drand_anchor.PERIOD:
-        die("target round would not be safely in the future")
+    seq, prev_hash, hp = head()
+    if ptype(hp) == "commit": die(f"pulse {seq} is an unresolved commit; reveal it or record a failure first")
+    seq += 1
+    now = drand_verified()
+    target = now["round"] + lead; release = S.release_time(target)
+    if release - time.time() < S.PUBLISH_MARGIN_S + 60: die("target round is not far enough away to honour the publication margin")
+    raw = ssh("protectli", f"python3 ~/beacon/entropy_host.py commit {seq} {target} {S.CHAIN_HASH}")
+    ent_signed = json.loads(raw); commitment = ent_signed["statement"]["entropy_commitment"]
+    ent = check_statement("entropy", ent_signed, seq, "commit", commitment)
+    if ent["statement"]["target_round"] != target: die("entropy host bound a different target round")
+    sts = {"entropy": ent, **collect(seq, "commit", commitment, S.REQUIRED["commit"])}
+    anchor_s = D(sts["gnss"]["statement"]["measurement"]["anchor"]["utc_unix_s"])
+    if anchor_s >= release: die("GNSS anchor is not before the target release")
+    core = {"v": S.VERSION, "type": "commit", "seq": seq, "prev_hash": prev_hash, "chain_hash": S.CHAIN_HASH,
+            "statements": sts, "drand_at_commit": now,
+            "derived": {"entropy_commitment": commitment, "target_round": target, "target_release_unix_s": release,
+                        "target_release_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(release)),
+                        "anchor_utc_unix_s": str(anchor_s), "anchor_before_release_s": str(D(release) - anchor_s), "lead_rounds": lead},
+            "tooling": tooling(sts), "aggregator_host": "think"}
+    path, ph, st = seal(core)
+    if path is None:
+        ssh("protectli", f"python3 ~/beacon/entropy_host.py abandon {seq} tsa-tokens-insufficient")
+        die(f"only {len(st['tokens'])} TSA token(s); nothing was written; E abandoned on the entropy host")
+    print(json.dumps({"minted": path, "type": "commit", "seq": seq, "pulse_hash": ph, "target_round": target,
+                      "target_release_utc": core["derived"]["target_release_utc"], "tsa_tokens": [(t["tsa"], t["time"]) for t in json.load(open(path + ".tsa.json"))["tokens"]],
+                      "reveal_after_s": round(release - time.time(), 1)}, indent=2))
 
-    seq, prev_hash, _ = head(); seq += 1
-    ent = get_entropy(32)
-    commitment = hashlib.sha256(COMMIT_DOMAIN + ent).hexdigest()
-    tblock = get_time_block()
-    if tblock["anchor"]["utc_unix_s"] >= target_release:
-        die("GNSS anchor is not before the target round release - commit would be meaningless")
-
-    core = {
-        "version": "0.4", "type": "commit", "seq": seq, "prev_hash": prev_hash,
-        "commitment": {
-            "scheme": "SHA256(domain || entropy32)", "domain_tag": COMMIT_DOMAIN.decode(),
-            "entropy_commitment": commitment, "entropy_len_bytes": 32,
-            "entropy_source": {"device": "ID Quantique Quantis USB", "serial": "246578A410", "host": "protectli", "correction": "none"},
-            "target_round": target, "target_release_unix_s": target_release,
-            "target_release_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(target_release)),
-            "lead_rounds": lead,
-            "rule": ("The reveal pulse MUST disclose entropy E with SHA256(domain||E) == entropy_commitment, "
-                     "and MUST mix drand round == target_round. Because E is fixed here, before target_round "
-                     "exists, the attested value is unknowable to anyone - including the publisher - until "
-                     "target_round releases, and the publisher cannot select E after seeing it."),
-            "publication_requirement": ("This commitment proves what it claims only if it is PUBLISHED before "
-                                        "target_release. Signing is not publishing. See PUBLICATION.md."),
-        },
-        "drand_at_commit": {**now, "meaning": "Latest round at commit time: proves this commit was made no earlier than its release."},
-        "time": tblock,
-    }
-    if core["drand_at_commit"]["round"] >= target: die("internal: target not in the future")
-    pulse_hash = hashlib.sha256(canonical(core)).hexdigest()
-    pulse = {"core": core, "pulse_hash": pulse_hash, "signatures": sign_all(pulse_hash),
-             "disclosure": {**DISCLOSURE,
-                            "what_this_proves": "A specific 32-byte value was fixed (by hash) before drand round %d existed." % target,
-                            "what_this_does_NOT_prove_yet": "Nothing about the value itself until the matching reveal pulse."}}
-    # hold the secret back, mode 600, until reveal
-    os.makedirs(PENDING, exist_ok=True)
-    sp = os.path.join(PENDING, f"pulse-{seq:04d}.secret")
-    fd = os.open(sp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    os.write(fd, json.dumps({"seq": seq, "entropy_hex": ent.hex(), "commitment": commitment,
-                             "target_round": target, "pulse_hash": pulse_hash}).encode()); os.close(fd)
-    path = write_pulse(seq, pulse)
-    # Independent timestamps from >= 2 public TSAs, taken NOW - before the target round exists.
-    stamps = tsa.stamp(path, "at-commit")
-    if len(stamps["tokens"]) < 1:
-        sys.stderr.write("WARNING: no TSA token obtained; the commit's publication time rests on git alone\n")
-    print(json.dumps({"minted": path, "type": "commit", "tsa_tokens": [(t["tsa"], t["time"]) for t in stamps["tokens"]], "seq": seq, "pulse_hash": pulse_hash,
-                      "target_round": target, "target_release_utc": core["commitment"]["target_release_utc"],
-                      "reveal_after_s": round(target_release - time.time(), 1)}, indent=2))
-
-# ---------------------------------------------------------------- reveal
 def cmd_reveal():
     require_synced()
-    pend = sorted(glob.glob(os.path.join(PENDING, "pulse-*.secret")))
-    if not pend: die("no pending commit to reveal")
-    sec = json.load(open(pend[0]))
-    cseq, target = sec["seq"], sec["target_round"]
-    cpath = os.path.join(CHAIN, f"pulse-{cseq:04d}.json")
-    commit = json.load(open(cpath))
-    if commit["pulse_hash"] != sec["pulse_hash"]: die("pending secret does not match its commit pulse")
-    ent = bytes.fromhex(sec["entropy_hex"])
-    if hashlib.sha256(COMMIT_DOMAIN + ent).hexdigest() != commit["core"]["commitment"]["entropy_commitment"]:
-        die("held entropy does not hash to the published commitment")
-
-    # EXTERNAL "now": drand's latest round, not our clock. Fail closed if R is not out yet.
-    try: latest = drand_anchor.fetch()
-    except Exception as e: die(f"drand unreachable - {e}")
-    if latest["round"] < target:
-        die(f"drand has only reached round {latest['round']}; target {target} releases at "
-            f"{commit['core']['commitment']['target_release_utc']} - wait")
-    try: dr = drand_anchor.fetch(target)
-    except Exception as e: die(f"could not fetch target round {target} - {e}")
-    if dr["round"] != target or not dr["randomness_equals_sha256_signature"]:
-        die("target round fetch inconsistent")
-
     seq, prev_hash, hp = head()
-    if hp["pulse_hash"] != commit["pulse_hash"]:
-        die("reveal must directly follow its commit in the chain (head is %s)" % hp["core"]["seq"])
-    seq += 1
-    mixed = mix(ent, dr)
-    tblock = get_time_block()
-    if tblock["anchor"]["utc_unix_s"] < dr["round_release_unix_s"]:
-        die("reveal anchored before the target round released - impossible unless a clock is wrong")
+    if ptype(hp) != "commit": die("head is not a commit; nothing to reveal")
+    cseq, cph = seq, prev_hash; target = hp["core"]["derived"]["target_round"]; seq += 1
+    latest = drand_verified()
+    if latest["round"] < target: die(f"drand at round {latest['round']}; target {target} releases {hp['core']['derived']['target_release_utc']}")
+    dr = drand_verified(target)
+    ent = check_statement("entropy", json.loads(ssh("protectli", f"python3 ~/beacon/entropy_host.py reveal {cseq} {cph}")), cseq, "reveal", cph)
+    E = bytes.fromhex(ent["statement"]["entropy_hex"])
+    if hashlib.sha256(S.COMMIT_DOMAIN + E).hexdigest() != hp["core"]["derived"]["entropy_commitment"]: die("revealed E does not match the published commitment")
+    sts = {"entropy": ent, **collect(seq, "reveal", cph, S.REQUIRED["reveal"])}
+    anchor_s = D(sts["gnss"]["statement"]["measurement"]["anchor"]["utc_unix_s"])
+    if anchor_s < dr["round_release_unix_s"]: die("reveal anchored before the round released")
+    buf = S.MIX_DOMAIN + E + bytes.fromhex(dr["randomness"]) + bytes.fromhex(dr["chain_hash"]) + int(target).to_bytes(8, "big")
+    core = {"v": S.VERSION, "type": "reveal", "seq": seq, "prev_hash": prev_hash, "chain_hash": S.CHAIN_HASH,
+            "statements": sts, "drand": dr,
+            "derived": {"commit_seq": cseq, "commit_pulse_hash": cph, "entropy_commitment": hp["core"]["derived"]["entropy_commitment"],
+                        "attested_value": hashlib.sha256(buf).hexdigest(),
+                        "mix": {"algorithm": "SHA256(domain || E || drand_randomness || chain_hash || round_be8)", "domain_tag": S.MIX_DOMAIN.decode()},
+                        "round_release_unix_s": dr["round_release_unix_s"], "anchor_utc_unix_s": str(anchor_s),
+                        "anchor_after_release_s": str(anchor_s - D(dr["round_release_unix_s"])),
+                        "commit_anchor_before_release_s": str(D(dr["round_release_unix_s"]) - D(hp["core"]["derived"]["anchor_utc_unix_s"]))},
+            "tooling": tooling(sts), "aggregator_host": "think"}
+    path, ph, _ = seal(core)
+    print(json.dumps({"minted": path, "type": "reveal", "seq": seq, "reveals_commit": cseq, "attested_value": core["derived"]["attested_value"],
+                      "drand_round": target, "commit_before_round_by_s": core["derived"]["commit_anchor_before_release_s"],
+                      "reveal_after_round_by_s": core["derived"]["anchor_after_release_s"]}, indent=2))
 
-    core = {
-        "version": "0.4", "type": "reveal", "seq": seq, "prev_hash": prev_hash,
-        "reveals": {"commit_seq": cseq, "commit_pulse_hash": commit["pulse_hash"],
-                    "entropy_hex": ent.hex(), "entropy_sha256": hashlib.sha256(ent).hexdigest(),
-                    "entropy_commitment": commit["core"]["commitment"]["entropy_commitment"],
-                    "commit_anchor_utc": commit["core"]["time"]["utc"],
-                    "commit_anchor_unix_s": commit["core"]["time"]["anchor"]["utc_unix_s"]},
-        "external_anchor": {**dr, "is_committed_target": True},
-        "attested_value": mixed["attested_value"], "mix": mixed,
-        "time": tblock,
-        "timeline": {
-            "commit_anchor_unix_s": commit["core"]["time"]["anchor"]["utc_unix_s"],
-            "target_round_release_unix_s": dr["round_release_unix_s"],
-            "reveal_anchor_unix_s": tblock["anchor"]["utc_unix_s"],
-            "commit_before_round_by_s": round(dr["round_release_unix_s"] - commit["core"]["time"]["anchor"]["utc_unix_s"], 3),
-            "reveal_after_round_by_s": round(tblock["anchor"]["utc_unix_s"] - dr["round_release_unix_s"], 3),
-            "reading": ("commit_before_round_by_s > 0 means the entropy was fixed before the round existed; "
-                        "exact timing is what makes both edges of this window checkable rather than asserted."),
-        },
-    }
-    pulse_hash = hashlib.sha256(canonical(core)).hexdigest()
-    pulse = {"core": core, "pulse_hash": pulse_hash, "signatures": sign_all(pulse_hash),
-             "disclosure": {**DISCLOSURE,
-                            "attested_value_is_the_output": "Use core.attested_value.",
-                            "what_this_proves": ("The attested value was unknowable to ANYONE - the publisher included - before "
-                                                 "drand round %d released, and the publisher could not have chosen the entropy "
-                                                 "after seeing that round, because sha256(entropy) was committed in pulse %d "
-                                                 "beforehand." % (target, cseq)),
-                            "residual_assumptions": ["the commit pulse was PUBLISHED (not merely signed) before the round - see PUBLICATION.md",
-                                                     "drand's threshold network is honest (League of Entropy, >= threshold of independent operators)",
-                                                     "SHA-256 is preimage resistant"]}}
-    path = write_pulse(seq, pulse)
-    os.replace(pend[0], os.path.join(PENDING, f"pulse-{cseq:04d}.revealed"))  # keep the record, never re-use
-    print(json.dumps({"minted": path, "type": "reveal", "seq": seq, "reveals_commit": cseq,
-                      "attested_value": mixed["attested_value"], "drand_round": target,
-                      "commit_before_round_by_s": core["timeline"]["commit_before_round_by_s"],
-                      "reveal_after_round_by_s": core["timeline"]["reveal_after_round_by_s"]}, indent=2))
+def cmd_fail(reason):
+    require_synced()
+    seq, prev_hash, hp = head()
+    if ptype(hp) != "commit": die("head is not a commit; nothing to fail")
+    cseq, cph = seq, prev_hash; seq += 1
+    ent = check_statement("entropy", json.loads(ssh("protectli", f"python3 ~/beacon/entropy_host.py abandon {cseq} {reason}")), cseq, "failure",
+                          hp["core"]["derived"]["entropy_commitment"])
+    sts = {"entropy": ent}
+    for n in ("gnss", "time", "witness"):
+        try: sts.update(collect(seq, "failure", cph, (n,)))
+        except Exception as e: sys.stderr.write(f"failure pulse: {n} statement unavailable ({str(e)[:80]}); continuing\n")
+    core = {"v": S.VERSION, "type": "failure", "seq": seq, "prev_hash": prev_hash, "chain_hash": S.CHAIN_HASH, "statements": sts,
+            "derived": {"commit_seq": cseq, "commit_pulse_hash": cph, "reason": reason, "target_round": hp["core"]["derived"]["target_round"],
+                        "entropy_commitment": hp["core"]["derived"]["entropy_commitment"],
+                        "meaning": "The referenced commit did not complete its contract. Consumers must treat it as failed; its E was abandoned unrevealed."},
+            "tooling": tooling(sts), "aggregator_host": "think"}
+    path, ph, _ = seal(core)
+    print(json.dumps({"minted": path, "type": "failure", "seq": seq, "fails_commit": cseq, "reason": reason}, indent=2))
 
 def cmd_status():
-    seq, h, p = head()
-    print("head: seq %s  type %s  hash %s" % (seq, (p or {}).get("core", {}).get("type", "legacy"), h[:16]))
-    for f in sorted(glob.glob(os.path.join(PENDING, "pulse-*.secret"))):
-        s = json.load(open(f)); rel = drand_anchor.round_time(s["target_round"]) - time.time()
-        print("pending commit seq %s -> round %s (%s)" % (s["seq"], s["target_round"],
-              "revealable now" if rel <= 0 else "revealable in %.0f s" % rel))
+    seq, h, p = head(); print(f"head: seq {seq}  type {ptype(p)}  hash {h[:16]}")
+    try: print("entropy host pending:", ssh("protectli", "python3 ~/beacon/entropy_host.py pending"))
+    except Exception as e: print("entropy host unreachable:", str(e)[:80])
 
 if __name__ == "__main__":
-    cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
-    if cmd == "commit":
-        lead = int(sys.argv[sys.argv.index("--lead") + 1]) if "--lead" in sys.argv else DEFAULT_LEAD
-        cmd_commit(lead)
+    a = sys.argv[1:]; cmd = a[0] if a else "status"
+    if cmd == "commit": cmd_commit(int(a[a.index("--lead") + 1]) if "--lead" in a else DEFAULT_LEAD)
     elif cmd == "reveal": cmd_reveal()
-    elif cmd == "fail":
-        print(mark_failed(int(sys.argv[2]), sys.argv[3] if len(sys.argv) > 3 else "unspecified"))
+    elif cmd == "fail": cmd_fail(" ".join(a[1:]) or "unspecified")
     else: cmd_status()

@@ -171,3 +171,14 @@ were stamped from it and are superseded.
   hosts signed the record's digest" (ERR-005).
 - drand release times are `genesis + (round − 1)·period`. Any figure derived from the old formula is 3 s late
   (ERR-004); quote recomputed margins, not the published `timeline` fields, for pulses 0009–0015.
+
+
+## Added 2026-09-12 — v0.5 attestation (binding)
+
+- ✅ From pulse **0018**: "each host signed its own statement: the entropy host generated, held and revealed E;
+  the GNSS host signed the anchor it measured; the time host and witness signed their own clock measurements;
+  the aggregator signed only the assembly." Before 0018: digest signatures only (ERR-005).
+- ✅ "Failures are signed chain events" (v0.5). ❌ Never describe an unsigned `FAILED.json` as a chain event.
+- ✅ "Every v0.5 commit carries at least two RFC 3161 tokens taken at mint, each ≥ 120 s before its round."
+- The aggregator is still a single party that *assembles*; it cannot forge host facts but it can choose not
+  to publish. That is what the watcher's COMMIT-RECEIPT and NON-REVEAL records exist to expose.

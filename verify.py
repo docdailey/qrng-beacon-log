@@ -99,7 +99,7 @@ def verify_drand(da, refetch):
         except Exception as e:
             print(f"[WARN] could not re-fetch drand round: {type(e).__name__}: {e}")
 
-def main():
+def legacy_main():
     a = sys.argv[1:]
     if not a: print(__doc__); return 2
     p = load(a[0]); core = p["core"]; typ = core.get("type", "legacy")
@@ -179,6 +179,148 @@ def main():
         print("[INFO] genesis pulse")
     print("\n" + ("ALL CHECKS PASSED" if OK else "VERIFICATION FAILED"))
     return 0 if OK else 1
+
+# =====================================================================================
+# PROTOCOL v0.5 — strict path. Schema first (fail closed), then host statements, bindings, derived
+# values, drand BLS, aggregator signature. Pulses <= v0.4 go to legacy_main() unchanged.
+# =====================================================================================
+import decimal, re, glob as _glob
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "hosts"))
+try:
+    import attest_lib as A, schema as S
+    V05 = True
+except Exception as _e:
+    V05 = False
+
+def _D(x): return decimal.Decimal(str(x))
+def _hex(s, n): return isinstance(s, str) and len(s) == n and all(c in "0123456789abcdef" for c in s)
+
+def strict_main():
+    a = sys.argv[1:]; src = a[0]
+    p = load(src); core = p["core"]; typ = core.get("type")
+    pin = a[a.index("--pin") + 1] if "--pin" in a else None
+    prev = load(a[a.index("--prev") + 1]) if "--prev" in a else None
+    refetch = "--refetch" in a; global NO_BLS; NO_BLS = "--no-bls" in a
+    print(f"pulse seq {core.get('seq')}  type {typ}  v0.5 (strict)")
+
+    # ---- 1. schema: everything below assumes these hold, so they fail closed first ----
+    chk(typ in S.TYPES, f"type is one of {S.TYPES}")
+    chk(isinstance(core.get("seq"), int) and core["seq"] >= 1, "seq is a positive integer")
+    m = re.search(r"pulse-(\d{4})\.json$", src)
+    if m: chk(int(m.group(1)) == core["seq"], "filename sequence matches core.seq")
+    chk(_hex(core.get("prev_hash"), 64), "prev_hash is 64 hex")
+    chk(core.get("chain_hash") == S.CHAIN_HASH, "chain_hash is the pinned quicknet chain")
+    sts = core.get("statements", {})
+    req = S.REQUIRED.get(typ, ())
+    chk(all(k in sts for k in req), f"required statements present: {req}")
+    chk(all(k in S.STATEMENTS for k in sts), "no unknown statements")
+    chk(set(p.get("signatures", {}).keys()) == {"aggregator"}, "exactly one outer signature: aggregator")
+    try:
+        A.canon(core); chk(True, "core is in canonical form (no floats, no integers beyond 2^53)")
+    except Exception as e:
+        chk(False, "core is in canonical form", str(e))
+    if not OK:
+        print("\nVERIFICATION FAILED (schema)"); return 1
+
+    d = core.get("derived", {})
+    # ---- 2. each host statement: its OWN signature over its OWN canonical bytes, bound to this pulse ----
+    def stmt_ok(name, expect_seq, expect_phase, expect_binding):
+        role, host = S.STATEMENTS[name]; signed = sts[name]; st, sig = signed["statement"], signed["signature"]
+        good = (st.get("v") == S.VERSION and st.get("role") == role and st.get("host") == host and st.get("chain_hash") == S.CHAIN_HASH)
+        chk(good, f"{name}: statement is v0.5 {role}@{host} on the pinned chain")
+        chk(st.get("seq") == expect_seq and st.get("phase") == expect_phase and st.get("binding") == expect_binding,
+            f"{name}: bound to seq {expect_seq} / phase {expect_phase} / binding {str(expect_binding)[:16]}…",
+            f"got seq {st.get('seq')} phase {st.get('phase')} binding {str(st.get('binding'))[:16]}")
+        kid_ok = sig.get("alg") == "ed25519" and hashlib.sha256(base64.b64decode(sig["public_key_b64"])).hexdigest()[:16] == sig.get("key_id")
+        chk(kid_ok, f"{name}: key_id == SHA256(public_key)[:16], alg ed25519")
+        try:
+            Ed25519PublicKey.from_public_bytes(base64.b64decode(sig["public_key_b64"])).verify(base64.b64decode(sig["sig_b64"]), A.canon(st)); r = True
+        except Exception: r = False
+        chk(r, f"{name}: {host}'s signature verifies over canon(statement) — the host attested this itself")
+        if pin:
+            ok, desc = pin_check(pin, role, sig["public_key_b64"], core["seq"])
+            if ok is None: print(f"[WARN] {desc}")
+            else: chk(ok, f"{name}: key pinned for seq {core['seq']} — {desc}")
+        return st
+
+    if typ == "commit":
+        C, R = d.get("entropy_commitment"), d.get("target_round")
+        chk(_hex(C, 64) and isinstance(R, int), "derived.entropy_commitment is 64 hex and target_round is an int")
+        e = stmt_ok("entropy", core["seq"], "commit", C)
+        chk(e.get("entropy_commitment") == C and e.get("target_round") == R, "entropy host's own commitment and target round match derived")
+        chk("entropy_hex" not in e, "commit statement discloses no entropy")
+        g = stmt_ok("gnss", core["seq"], "commit", C); stmt_ok("time", core["seq"], "commit", C); stmt_ok("witness", core["seq"], "commit", C)
+        now = core["drand_at_commit"]; verify_drand(now, refetch)
+        chk(R > now["round"], f"target round {R} is strictly after the round current at commit ({now['round']})")
+        rel = S.release_time(R); chk(d.get("target_release_unix_s") == rel, f"derived.target_release_unix_s == genesis+(R-1)*period == {rel}")
+        anchor = _D(g["measurement"]["anchor"]["utc_unix_s"])
+        chk(anchor < rel, f"GNSS anchor (from f9t's signed statement) precedes target release by {rel - anchor} s")
+        chk(_D(d.get("anchor_utc_unix_s", "nan")) == anchor, "derived.anchor_utc_unix_s equals the GNSS host's signed anchor")
+        eg = sts["time"]["statement"]["measurement"].get("epoch_guard", {})
+        chk(eg.get("epoch_ok") is True and eg.get("chrony_selects_iphc") is True, "p550 epoch guard passed inside p550's signed statement")
+        if prev is not None:
+            chk(prev["core"].get("type", "legacy") in ("legacy", "reveal", "failure") or "type" not in prev["core"], "state machine: commit follows a reveal, failure or legacy pulse")
+    elif typ in ("reveal", "failure"):
+        cs, cph, C = d.get("commit_seq"), d.get("commit_pulse_hash"), d.get("entropy_commitment")
+        chk(isinstance(cs, int) and _hex(cph, 64) and _hex(C, 64), "derived commit_seq / commit_pulse_hash / entropy_commitment well-formed")
+        if typ == "reveal":
+            e = stmt_ok("entropy", cs, "reveal", cph)
+            E = bytes.fromhex(e.get("entropy_hex", "")); chk(len(E) == 32, "revealed entropy is 32 bytes")
+            chk(hashlib.sha256(S.COMMIT_DOMAIN + E).hexdigest() == C, "SHA256(domain||E) == the commitment (entropy host's E matches what it committed)")
+            g = stmt_ok("gnss", core["seq"], "reveal", cph); stmt_ok("time", core["seq"], "reveal", cph); stmt_ok("witness", core["seq"], "reveal", cph)
+            dr = core["drand"]; verify_drand(dr, refetch)
+            R = dr["round"]; rel = S.release_time(R); chk(d.get("round_release_unix_s") == rel, f"derived.round_release_unix_s == computed {rel}")
+            anchor = _D(g["measurement"]["anchor"]["utc_unix_s"]); chk(anchor >= rel, f"reveal GNSS anchor is {anchor - rel} s after the round release")
+            buf = S.MIX_DOMAIN + E + bytes.fromhex(dr["randomness"]) + bytes.fromhex(dr["chain_hash"]) + int(R).to_bytes(8, "big")
+            chk(hashlib.sha256(buf).hexdigest() == d.get("attested_value"), "attested_value == SHA256(domain||E||randomness||chain||round_be8)")
+            if prev is not None:
+                pc = prev["core"]
+                chk(pc.get("type") == "commit" and prev["pulse_hash"] == cph and pc["seq"] == cs, "state machine: predecessor IS the referenced commit")
+                chk(pc.get("derived", {}).get("entropy_commitment") == C, "commitment equals the commit pulse's")
+                chk(pc.get("derived", {}).get("target_round") == R, f"drand round {R} == committed target round")
+                cprev = _D(pc["derived"]["anchor_utc_unix_s"]); chk(cprev < rel, f"commit anchor precedes round release by {rel - cprev} s")
+        else:
+            e = stmt_ok("entropy", cs, "failure", C)
+            chk("entropy_hex" not in e, "failure statement discloses no entropy (E abandoned unrevealed)")
+            for n in ("gnss", "time", "witness"):
+                if n in sts: stmt_ok(n, core["seq"], "failure", cph)
+            if prev is not None:
+                chk(prev["core"].get("type") == "commit" and prev["pulse_hash"] == cph and prev["core"]["seq"] == cs, "state machine: predecessor IS the failed commit")
+    # ---- 3. tooling drift (informational) ----
+    here = os.path.dirname(os.path.abspath(__file__))
+    for name, tools in (core.get("tooling") or {}).items():
+        for t in tools or []:
+            loc = os.path.join(here, "hosts", t["name"]) if os.path.exists(os.path.join(here, "hosts", t["name"])) else os.path.join(here, t["name"])
+            if os.path.exists(loc) and hashlib.sha256(open(loc, "rb").read()).hexdigest() != t["sha256"]:
+                print(f"[WARN] tooling drift: {name}/{t['name']} in this pulse differs from the published copy")
+    # ---- 4. hash + aggregator signature + chain ----
+    recomputed = hashlib.sha256(A.canon(core)).hexdigest()
+    chk(recomputed == p["pulse_hash"], "pulse_hash == sha256(canon(core))", f"claimed {p['pulse_hash']}\n       recomputed {recomputed}")
+    ag = p["signatures"]["aggregator"]
+    try: Ed25519PublicKey.from_public_bytes(base64.b64decode(ag["public_key_b64"])).verify(base64.b64decode(ag["sig_b64"]), bytes.fromhex(recomputed)); r = True
+    except Exception: r = False
+    chk(r and hashlib.sha256(base64.b64decode(ag["public_key_b64"])).hexdigest()[:16] == ag.get("key_id"), "aggregator signature over the RECOMPUTED digest (attests assembly only)")
+    if pin:
+        ok, desc = pin_check(pin, "aggregator", ag["public_key_b64"], core["seq"])
+        if ok is not None: chk(ok, f"aggregator key pinned for seq {core['seq']} — {desc}")
+    if prev is not None:
+        chk(core["prev_hash"] == prev["pulse_hash"] and core["seq"] == prev["core"]["seq"] + 1, f"chains to previous pulse (seq {prev['core']['seq']} -> {core['seq']})")
+    if typ == "reveal" and OK:
+        rel = S.release_time(core["drand"]["round"])
+        print(f"\nAttested value {d['attested_value']}\nUnknowable to anyone before {utc(rel)} (drand round {core['drand']['round']}). "
+              f"E was generated, held and revealed by the entropy host itself; every measurement is signed by the host that made it. "
+              f"Residual: pre-round uniqueness of the published commitment rests on third-party observation (TSA existence + watcher receipts).")
+    print("\n" + ("ALL CHECKS PASSED" if OK else "VERIFICATION FAILED")); return 0 if OK else 1
+
+def main():
+    a = sys.argv[1:]
+    if not a: print(__doc__); return 2
+    p = load(a[0]); v = p["core"].get("v") or p["core"].get("version") or "legacy"
+    if v == "0.5":
+        if not V05: print("[FAIL] v0.5 pulse but hosts/attest_lib.py + schema.py are not beside verify.py"); return 1
+        return strict_main()
+    if v in ("legacy", "0", "0.2", "0.3", "0.4"): return legacy_main()
+    print(f"[FAIL] unsupported protocol version {v!r}"); return 1
 
 if __name__ == "__main__":
     sys.exit(main())

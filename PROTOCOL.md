@@ -1,6 +1,59 @@
 # PROTOCOL.md — pulse format and verification, normative
 
-Version **0.4** (commit-then-reveal). This document is the specification; `verify.py` is the reference
+Version **0.5** (host-attested statements; commit-then-reveal; signed failures). Pulses ≤ 0.4 remain
+verifiable under the legacy path described at the end; their signatures are digest signatures, not role
+attestations (ERR-005).
+
+## 0. v0.5 in one paragraph
+
+Each role host produces and **signs its own statement** with its own key: the **entropy host** (protectli)
+generates `E`, holds it, and signs `{entropy_commitment, target_round}`; at reveal it releases `E` and signs
+that; on failure it signs an abandonment. The **GNSS host** (f9t) signs the anchor epoch it measured. The
+**time host** (p550) and **witness** (k3) each sign their own clock measurement. Every statement is bound to
+the pulse by `{seq, phase, binding, chain_hash}` — `binding` is the entropy commitment (commit) or the commit
+pulse hash (reveal/failure) — so a statement cannot be replayed into another pulse. The **aggregator** (think)
+verifies each statement, assembles `core`, and signs only the assembly with a fifth key. A dishonest
+aggregator therefore cannot fabricate any host's facts. All host scripts are published under `hosts/` and
+version-bound into each pulse by SHA-256 (`core.tooling`).
+
+### Canonical form
+`canon(x)` = `json.dumps(x, sort_keys=True, separators=(",", ":"), ensure_ascii=False)` as UTF-8, over a value
+domain containing **no floats and no integers outside ±(2⁵³−1)**. Producers rewrite every float and every
+out-of-range integer as a decimal string before signing (`hosts/attest_lib.normalize`); verifiers **reject**
+any core violating this. The result is RFC 8785-compatible and reproducible from any JSON library.
+
+### Statement
+```
+{ "statement": { "v":"0.5", "role", "host", "seq", "phase": commit|reveal|failure, "binding", "chain_hash",
+                 "issued_unix_ns": "<str>", "tools": [{name, sha256}...], ...role fields... },
+  "signature": { "alg":"ed25519", "key_id", "public_key_b64", "sig_b64", "over":"canon(statement)" } }
+```
+`key_id` = SHA256(raw public key)[:16]; the key must be listed in `keys/KEYS.json` for that role with the pulse
+seq inside its validity window.
+
+### Core (v0.5)
+```
+{ "v":"0.5", "type": commit|reveal|failure, "seq", "prev_hash", "chain_hash",
+  "statements": { "entropy", "gnss", "time", "witness" },      # failure: entropy required, others best-effort
+  "drand_at_commit" | "drand",                                 # BLS-verified by the aggregator before use
+  "derived": { ... },  "tooling": {...},  "aggregator_host":"think" }
+pulse = { "core", "pulse_hash" = SHA256(canon(core)), "signatures": { "aggregator" }, "disclosure" }
+```
+Required statements: commit/reveal → entropy, gnss, time, witness; failure → entropy. The entropy statement's
+`seq` is the **commit's** seq in reveal and failure pulses (it refers to the commitment it resolves).
+
+### State machine (enforced by the aggregator and by CI)
+`legacy | reveal | failure  →  commit  →  reveal | failure  →  commit …` — at most one unresolved commit; a
+reveal or failure must directly follow its commit; `seq` increments by exactly one.
+
+### Timing contract
+Commit: ≥ **2** RFC 3161 tokens taken at mint over the final bytes, else **nothing is written**; each token time
+must be ≥ 120 s before `target_release`; the commit must be pushed ≥ 120 s before `target_release`. Reveal must
+be pushed ≤ 600 s after release, else a **signed failure pulse** follows the commit.
+
+---
+
+# Legacy detail (v0.4 and earlier) This document is the specification; `verify.py` is the reference
 implementation. Where they disagree, this document wins and `verify.py` has a bug.
 
 ## 1. Objects

@@ -19,8 +19,8 @@ by each host of the fact its role names.
 **Fix (v0.5, in progress):** each host produces and signs its own statement (entropy host generates and
 holds `E` and signs `{commitment, target_round}`; time host signs its own measurement object; witness signs
 its own observation); the aggregator assembles the already-signed statements and signs the assembly with a
-fourth key. Host-side scripts are published and version-bound into each pulse by hash. Effective from the
-first v0.5 pulse, which will be named here.
+fourth key. Host-side scripts are published and version-bound into each pulse by hash. **Effective from pulse 0018** (first v0.5 commit; pulses 0016/0017
+are the last v0.4 pair).
 **Found by:** external reviewer, 2026-09-12.
 
 ## ERR-004 — every drand release time was computed 3 s late

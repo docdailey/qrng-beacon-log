@@ -36,10 +36,16 @@ def publish(msg):
     return time.time()
 
 def fail(seq, reason, extra=None):
+    """v0.5: a failure is a SIGNED CHAIN EVENT. The entropy host abandons E and signs that; the aggregator
+    mints a failure pulse chained after the commit. Nothing is hidden and nothing is unsigned."""
     log(f"FAILED seq {seq}: {reason} {extra or ''}")
-    run("python3", "pulse.py", "fail", str(seq), reason, check=False)
-    try: publish(f"FAILED pulse {seq}: {reason}")
-    except Exception as e: log(f"could not publish failure marker: {e}")
+    try:
+        out = run("python3", "pulse.py", "fail", f"{reason} {json.dumps(extra) if extra else ''}".strip())
+        log("failure pulse minted: " + out.strip().replace("\n", " ")[:160])
+    except Exception as e:
+        log(f"could not mint failure pulse: {e}")
+    try: publish(f"FAILURE pulse for commit {seq}: {reason}")
+    except Exception as e: log(f"could not publish failure pulse: {e}")
     sys.exit(1)
 
 def main():
@@ -52,7 +58,7 @@ def main():
         log(f"commit refused: {e}"); sys.exit(1)      # nothing minted -> nothing to mark
     seq, target, release = out["seq"], out["target_round"], None
     cpath = os.path.join(REPO, "chain", f"pulse-{seq:04d}.json")
-    release = json.load(open(cpath))["core"]["commitment"]["target_release_unix_s"]
+    release = json.load(open(cpath))["core"]["derived"]["target_release_unix_s"]
     log(f"committed seq {seq} -> round {target}, release in {release-time.time():.0f}s, tsa={out.get('tsa_tokens')}")
     pushed = publish(f"COMMIT pulse {seq} -> drand round {target}")
     margin = release - pushed
@@ -85,6 +91,9 @@ if __name__ == "__main__":
     except Exception as e:
         log(f"UNHANDLED: {type(e).__name__}: {e}")
         # if a commit exists without a reveal, mark it
-        pend = sorted(glob.glob(os.path.join(REPO, "chain", "pending", "*.secret")))
-        if pend: fail(json.load(open(pend[0]))["seq"], "cycle-crashed", {"error": str(e)[:200]})
+        # v0.5: the pending commit is whatever the chain head is, if it is a commit
+        try:
+            hp = json.load(open(sorted(glob.glob(os.path.join(REPO, "chain", "pulse-????.json")))[-1]))
+            if hp["core"].get("type") == "commit": fail(hp["core"]["seq"], "cycle-crashed", {"error": str(e)[:200]})
+        except Exception: pass
         sys.exit(1)
