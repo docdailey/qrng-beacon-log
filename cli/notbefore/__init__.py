@@ -1,7 +1,7 @@
 """NotBefore — the consumer side of the qrng-beacon-log: verify one hourly commit-then-reveal pair with a
 pinned, vendored verifier, and derive labeled seeds / shuffles / splits from its attested value.
 
-Spec: NOTBEFORE.md in https://github.com/docdailey/qrng-beacon-log (draft 0.2). Not a certification of anything.
+Spec: NOTBEFORE.md in https://github.com/docdailey/qrng-beacon-log (version in SPEC below). Not a certification of anything.
 """
 __version__ = "0.5.0"
 SPEC = "notbefore/spec/0.4"

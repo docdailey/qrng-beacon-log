@@ -466,7 +466,7 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 
 **0.4 (2026-09-12).** Derived functions on the same \(S\): `sample` (§7.6), `assign` (§7.7), `id` (§7.8), `range` (§7.9), `bytes` (§7.10) with their domains; tool commands `explain`, `pin`/`--lock`, `diff-transcript`, `checkpoint` (§8). \(V\), \(S\), shuffle and split unchanged. Status line and §8 no longer name a stale package version or a `--pin` flag that the CLI never had.
 
-**0.3 (2026-09-12).** Protocol v0.5.1 adds the `skip` pulse (§4.3a): a refused commit becomes a signed, timestamped chain event instead of a silent gap. Eligibility (§6) excludes it explicitly. `notbefore` 0.3.0 vendors the verifier that accepts a commit after a skip; 0.2.0 rejects the first commit after any skipped hour. \(V\), \(S\), shuffle and split are unchanged (same domains).
+**0.3 (2026-09-12).** Protocol v0.5.1 adds the `skip` pulse (§4.3a): a refused commit becomes a signed, timestamped chain event instead of a silent gap. Eligibility (§6) excludes it explicitly. a `notbefore` release from 0.3.0 on vendors the verifier that accepts a commit after a skip; earlier releases reject the first commit after any skipped hour. \(V\), \(S\), shuffle and split are unchanged (same domains).
 
 **0.2 (2026-09-12, claude-main review of the 0.1 draft against `pulse.py`, `schema.py`, `beacon-cycle.py`, `verify.py`, `tsa.py` and pulses 0040/0041).** Everything in 0.1 that could be checked against the code was correct — domains, `release(R)`, lead 100 rounds, margin 120 s, deadline 600 s, "missed margin ⇒ signed failure", the TSA CLI, the mix order, \(\rho = \mathrm{SHA256}(\sigma)\), the eligibility floors — except:
 
