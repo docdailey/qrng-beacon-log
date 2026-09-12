@@ -1,4 +1,4 @@
-# CADENCE.md — proposed schedule and non-reveal accountability (PROPOSED, NOT ENABLED)
+# CADENCE.md — schedule and non-reveal accountability — **ENABLED 2026-09-12 00:47 UTC on think**
 
 Bill, 2026-09-12: *"It is not yet worth anyone using as a number. The next increment is an
 independent timestamp on each commit, a stated cadence, and a second party who can verify a reveal
@@ -10,21 +10,29 @@ Every `commit` pulse is stamped at mint time by two RFC 3161 TSAs (freetsa.org, 
 commit proves the commitment predates its round with a third party's clock. Pulses 0010/0011 carry
 **retroactive** tokens (labelled) — they prove existence before 2026-09-12 00:2x UTC, not pre-round.
 
-## 2. Stated cadence — needs a decision
-Proposed, cheapest honest version:
+## 2. Stated cadence — ENABLED
+Running on **think** (192.168.71.34) as a systemd **user** timer (`qrng-beacon.timer`, `OnCalendar=hourly`,
+`Persistent=true`, Linger on). Repo checkout `think:~/qrng-beacon`, pushing over a repo-scoped GitHub deploy
+key (`think-beacon-cycle`, write access to this one repository only). First automated pair: **pulse 0012
+(commit, pushed 269 s before round 32123484, two at-commit TSA tokens) → pulse 0013 (reveal, pushed 28 s
+after release)**. Only think mints; `pulse.py` refuses on any host whose checkout is not the published head.
+
+| parameter | value | enforced by |
+|---|---|---|
 
 | parameter | proposed | why |
 |---|---|---|
-| period | **1 commit/reveal pair per hour**, on the hour | slow enough to watch by hand at first; fast enough to be a real log |
-| lead | **100 rounds = 5 min** | leaves time to TSA-stamp and push before the round |
-| publish deadline | commit pushed + TSA-stamped **≥ 2 min before** target release | measurable; a late push is a failed commit |
-| reveal deadline | reveal pushed **≤ 10 min after** target release | after that the pulse is FAILED, permanently |
-| host | a fleet Linux box (ryzen or think), systemd timer, `git push` inside the unit | oscpro902 travels; the loop must not |
+| period | **1 commit/reveal pair per hour**, on the hour | `qrng-beacon.timer` |
+| lead | **100 rounds = 5 min** | `beacon-cycle.py LEAD` |
+| publish deadline | commit pushed + TSA-stamped **≥ 2 min before** target release | `PUBLISH_MARGIN_S`; breach → `pulse-NNNN.FAILED.json` pushed |
+| reveal deadline | reveal pushed **≤ 10 min after** target release | `REVEAL_DEADLINE_S`; breach → FAILED marker pushed; watcher attests |
+| host | think | always-on home-LAN Linux; oscpro902 travels |
 
-**Not enabled** because it pushes to a public repository unattended on your account. Say the word
-and which host, and it runs.
+Operational notes: `think:~/qrng-beacon/cycle.log` is the local record; failures are also public as
+`FAILED.json` markers. To stop: `systemctl --user disable --now qrng-beacon.timer` on think. A stopped
+cadence leaves no hole — holes only come from a commit without a reveal.
 
-## 3. Second party for non-reveal — needs a person or an agent
+## 3. Second party for non-reveal — watcher SHIPPED, operator = Grok (pending its repo/key)
 The chain makes a skipped reveal *visible*; it does not make it *attested*. The design:
 
 - A **watcher** polls the public repo and drand. For every `commit` whose
@@ -36,5 +44,8 @@ The chain makes a skipped reveal *visible*; it does not make it *attested*. The 
   already runs polling routines. Not fully independent (same sponsor) — honest label: "second
   system, same sponsor". A genuinely independent third party is the step after.
 
-Until 2 and 3 exist, the honest description of this log is: **an attested-log prototype and a timing
-thesis, verifiable by anyone, used as a number by no one.**
+`watcher.py` is public in the repo and needs no access to our systems. Once Grok publishes its watcher
+repo URL and key id, they are pinned in the README as the designated watcher ("second system, same
+sponsor"). Until an unrelated third party also runs it, the honest description remains: **an attested-log
+prototype and a timing thesis, verifiable by anyone, with a stated cadence and a same-sponsor auditor —
+not yet a number to build on.**

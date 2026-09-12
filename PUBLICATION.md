@@ -17,6 +17,14 @@ before its target round releases.
   at **23:58:57Z**; GitHub's own `committer.date` on that commit is **23:58:46Z**. Published 42 s
   before the round existed.
 
+## How pulses get there now (since 2026-09-12)
+
+The hourly cycle on **think** pushes with a **repo-scoped deploy key** (`think-beacon-cycle`, write access
+to this repository only — not an account token). Every commit pulse is **RFC 3161-stamped at mint time by
+two TSAs** (freetsa.org, DigiCert) before the push, so the third-party time evidence no longer depends on
+GitHub at all; GitHub's committer date is now corroboration. First at-commit-stamped pulse: 0012
+(tokens 00:39:08Z, round released 00:43:39Z).
+
 ## Trust assumptions — stated, not hidden
 
 | assumption | why it is acceptable | how to check it |
