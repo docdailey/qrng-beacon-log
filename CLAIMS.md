@@ -198,10 +198,13 @@ were stamped from it and are superseded.
 ## Added 2026-09-12 after review #3 (binding)
 
 - Pulses **0018/0019** fail the current verifier (ERR-007). Describe them as "first v0.5 pair; witness guard misfired;
-  content valid on live evidence; formally non-compliant". The first fully compliant v0.5 pair will be named here.
-- ❌ "A dishonest aggregator cannot fabricate any host's facts" is **withdrawn** until host isolation ships (review #3
-  finding 1): today the aggregator's SSH identity can reach the keys and secrets on each host. ✅ Say: "each host signs its
-  own statement; isolation of keys and secrets from the aggregator's SSH identity is in progress."
+  content valid on live evidence; formally non-compliant". **The first fully compliant v0.5 pair is 0020/0021**
+  (host-isolated, witness health enforced, stranger-verified, watcher-receipted before its round).
+- ✅ **From pulse 0020 (host isolation live 2026-09-12):** "a hostile or compromised aggregator cannot fabricate any
+  host's facts: keys and secrets live under a confined OS user on each host, and the aggregator can only invoke one
+  fixed-role forced command with locally validated phase/seq/binding." ❌ Never extend that to the **operator**: the
+  person who administers all machines is out of scope by design; what bounds the operator is drand, RFC 3161 and an
+  independent watcher — say so in the same breath. Pulses 0001–0019 do not carry the isolation property.
 - ❌ Do not call the watcher independent while it trusts code or keys from the watched repository. ✅ v3 watcher runs only
   its operator's pinned verifier and keys (`watcher/make_pins.py`).
 - The archive figure is **1.92 % of the archive, 5.6 % of the scanned subset**; never the reverse.

@@ -20,6 +20,8 @@ after release)**. **First UNATTENDED fire: 01:00:26 UTC 2026-09-12** (systemd `R
 31 s after release). **v0.5 cut-over 2026-09-12 02:09–02:20 UTC** (timer paused, one supervised pair): pulse **0018** commit (E held on the entropy host,
 four host-signed statements, two TSA tokens 02:13:48Z, pushed 224 s before round 32125363) → pulse **0019** reveal (anchored 7 s after
 release, pushed 126 s after). First v0.5 pair verified as a stranger; watcher issued a pre-round COMMIT-RECEIPT at drand round 32125316.
+**Review #3 cut-over 2026-09-12 02:31–02:57 UTC** (timer paused): host isolation deployed on all four hosts; pulse **0020/0021** =
+first compliant, host-isolated pair; timer re-enabled 02:57:14Z; 03:00Z = first unattended isolated cycle.
 Only think mints; `pulse.py` refuses on any host whose checkout is not the published head.
 
 | parameter | value | enforced by |

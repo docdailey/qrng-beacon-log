@@ -30,3 +30,11 @@ path to a shell; probes run as `beacon` cannot escalate. The operator's own admi
 **Rollout.** `setup_host.sh <role>` on each host (needs root once): creates the user, moves keys/secrets, installs
 `beacon-cmd` and `host.json`, installs think's public key with the forced command, grants device group access, and
 verifies think can attest and cannot open a shell. Keys do not change, so `KEYS.json` does not change.
+
+## Operational rule learned on 2026-09-12 (the guard bit its author)
+
+`beacon-cmd` enforces a **monotonic sequence per phase** and never lowers it. A test run on a production host with a
+sacrificial `seq 997` therefore blocked the real `seq 20` until an operator reset `/home/beacon/state.json` as root.
+Rule: **never exercise a production host's forced command with a sequence above the live chain.** Use `seq 0` only
+before the chain exists on that host, or a separate test host configuration. Resetting the state file is an operator
+action and should be recorded here when it happens (it happened once: protectli, 2026-09-12 02:49 UTC, 997 → 19).

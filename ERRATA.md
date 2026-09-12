@@ -23,7 +23,8 @@ says "invalid" and passes.
 unset it uses the IERS constant and says so); the **aggregator refuses to mint** if a required clock statement reports
 an unhealthy clock; **the verifier now fails a pulse whose required time or witness statement reports
 `epoch_ok != true`, an unselected hardware refclock, or any ALERT** — pulses 0018/0019 therefore now **fail** the current
-verifier, as they should, and are recorded here as valid-in-content but formally non-compliant. Latent issue also
+verifier, as they should, and are recorded here as valid-in-content but formally non-compliant. **The first fully
+compliant pair is 0020/0021** (2026-09-12 02:50–02:55 UTC). Latent issue also
 logged: k3's `offset -37` is the hardcoded leap-second form; it should be the `tai` option (gap #10).
 **Found by:** external reviewer, 2026-09-12 (review #3, finding 4).
 
@@ -83,8 +84,8 @@ by each host of the fact its role names.
 **Fix (v0.5, in progress):** each host produces and signs its own statement (entropy host generates and
 holds `E` and signs `{commitment, target_round}`; time host signs its own measurement object; witness signs
 its own observation); the aggregator assembles the already-signed statements and signs the assembly with a
-fourth key. Host-side scripts are published and version-bound into each pulse by hash. **Effective from pulse 0018** (first v0.5 commit; pulses 0016/0017
-are the last v0.4 pair).
+fourth key. Host-side scripts are published and version-bound into each pulse by hash. **Architecture effective from pulse 0018** (first v0.5 commit; 0016/0017 are the last v0.4 pair). **Host isolation
+(the part that makes the aggregator unable to fabricate host facts) effective from pulse 0020.**
 **Found by:** external reviewer, 2026-09-12.
 
 ## ERR-004 — every drand release time was computed 3 s late
