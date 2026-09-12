@@ -9,17 +9,21 @@
 NotBefore commits its entropy before the public randomizer; the user commits their decision before the NotBefore value.
 Neither side chooses after seeing the thing that matters.
 
-TIMESTAMPING, NOT REGISTRATION: RFC 3161 tokens prove these bytes existed at T. Nothing here forces the user to
-DISCLOSE the contract afterwards; publishing the hash where it cannot be withdrawn is the user's job until the
-decision log (DECISION-LOG.md) exists. Canonical form is RFC 8785 JCS; a contract contains only strings, integers,
-objects and arrays (no floats: fractions are decimal strings), so this serialization is byte-identical to JCS.
+TIMESTAMPING, THEN REGISTRATION: RFC 3161 tokens prove these bytes existed at T. Since contract/2 the contract also
+names its SIGNER (the consumer's Ed25519 identity, identity.py) and a DECISION_ID, and `plan` signs a decision
+statement over the contract hash and appends it to the write-once decision log (decisionlog.py, DECISION-LOG.md):
+the first statement for (key_id, decision_id) is the authoritative preregistration, so a consumer cannot quietly
+timestamp several contracts and publish the favourable one. Canonical form is RFC 8785 JCS; a contract contains only
+strings, integers, objects and arrays (no floats: fractions are decimal strings), so this serialization is
+byte-identical to JCS.
 """
 import os, sys, json, hashlib, time, re, subprocess
 from . import __version__, SPEC, FIRST_ELIGIBLE_REVEAL
 from .check import VENDOR, check_pair, known_noncompliant
 from . import derive as D
 
-CONTRACT_SPEC = "notbefore/contract/1"
+CONTRACT_SPEC = "notbefore/contract/2"                # /2 = /1 + signer + decision_id
+ACCEPTED_SPECS = ("notbefore/contract/1", "notbefore/contract/2")   # /1 (0.6.0–0.7.x, unsigned) still executes, labelled
 RULE = "first-eligible-reveal-released-at-or-after"
 sys.path.insert(0, VENDOR)
 import tsa as _tsa                                    # vendored: TSAS = {"freetsa": ..., "digicert": ...}
@@ -41,7 +45,9 @@ def parse_utc(s):
     if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
     return int(dt.timestamp())
 
-def make(after_utc, purpose, operation, params, input_path=None, note=None):
+def make(after_utc, purpose, operation, params, input_path=None, note=None, signer=None, decision_id=None):
+    """signer = (key_id, public_key_b64) from identity.load(); decision_id defaults to the purpose string (the namespace the
+    write-once rule applies to). signer=None writes a legacy unsigned contract/1 (discouraged; execute labels it)."""
     if operation not in OPS: raise ValueError(f"operation must be one of {sorted(OPS)}")
     missing = [k for k in OPS[operation] if k not in params]
     if missing: raise ValueError(f"{operation} needs parameters {missing}")
@@ -52,6 +58,11 @@ def make(after_utc, purpose, operation, params, input_path=None, note=None):
          "purpose": P, "operation": operation, "params": {k: _param(operation, k, params[k]) for k in OPS[operation]},
          "derive_domain": D.D_DERIVE.decode(), "spec_version": SPEC, "cli_version": __version__,
          "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    if signer:
+        from . import decisionlog as DL
+        c["signer"] = {"alg": "ed25519", "key_id": signer[0], "public_key_b64": signer[1]}
+        c["decision_id"] = DL.validate_decision_id(decision_id or P)
+    else: c["spec"] = "notbefore/contract/1"
     if note: c["note"] = str(note)[:500]
     if operation in ("sample", "split", "assign", "shuffle", "id"):
         if not input_path: raise ValueError(f"{operation} needs an input file")

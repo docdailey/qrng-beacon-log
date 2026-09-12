@@ -1,0 +1,16 @@
+{
+  "note": "Identity of the NotBefore DECISION LOG as a C2SP transparency log (DECISION-LOG.md, NOTBEFORE.md \u00a77.12). A second origin, distinct from the pulse log (keys/CHECKPOINT.json): it records consumers' signed decision statements, write-once per (key_id, decision_id). The origin line is PERMANENT. The checkpoint key is held by the Worker that serves notbefore.net (secret DECISIONS_SIGNING_KEY) with an offline backup on the minting host; it asserts 'this is the decision log', nothing about any pulse.",
+  "origin": "notbefore.net/decisions",
+  "base_url": "https://notbefore.net",
+  "public_key_file": "keys/decisions.pub",
+  "alg": "ed25519",
+  "key_id_hex": "e516adc9",
+  "pubkey_sha256": "81a8b8f7268b7573559762c031443d0f6f659fc2001ab74a6d6c33731cbd8d36",
+  "verifier_key": "notbefore.net/decisions+e516adc9+AQgyzultsOY45Zmmkckz+J6ebQ7KqfQ2v/ivXb5wQe9v",
+  "signer": "Cloudflare Worker 'notbefore' (public/worker/decisions.js), storage D1; source in this repository",
+  "mirror": "decisions/ in this repository, written by decisions_mirror.py on the minting host (:20 and :50), witness-cosigned there",
+  "write_once_rule": "the first valid statement for (key_id, decision_id) is the authoritative preregistration (seq_in_namespace 1); later statements for the same tuple are amendments and are never the one `execute` accepts for the original randomization",
+  "created_utc": "2026-09-12",
+  "enabled": false,
+  "enabled_note": "enabled becomes true in the release that ships after the Worker and its D1 database are live; until then the CLI signs contracts and reports 'decision log not enabled in this release' instead of submitting"
+}

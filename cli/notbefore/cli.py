@@ -58,7 +58,20 @@ def build_parser():
     pn = sub.add_parser("pin", help="write notbefore.lock pinning the log commit, CLI version and vendored verifier for bit-stable re-runs")
     pn.add_argument("--out", default="notbefore.lock")
     dt = sub.add_parser("diff-transcript", help="compare two transcripts: did the input, the pulse, the purpose or the tool change?"); dt.add_argument("a"); dt.add_argument("b")
-    pl = sub.add_parser("plan", help="write a decision contract (selection rule, purpose, operation, parameters, input sha256) and register it with two RFC 3161 TSAs BEFORE the pulse exists")
+    kg = sub.add_parser("keygen", help="create this consumer's Ed25519 identity (~/.config/notbefore/identity.key); it signs decision statements for the write-once decision log")
+    kg.add_argument("--key", help="where to write the key (default $NOTBEFORE_KEY or ~/.config/notbefore/identity.key)"); kg.add_argument("--force", action="store_true", help="replace an existing key (its namespace is abandoned)")
+    for fl in (("--json",),): kg.add_argument(*fl, action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    wi = sub.add_parser("whoami", help="print this consumer's key_id and public key"); wi.add_argument("--key")
+    for fl in (("--json",),): wi.add_argument(*fl, action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    rg2 = sub.add_parser("register", help="append an existing signed contract's decision statement to the write-once decision log (idempotent); done by `plan` normally")
+    rg2.add_argument("contract"); rg2.add_argument("--disclose", action="store_true", help="also publish the contract body itself in the log (default: the hash only)")
+    for fl in (("--json",), ("-q", "--quiet")): rg2.add_argument(*fl, action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    pl = sub.add_parser("plan", help="write a decision contract (selection rule, purpose, operation, parameters, input sha256), sign it with your identity, timestamp it with two RFC 3161 TSAs and register it in the write-once decision log — all BEFORE the pulse exists")
+    pl.add_argument("--key", help="identity key (default $NOTBEFORE_KEY or ~/.config/notbefore/identity.key; run `notbefore keygen` once)")
+    pl.add_argument("--decision-id", help="write-once namespace under your key (default: the purpose string). For high-stakes use derive it from an external artifact (protocol registration number+version, audit order digest) so renaming is visible")
+    pl.add_argument("--unsigned", action="store_true", help="legacy contract/1 without signer or decision log (discouraged; execute labels it)")
+    pl.add_argument("--no-log", action="store_true", help="sign and timestamp but do not submit to the decision log now (register later with `notbefore register`)")
+    pl.add_argument("--disclose", action="store_true", help="publish the contract body in the decision log, not just its hash")
     pl.add_argument("--after", required=True, help="ISO-8601 UTC: use the first eligible reveal whose drand round released at or after this instant (e.g. 2026-10-01T00:00Z)")
     pl.add_argument("--purpose", required=True); pl.add_argument("--out", default=None, help="contract path (default notbefore-plan-<purpose>.json)")
     for name, kw in (("--sample", dict(type=int, metavar="K")), ("--split", dict(type=float, metavar="FRAC")), ("--assign", dict(type=int, metavar="ARMS")), ("--shuffle", dict(action="store_true")),
@@ -70,6 +83,7 @@ def build_parser():
     ex = sub.add_parser("execute", help="run a timestamped decision contract: no choices are accepted here")
     ex.add_argument("contract"); ex.add_argument("--input", help="path of the committed input file if it moved (its sha256 must still match)")
     ex.add_argument("--allow-unregistered", action="store_true", help="run a contract whose timestamps are missing or incomplete (no third-party evidence it predates the pulse; the transcript says so). Never overrides a token that is AFTER the round.")
+    ex.add_argument("--require-log", action="store_true", help="refuse unless the decision log confirms this contract is the FIRST entry for its (key_id, decision_id) and was received before the round (default: report, and refuse only a superseded or late entry)")
     ex.add_argument("--transcript", help="transcript path (default notbefore-executed-<contract sha>.json; '-' stdout; 'none')")
     for fl in (("--json",), ("--offline",), ("-q", "--quiet"), ("--no-anchors",)): ex.add_argument(*fl, action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     cp = sub.add_parser("checkpoint", help="show and verify the log's current signed checkpoint against the vendored identity and this machine's cached head")
@@ -98,28 +112,72 @@ def _plan(a):
     op, v = ops[0]
     params = {"sample": lambda: {"k": v}, "split": lambda: {"frac": v}, "assign": lambda: {"arms": v}, "shuffle": lambda: {}, "id": lambda: {"hexlen": a.hexlen},
               "range": lambda: {"lo": v[0], "hi": v[1]}, "bytes": lambda: {"n": v}, "seed": lambda: {}}[op]()
-    try: c = C.make(a.after, a.purpose, op, params, a.file, a.note)
+    from . import identity as I, decisionlog as DL
+    signer = priv = None
+    if not a.unsigned:
+        try: priv, _, kid, pub_b64 = I.load(a.key); signer = (kid, pub_b64)
+        except I.IdentityError as e: _err(str(e) + "  (or pass --unsigned for a legacy contract with no signer and no decision-log entry)"); return 2
+    try: c = C.make(a.after, a.purpose, op, params, a.file, a.note, signer=signer, decision_id=a.decision_id)
     except (ValueError, D.PurposeError, FileNotFoundError) as e: _err(str(e)); return 2
     out = a.out or f"notbefore-plan-{c['purpose'].replace('/', '_').replace(':', '_')}.json"
-    h = C.write(c, out); _err(f"contract written: {out}  sha256 {h}")
+    h = C.write(c, out); _err(f"contract written: {out}  sha256 {h}" + (f"  signer {signer[0]}  decision_id {c['decision_id']}" if signer else "  (UNSIGNED legacy contract/1)"))
     rc = 0
+    if signer:
+        st = DL.statement(h, c["decision_id"], signer[0], signer[1], c["spec"]); sig = DL.sign_statement(priv, st); DL.write_signature(out, st, sig)
+        _err(f"decision statement signed: {DL.sig_path(out)}")
     if not a.no_register:
         got = C.timestamp(out); toks, bad = C.verify_timestamps(out)
         for n, t, _ in toks: _err(f"timestamped: {n} {t}")
         ok, why, _ = C.timestamp_verdict(toks, bad, None)
         if not ok: _err(f"INCOMPLETE TIMESTAMPING — {why}. The contract is written; retry with: notbefore timestamp {out}"); rc = 1
     else: _err("NOT timestamped (--no-timestamp): there is no third-party evidence of when this contract existed")
-    _err("this is timestamping, not registration: publish the sha256 where it cannot be withdrawn (a commit, a registry, a dated mail), then wait for the pulse and run: notbefore execute " + out)
-    print(json.dumps({"contract": out, "sha256": h, "after_utc": c["selection"]["after_utc"], "operation": op, "params": c["params"], "timestamped": rc == 0}) if a.json else h); return rc
+    logged = None
+    if signer and not a.no_log:
+        logged = _register(out, c, a, quiet=False)
+        if logged is None: rc = 1
+    if not signer: _err("this is timestamping, not registration: publish the sha256 where it cannot be withdrawn (a commit, a registry, a dated mail), then wait for the pulse and run: notbefore execute " + out)
+    elif logged is None and not a.no_log and DL.enabled(): _err("the contract is signed and timestamped but NOT registered; retry with: notbefore register " + out)
+    else: _err("then wait for the pulse and run: notbefore execute " + out)
+    print(json.dumps({"contract": out, "sha256": h, "after_utc": c["selection"]["after_utc"], "operation": op, "params": c["params"], "timestamped": rc == 0 or bool(a.no_register) is False and logged is not None,
+                      "signer_key_id": signer[0] if signer else None, "decision_id": c.get("decision_id"), "decision_log": logged}) if a.json else h); return rc
+
+def _register(path, c, a, quiet=False):
+    """Append the contract's signed statement to the decision log. Returns the verified receipt summary, or None
+    (and says why). Skips with an INFO line when the vendored identity is not enabled."""
+    from . import decisionlog as DL, contract as C
+    st, sig = DL.read_signature(path)
+    if st is None: _err(f"no {DL.sig_path(path)} beside the contract: it was written unsigned (--unsigned) or by an older release"); return None
+    if st["contract_sha256"] != hashlib.sha256(open(path, "rb").read()).hexdigest(): _err("signature file does not match this contract's bytes"); return None
+    if not DL.enabled(): _err(f"[INFO] decision log ({(DL.identity() or {}).get('origin', '?')}) not enabled in this release: statement signed locally, not submitted"); return {"status": "disabled"}
+    tsa = {n: f"{path}.{n}.tsr" for n in C.EXPECTED_TSAS}
+    try: r = DL.submit(st, sig, tsa_files=tsa, contract_obj=(c if getattr(a, "disclose", False) else None))
+    except Exception as e: _err(f"decision log: {type(e).__name__}: {str(e)[:160]}"); return None
+    summ = {"status": "authoritative" if r.get("authoritative") else "amendment", "origin": DL.origin(), "index": r["index"], "seq_in_namespace": r["seq_in_namespace"], "received_utc": r["received_utc"], "size": r["size"], "existing": bool(r.get("existing"))}
+    json.dump({"receipt": r, "summary": summ, "verified_against": {"origin": DL.origin(), "key_id_hex": DL.identity().get("key_id_hex")}}, open(DL.receipt_path(path), "w"), indent=1, sort_keys=True)
+    if not quiet:
+        _err(f"registered in {DL.origin()}: index {r['index']}, {'AUTHORITATIVE (first entry for this key_id/decision_id)' if r.get('authoritative') else 'seq_in_namespace ' + str(r['seq_in_namespace']) + ' — an AMENDMENT: an earlier contract owns this decision_id'}"
+             + (", already present" if r.get("existing") else "") + f"; receipt verified (checkpoint size {r['size']}): {DL.receipt_path(path)}")
+    return summ
 
 def _execute(a, src):
     from . import contract as C
     import time as _t
+    from . import decisionlog as DL
     c = json.load(open(a.contract)); raw = open(a.contract, "rb").read()
-    if c.get("spec") != C.CONTRACT_SPEC: _err(f"not a {C.CONTRACT_SPEC} contract"); return 2
+    if c.get("spec") not in C.ACCEPTED_SPECS: _err(f"not a decision contract ({'/'.join(C.ACCEPTED_SPECS)})"); return 2
     csha = hashlib.sha256(raw).hexdigest()
     if C.canon(c) != raw: _err("contract file is not in canonical form (edited by hand?) — refusing"); return 1
     lines = []
+    st = sig = None; dl = {"status": "unsigned", "why": "legacy contract/1: no signer, no decision-log namespace"}
+    if c["spec"] == C.CONTRACT_SPEC:
+        st, sig = DL.read_signature(a.contract)
+        if st is None: _err(f"refusing: signed contract but no {DL.sig_path(a.contract)} beside it"); return 1
+        sok, why = DL.verify_statement(st, sig)
+        bound = st["contract_sha256"] == csha and st["key_id"] == c["signer"]["key_id"] and st["public_key_b64"] == c["signer"]["public_key_b64"] and st["decision_id"] == c["decision_id"]
+        if not (sok and bound): _err(f"refusing: decision statement does not verify for this contract ({why if not sok else 'statement names a different contract, key or decision_id'})"); return 1
+        lines.append(f"[PASS] contract signed by key {st['key_id']} for decision_id {st['decision_id']!r} (Ed25519 statement verifies)")
+    elif not a.allow_unregistered: _err("refusing: legacy unsigned contract/1 (no signer, no decision-log entry); pass --allow-unregistered to run it labelled as such"); return 1
+    else: lines.append("[WARN] legacy unsigned contract/1: no signer identity and no decision-log entry; labelled in the transcript")
     toks, bad = C.verify_timestamps(a.contract)
     lines += [f"[PASS] contract timestamped: {n} {ts}" for n, ts, _ in toks]
     pre_ok, pre_why, _ = C.timestamp_verdict(toks, bad, None)          # presence/validity only; the time gate comes after selection
@@ -134,12 +192,28 @@ def _execute(a, src):
     if toks or not ok_t:
         lines.append(f"[{'PASS' if ok_t else 'FAIL'}] {why_t}" + (f" (latest token {_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime(latest))}, {rel-latest} s before release)" if ok_t and latest else ""))
         if not ok_t: [_err(l) for l in lines]; _err("refusing: " + why_t); return 1
+    # ---- the decision log: is this THE preregistration for (key_id, decision_id), and was it received before the round?
+    if st is not None:
+        dl = DL.check_authoritative(st, offline=a.offline, src=src)
+        if dl["status"] == "authoritative":
+            early = dl["received_unix"] < rel
+            lines.append(f"[{'PASS' if early else 'FAIL'}] decision log {dl['origin']}: {dl['why']}" + ("" if early else " — but received AT/AFTER the round release: the registration does not predate the value"))
+            if not early: [_err(l) for l in lines]; _err("refusing: decision-log entry is not before the round release"); return 1
+            lines.append(f"[PASS] decision-log inclusion verified (leaf {dl['index']} of {dl['size']}, log signature under the vendored key); {rel - dl['received_unix']} s before release")
+        elif dl["status"] == "superseded":
+            lines.append(f"[FAIL] decision log {dl['origin']}: {dl['why']}"); [_err(l) for l in lines]; _err("refusing: this contract is not the first registered for its decision_id"); return 1
+        else:
+            lvl = "FAIL" if a.require_log else "WARN"
+            lines.append(f"[{lvl}] decision log: {dl['why']}" + ("" if a.require_log else " (timestamps alone bound WHEN this contract existed, not that it was the only one; pass --require-log to refuse)"))
+            if a.require_log: [_err(l) for l in lines]; _err("refusing (--require-log): " + dl["why"]); return 1
     if a.allow_unregistered and not C.timestamp_verdict(toks, bad, rel)[0]: lines.append("[WARN] timestamping INCOMPLETE: this run is labelled as such in the transcript")
     P = c["purpose"]; S = D.seed(R.attested_value, P)
     try: body, extra = C.run_operation(c, S, a.input or (c.get("input", {}).get("file")))
     except (ValueError, FileNotFoundError) as e: [_err(l) for l in lines]; _err(str(e)); return 1
     t = D.transcript(R, P, S, {"operation": c["operation"], **{k: v for k, v in c["params"].items()}, "contract_sha256": csha, "contract_file": os.path.basename(a.contract),
                                 "contract_timestamped": [{"tsa": n, "time": ts} for n, ts, _ in toks], "contract_timestamped_latest_unix_s": latest, "timestamping_complete": C.timestamp_verdict(toks, bad, rel)[0], "selected_by_rule": C.RULE,
+                                "contract_spec": c["spec"], "signer_key_id": (c.get("signer") or {}).get("key_id"), "decision_id": c.get("decision_id"), "contract_signature_verified": st is not None,
+                                "decision_log": {k: dl.get(k) for k in ("origin", "status", "index", "seq_in_namespace", "size", "root_b64", "received_unix", "why", "source")},
                                 "after_utc": c["selection"]["after_utc"], "input_sha256": c.get("input", {}).get("sha256"), "record_count": c.get("input", {}).get("record_count"),
                                 "output_sha256": D.sha256_hex(body.encode()), **({"A": {"count": extra["A_count"], "sha256": D.sha256_hex(body.encode())}, "B": {"count": extra["B_count"], "sha256": D.sha256_hex(("\n".join(extra["B"]) + "\n").encode())}} if c["operation"] == "split" else {})})
     for l in R.lines + lines:
@@ -199,6 +273,22 @@ def main(argv=None):
         _err(str(e)); return 1
     try:
         if a.cmd == "plan": return _plan(a)
+        if a.cmd == "keygen":
+            from . import identity as I
+            try: path, kid, pub = I.generate(a.key, force=a.force)
+            except I.IdentityError as e: _err(str(e)); return 1
+            _err(f"identity written: {path} (mode 0600). key_id {kid}. Back it up; there is no recovery. Never share the .key file — the .pub beside it is what others need.")
+            print(json.dumps({"key": path, "key_id": kid, "public_key_b64": pub}) if a.json else kid); return 0
+        if a.cmd == "whoami":
+            from . import identity as I
+            try: _, _, kid, pub = I.load(a.key)
+            except I.IdentityError as e: _err(str(e)); return 1
+            print(json.dumps({"key_id": kid, "public_key_b64": pub, "key": a.key or I.default_path()}) if a.json else f"{kid} ed25519 {pub}"); return 0
+        if a.cmd == "register":
+            from . import contract as C
+            c = json.load(open(a.contract))
+            if c.get("spec") != C.CONTRACT_SPEC: _err("only signed contract/2 files can be registered"); return 2
+            r = _register(a.contract, c, a); print(json.dumps(r) if a.json and r else ("" if not r else r["status"])); return 0 if r else 1
         if a.cmd == "timestamp":
             from . import contract as C
             got = C.timestamp(a.contract); toks, bad = C.verify_timestamps(a.contract)

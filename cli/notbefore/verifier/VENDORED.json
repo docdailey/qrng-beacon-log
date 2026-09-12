@@ -2,7 +2,7 @@
  "files": {
   "bls_drand.py": "b909dd175b1f1c2dff0e78b77d83f2446afca73222a9946e35c2233732228ed9",
   "ci/KNOWN_NONCOMPLIANT.json": "403268695cbbb93f5e4f757cdb3568056b40fbb31a14d0a0a1cb8b4ec953abd6",
-  "ci/anchor_lib.py": "4922459786f927f8ecbb1858eca3e256a5bc5ad2284e59be2f8f609fdc7afe76",
+  "ci/anchor_lib.py": "5078e5631bb25fb66da2f90ff80c192993f579e60d4e434ced26b708168ba675",
   "drand_anchor.py": "8c1d16bd8376218697626e5614644713f52f83b31aeb836cd7dd302b500eac85",
   "hosts/EXPECTED.json": "4fa57dfff93b7227db41fbd5c9001c1687e9ffb9f5e568b84ac8029be92c6e35",
   "hosts/attest_host.py": "036cc9ca5e978fe9b3fb749a0ab7627fe1b18991ccfb05bbdeb3d1d4eec99a6a",
@@ -11,10 +11,12 @@
   "hosts/gnss_probe.py": "e5ccf3e8e400b69be669113f6fb1ce2439225e6635054150b64fcd65f0d12cdb",
   "hosts/stamp_probe.py": "c4e3afd7037ffcff5017ec88413fb19f2411a803e0467fc4ef275588f496d04e",
   "keys/CHECKPOINT.json": "cc06e051cae993f9c9d937e59a8c8250c5c86d8e886909888fe8058f595fa7c9",
+  "keys/DECISIONS.json": "f3f1bbe4a9ce4092df9a450f8da6ea02852ccbd0721b7ce8edb3d8c0141ee911",
   "keys/KEYS.json": "9de75424793bcb2b00b42efc271465fa1a6656194507b1dd3ffdb7e28eef9b3f",
   "keys/WITNESSES.json": "0e5b462b30b0908566359d3a18d88abda65a18bebe40cdc5e3d09c755f2c1cd9",
   "keys/anchor.pub": "5afc8aef90f65ae47aae97790aca4181c92b4cb37d23c7ab936c3a2b07de7b24",
   "keys/checkpoint.pub": "59656c367e26331c575d3ef5b4c6df2710e4d5341968392a05f11d26b1225d87",
+  "keys/decisions.pub": "b28ccf78af8a91e5b281f6e4906e6a44da1411c7ea2af0dc9828056d05d0135c",
   "keys/drand-quicknet.json": "11ff6ba94bac65555551f3e097f4a498d5859cbf8a269127d569dedeaa1b8bf7",
   "keys/entropy_signer.pub": "bbd318423b18b0a107382edf4f6f7be4f4a6186be6a0f73b17051e9f6f9713ab",
   "keys/rekor.pub": "dce5ef715502ec9f3cdfd11f8cc384b31a6141023d3e7595e9908a81cb6241bd",
@@ -31,8 +33,8 @@
   "tsa.py": "bb4c45ec75e111041b93bfcf09c1e58ca462bce68d79bd4f323f31d0022fd225",
   "verify.py": "ff6ba62b677a8474de881fb4144954d865428068fe282ae332f3b5f4716a5310"
  },
- "git_sha": "615cf14fb03eae120798fd9d1a0cfe87fb93e1fc",
+ "git_sha": "bef0e7036ccd249c99aad48cafd1a7a96bea98fc",
  "log_repo": "https://github.com/docdailey/qrng-beacon-log",
  "note": "Verifier, keys and expected-config pinned at this commit. The CLI executes ONLY these files; the log is read as data.",
- "vendored_utc": "2026-09-12T21:32:20Z"
+ "vendored_utc": "2026-09-12T22:19:35Z"
 }
