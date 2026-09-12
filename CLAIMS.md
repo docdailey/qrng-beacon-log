@@ -240,3 +240,12 @@ were stamped from it and are superseded.
   accreditation. ❌ Never "PulseTrain" (rejected 2026-09-12: crowded name space, an existing hardware product).
 - ✅ The CLI shipped 2026-09-12 (`cli/`, package `notbefore` 0.2.0). Released to PyPI 2026-09-12 (`pip install notbefore`, 0.2.0). ✅ Say "the CLI verifies with a pinned, vendored verifier"; ❌ never say the package "certifies" a pulse.
 
+## Added 2026-09-12 — skip pulses (binding)
+
+- ✅ Say: "a cycle that runs but cannot commit publishes a signed, timestamped `skip` pulse naming the dependency
+  that refused; no hour passes without a chain event unless the operator deliberately stops the timer, which is
+  announced in advance."
+- ❌ Never say a skip *proves* the stated cause. It proves the operator recorded that cause at that time (aggregator
+  signature; RFC 3161 when available). ❌ Never say a skip is a failure of the beacon's security claim: no commitment
+  existed, so nothing was selected or withheld.
+

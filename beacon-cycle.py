@@ -50,9 +50,26 @@ def fail(seq, reason, extra=None):
     except Exception as e: log(f"could not publish failure pulse: {e}")
     sys.exit(1)
 
+def skip(reason):
+    """v0.5.1: a refused commit is a public, signed, timestamped chain event (skip pulse), not a silent gap."""
+    try:
+        out = run("python3", "pulse.py", "skip", reason[:400])
+        log("skip pulse minted: " + out.strip().replace("\n", " ")[:160])
+        publish(f"SKIP pulse: {json.loads(out).get('refused_by', '?')} refused the commit")
+    except Exception as e:
+        log(f"could not mint/publish skip pulse: {e}")
+
+def catch_up():
+    """Anything minted but not pushed (a previous cycle lost connectivity after sealing) is published before we
+    reason about the head; otherwise require_synced refuses forever and the beacon stalls on its own unpushed file."""
+    if run("git", "status", "--porcelain", "chain", check=False):
+        try: publish("catch-up: chain files minted by an earlier cycle but not pushed"); log("catch-up: pushed unpublished chain files")
+        except Exception as e: log(f"catch-up push failed: {e}")
+
 def main():
     log("cycle start")
     run("git", "pull", "-q", "--ff-only", "origin", "main")
+    catch_up()
     # ---- RECOVER: derive state from the published chain before doing anything new ----
     r = subprocess.run(["python3", "pulse.py", "recover"], cwd=REPO, capture_output=True, text=True, stdin=subprocess.DEVNULL)
     log("recover: " + (r.stdout.strip() or r.stderr.strip())[:200])
@@ -62,13 +79,13 @@ def main():
         seq, target = hp["core"]["seq"], hp["core"]["derived"]["target_round"]; release = hp["core"]["derived"]["target_release_unix_s"]
         log(f"resuming unresolved commit seq {seq} (round {target}, release {release})")
     elif r.returncode != 0:
-        log("recover failed; not minting"); sys.exit(1)
+        log("recover failed; not minting"); skip("recover failed: " + (r.stderr.strip() or r.stdout.strip())[-300:]); sys.exit(1)
     else:
         # ---- COMMIT ----
         try:
             out = json.loads(run("python3", "pulse.py", "commit", "--lead", str(LEAD)))
         except Exception as e:
-            log(f"commit refused: {e}"); sys.exit(1)      # nothing minted -> nothing to mark
+            log(f"commit refused: {e}"); skip(f"commit refused: {e}"); sys.exit(1)      # nothing committed; the refusal itself is published
         seq, target = out["seq"], out["target_round"]
         release = json.load(open(os.path.join(REPO, "chain", f"pulse-{seq:04d}.json")))["core"]["derived"]["target_release_unix_s"]
         log(f"committed seq {seq} -> round {target}, release in {release-time.time():.0f}s, tsa={out.get('tsa_tokens')}")

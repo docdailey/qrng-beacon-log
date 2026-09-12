@@ -15,7 +15,7 @@ REQ_BLS = os.environ.get("REQUIRE_BLS", "1") == "1"; REFETCH = os.environ.get("R
 V05_FROM = 18
 KNOWN = json.load(open(os.path.join(ROOT, "ci", "KNOWN_NONCOMPLIANT.json"))).get("pulses", {})
 pulses = sorted(f for f in glob.glob(f"{ROOT}/chain/pulse-*.json") if re.search(r"pulse-\d{4}\.json$", f))
-T = dict(pulses=0, known_noncompliant=0, unexpected_pass_of_listed=0, v05_pulses=0, execution_enforced=0, signatures=0, host_statements=0, chain_links=0, commit_pulses=0, reveal_pulses=0, failure_pulses=0,
+T = dict(pulses=0, known_noncompliant=0, unexpected_pass_of_listed=0, v05_pulses=0, execution_enforced=0, signatures=0, host_statements=0, chain_links=0, commit_pulses=0, reveal_pulses=0, failure_pulses=0, skip_pulses=0,
          commit_reveal_pairs=0, bls_verified=0, bls_skipped=0, drand_refetched=0, tsa_tokens=0, tsa_min_margin_s=None,
          err004_warnings=0, tooling_drift_warnings=0, state_machine_violations=0, failures=0)
 lines = []
@@ -34,6 +34,7 @@ for p in pulses:
     T["host_statements"] += out.count("signature verifies over canon(statement)")
     T["execution_enforced"] += out.count("[PASS] ") and len(re.findall(r"\[PASS\] \w+: execution self-report", out))
     T["chain_links"] += out.count("[PASS] chains to previous pulse")
+    T["skip_pulses"] += typ == "skip"
     T["bls_verified"] += out.count("[full BLS, offline]") if "[PASS] drand round" in out else 0
     T["bls_skipped"] += out.count("[WARN] BLS verification skipped")
     T["drand_refetched"] += out.count("re-fetched live from the League of Entropy and matches")
@@ -51,7 +52,8 @@ for p in pulses:
     # state machine across the chain (v0.5 era)
     if prev_core is not None and (v05 or prev_core.get("v") == "0.5"):
         pt = prev_core.get("type", "legacy")
-        legal = (typ == "commit" and pt in ("legacy", "reveal", "failure")) or (typ in ("reveal", "failure") and pt == "commit")
+        legal = (typ == "commit" and pt in ("legacy", "reveal", "failure", "skip")) or (typ in ("reveal", "failure") and pt == "commit") \
+            or (typ == "skip" and pt in ("legacy", "reveal", "failure", "skip"))
         if not legal: say(f"[FAIL] state machine: {pt} (seq {prev_core['seq']}) -> {typ} (seq {core['seq']}) is not a legal transition"); T["state_machine_violations"] += 1; bad = True
     T["failures"] += bad
     say(f"[{'FAIL' if bad else 'PASS'}] {os.path.basename(p)}  ({typ}{', v0.5' if v05 else ''}, {out.count('[full BLS, offline]')} BLS, {out.count('signature verifies over canon')} host stmts)")

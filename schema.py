@@ -1,6 +1,6 @@
 """schema.py — PROTOCOL v0.5 constants shared by the aggregator (pulse.py) and the verifier (verify.py)."""
 VERSION = "0.5"
-TYPES = ("commit", "reveal", "failure")
+TYPES = ("commit", "reveal", "failure", "skip")            # skip: a refused commit made public (v0.5.1, 2026-09-12)
 CHAIN_HASH = "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
 GENESIS, PERIOD = 1692803367, 3
 def release_time(rnd): return GENESIS + (int(rnd) - 1) * PERIOD          # round 1 is AT genesis (ERR-004)
@@ -11,7 +11,17 @@ STATEMENTS = {"entropy": ("entropy_signer", "protectli"), "gnss": ("gnss_atteste
               "time": ("time_attester", "p550"), "witness": ("time_witness", "k3")}
 REQUIRED = {"commit": ("entropy", "gnss", "time", "witness"),
             "reveal": ("entropy", "gnss", "time", "witness"),
-            "failure": ("entropy",)}
+            "failure": ("entropy",),
+            "skip": ()}                    # aggregator-only: no host could be asked, or a dependency refused
+# What a skip pulse names as the refusing dependency. Free text goes in derived.reason; this field is the coarse class.
+SKIP_REFUSED_BY = ("entropy", "gnss", "time", "witness", "drand", "tsa", "git", "aggregator", "unknown")
+def classify_refusal(text):
+    t = (text or "").lower()
+    for key, words in (("entropy", ("protectli", "entropy")), ("gnss", ("f9t", "gnss")), ("time", ("p550", "time (", "time:")),
+                       ("witness", ("k3", "witness")), ("drand", ("drand",)), ("tsa", ("tsa", "token")),
+                       ("git", ("origin", "fetch", "published head", "unpublished")), ("aggregator", ("lead", "margin", "recover"))):
+        if any(w in t for w in words): return key
+    return "unknown"
 AGGREGATOR = ("aggregator", "think")
 PUBLISH_MARGIN_S, REVEAL_DEADLINE_S, MIN_TSA_TOKENS = 120, 600, 2
 HEX64 = 64

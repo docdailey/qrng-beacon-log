@@ -72,6 +72,8 @@ minutes of its push, so a commit's Rekor time precedes its drand release. See `P
 
 ## What this is, and is not
 
+- **No silent hours.** A cycle that runs but cannot commit publishes a signed `skip` pulse naming the refusing dependency
+  (v0.5.1); only a deliberately stopped timer is silent, and that is announced in `CADENCE.md` first.
 - **Not a blockchain.** Hash-linked and append-only, yes; but one writer, no consensus, no proof-of-work. The
   writer's honesty about *when* is bounded by clocks nobody here controls (drand, RFC 3161, Rekor, Bitcoin headers),
   and its honesty about *which* chain is made checkable by the anchors above. Equivocation is detectable, not prevented.

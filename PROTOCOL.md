@@ -70,6 +70,19 @@ The aggregator refuses to mint such a pulse.
 The entropy host's failure statement binds to the **commit pulse hash** and carries the reason; the verifier requires
 that reason to equal the aggregator's published `derived.reason`.
 
+### Skip pulses (v0.5.1, added 2026-09-12) — a refused commit is a chain event, not a silent gap
+When a cycle cannot commit — a measurement host unreachable or reporting an unhealthy clock, the entropy host
+unreachable, drand or the TSA quorum unavailable, the checkout not at the published head — the aggregator mints a
+`type: "skip"` pulse: `statements: {}`, `derived.reason` (the refusal text), `derived.refused_by ∈ {entropy, gnss,
+time, witness, drand, tsa, git, aggregator, unknown}`, `derived.attempted_unix_s`, `drand_round_seen` (informational),
+`published_head_confirmed`. It is signed by the aggregator only, because the refusing dependency is normally the one
+that cannot be asked; RFC 3161 tokens are attached when a TSA answers (best-effort, unlike commits). **What a skip
+proves:** *when* the operator recorded a refusal and *what* it claimed. **What it does not prove:** that the claim is
+true. **What it rules out:** nothing was selected or withheld for that hour — no commitment existed. Consumers never
+consume a skip; `NOTBEFORE.md` §6 excludes it. A skip MAY follow a reveal, failure, legacy pulse or another skip and
+MUST NOT follow an unresolved commit (that is resolved only by a reveal or a signed failure). A stopped timer still
+leaves nothing — a planned pause is announced in `CADENCE.md` beforehand (`RECOVERY.md` §3).
+
 ### Known non-compliance
 Pulses are immutable. When a verifier change makes an already-published pulse non-compliant, it is listed in
 `ci/KNOWN_NONCOMPLIANT.json` with its erratum; CI counts it separately and fails if it ever unexpectedly passes.
@@ -103,6 +116,8 @@ Required statements: commit/reveal → entropy, gnss, time, witness; failure →
 ### State machine (enforced by the aggregator and by CI)
 `legacy | reveal | failure  →  commit  →  reveal | failure  →  commit …` — at most one unresolved commit; a
 reveal or failure must directly follow its commit; `seq` increments by exactly one.
+
+v0.5.1: `skip` joins the resting states: `{legacy, reveal, failure, skip} -> commit | skip`; `commit -> reveal | failure` only. A verifier or CI that does not know `skip` rejects the first commit after a skipped hour with *"state machine: commit follows a reveal, failure or legacy pulse"* — upgrade the verifier (`notbefore` ≥ 0.3.0).
 
 ### Timing contract
 Commit: ≥ **2** RFC 3161 tokens taken at mint over the final bytes, else **nothing is written**; each token time

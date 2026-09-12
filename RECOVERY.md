@@ -23,18 +23,20 @@ needs protectli + think + Internet, and collects gnss/time/witness only if they 
 
 ## 2. What the chain looks like, by scenario
 
-### 2a. Bench down when the hour starts → **nothing is minted (a silent gap)**
+### 2a. Bench down when the hour starts → **a signed `skip` pulse (since v0.5.1); before 2026-09-12 15:xx UTC, a silent gap**
 `cmd_commit` asks protectli for a commitment, then `collect()` SSHes f9t/p550/k3. An unreachable or unhealthy host
 raises → `rollback()` tells protectli `abandon-prepare <seq> 000…0` + `finalize`, then `die("commit aborted before
 anything was written")`. `beacon-cycle` logs `commit refused: …` and exits. Every hour, the same. Artifacts:
 
-- **chain:** unchanged. No pulse, no marker. CI stays green; the watcher is silent; `notbefore` users see no pulse for
-  that hour. The gap is visible only as a missing hour in the seq/time sequence and in `think:~/qrng-beacon/cycle.log`.
+- **chain (v0.5.1):** `pulse-N.json` `type: skip`, `derived.reason` = the refusal text, `derived.refused_by` = the dependency
+  class, aggregator-signed, RFC 3161 tokens when a TSA answered. One per refused cycle. CI verifies it (state machine
+  `{reveal,failure,skip,legacy} → skip`); the watcher ignores it; `notbefore` treats it as ineligible. `cycle.log` keeps the
+  full refusal text. (Before v0.5.1 the same situation left no public trace at all.)
 - **protectli:** `pending/<next-seq>.abandoned` with `resolved_by_pulse_hash = 000…0` — a fresh E drawn and abandoned
   per attempt, never published (the all-zero resolver is what lets that seq be reused; ERR-008 guard).
 - **hosts:** `~beacon/state.json` `commit` advanced to the next seq (allowed; it is the seq the real commit will use).
 
-This is by design (`CADENCE.md`: "a stopped cadence leaves no hole") — but it is **unannounced**. See §5.
+A *stopped timer* still leaves nothing (`CADENCE.md`: "a stopped cadence leaves no hole"): announce planned pauses first (§3).
 
 ### 2b. Bench dies between commit (:01) and reveal (:06) → **commit N + signed failure N+1**
 `cmd_reveal` → `collect()` raises → `beacon-cycle.fail(seq, "reveal-refused", {...})` → `pulse.py fail` →
@@ -115,10 +117,9 @@ the published chain — read `cycle.log`, find whether the pulse was minted but 
 
 ## 5. Known gaps (honest)
 
-- **Silent gaps.** A refused commit leaves no public trace. A reader cannot distinguish "bench down" from "operator
-  chose not to publish this hour". Mitigation now: announce planned pauses in `CADENCE.md` beforehand and unplanned
-  ones in ERRATA afterwards. Proper fix (protocol v0.6, needs a `notbefore` release): a signed `skip` pulse minted by
-  the aggregator when a commit is refused, carrying the refusing dependency — so a gap is itself a chain event.
+- ~~**Silent gaps.**~~ Fixed 2026-09-12 (v0.5.1): a refused commit mints a signed `skip` pulse carrying the refusing
+  dependency. What remains silent is a deliberately stopped timer — announce planned pauses in `CADENCE.md` first. A skip
+  is the operator's own claim about *why*; only *when* is third-party-timestamped.
 - **One TSA outage stops commits** (`MIN_TSA_TOKENS = 2` of 2 configured). Adding a third TSA makes the quorum 2-of-3.
 - **nas1 is in the critical path** through the GNSS statement.
 - **No drill has produced a failure pulse yet** (`failure_pulses 0`). §2b/2c are read from the code and the review-4

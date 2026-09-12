@@ -46,13 +46,17 @@ def head():
 def ptype(p): return (p or {}).get("core", {}).get("type", "legacy")
 def D(x): return decimal.Decimal(str(x))
 
-def require_synced():
-    if git("rev-parse", "--is-inside-work-tree")[0] != 0: return
+def require_synced(allow_offline=False):
+    """Returns True when the published head could NOT be confirmed but allow_offline let us proceed (skip pulses)."""
+    if git("rev-parse", "--is-inside-work-tree")[0] != 0: return False
     rc, _, err = git("fetch", "-q", "origin", "main")
-    if rc != 0: die("cannot fetch origin - " + err[:120])
+    if rc != 0:
+        if allow_offline: sys.stderr.write("warning: cannot fetch origin; proceeding on the local head\n"); return True
+        die("cannot fetch origin - " + err[:120])
     if git("rev-parse", "HEAD")[1] != git("rev-parse", "origin/main")[1]: die("checkout is not the published head; pull first, never mint on a fork")
     dirty = [l for l in git("status", "--porcelain")[1].splitlines() if "chain/" in l and "chain/pending/" not in l]
     if dirty: die("chain has unpublished changes: " + "; ".join(dirty[:3]))
+    return False
 
 # ---------------------------------------------------------------- statements
 def key_allowed(role, pk_b64, seq):
@@ -117,9 +121,9 @@ def seal(core):
     final = os.path.join(CHAIN, f"pulse-{core['seq']:04d}.json"); tmp = os.path.join(CHAIN, f".pulse-{core['seq']:04d}.json.tmp")
     if os.path.exists(final): die(f"{final} exists - append-only")
     json.dump(pulse, open(tmp, "w"), indent=2)
-    if core["type"] == "commit":
-        st = tsa.stamp(tmp, "at-commit")
-        if len(st["tokens"]) < S.MIN_TSA_TOKENS:
+    if core["type"] in ("commit", "skip"):
+        st = tsa.stamp(tmp, "at-commit" if core["type"] == "commit" else "at-skip")
+        if core["type"] == "commit" and len(st["tokens"]) < S.MIN_TSA_TOKENS:
             for f in glob.glob(tmp + "*"): os.remove(f)
             return None, ph, st
         for t in st["tokens"]:
@@ -277,6 +281,31 @@ def cmd_abort_unpublished():
             ssh("protectli", f"finalize {s_} {'0'*64}"); done.append(f)
     print(json.dumps({"head_seq": seq, "head_type": ptype(hp), "entropy_host_pending_before": pend, "aborted": done}))
 
+def cmd_skip(reason):
+    """A REFUSED commit becomes a public, signed, third-party-timestamped chain event instead of a silent gap
+    (PROTOCOL v0.5.1). Aggregator-only, by necessity: the dependency that refused is usually the one that cannot be
+    asked. It proves WHEN the operator recorded a refusal and WHAT it claimed — not that the claim is true. A skip may
+    follow a reveal, a failure, a legacy pulse or another skip; never an unresolved commit (that must be failed)."""
+    offline = require_synced(allow_offline=True)
+    seq, prev_hash, hp = head()
+    if ptype(hp) == "commit": die("head is an unresolved commit; a skip cannot follow a commit - resolve it (reveal or fail) first")
+    seq += 1
+    seen = None
+    try: seen = int(drand_anchor.fetch()["round"])            # informational: which round the world was at
+    except Exception: pass
+    now = int(time.time())
+    core = {"v": S.VERSION, "type": "skip", "seq": seq, "prev_hash": prev_hash, "chain_hash": S.CHAIN_HASH, "statements": {},
+            "derived": {"reason": str(reason)[:400], "refused_by": S.classify_refusal(reason), "attempted_unix_s": now,
+                        "attempted_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)), "drand_round_seen": seen,
+                        "published_head_confirmed": not offline, "head_type_before": ptype(hp),
+                        "meaning": "No commit was minted this cycle. Nothing was selected and nothing was withheld: no commitment "
+                                   "existed. This pulse only makes the gap, and the operator's stated cause, public at a timestamped moment."},
+            "tooling": {}, "aggregator_host": "think"}
+    path, ph, _ = seal(core)
+    toks = json.load(open(path + ".tsa.json"))["tokens"] if os.path.exists(path + ".tsa.json") else []
+    print(json.dumps({"minted": path, "type": "skip", "seq": seq, "refused_by": core["derived"]["refused_by"],
+                      "tsa_tokens": [(t["tsa"], t["time"]) for t in toks], "published_head_confirmed": not offline}, indent=2))
+
 def cmd_preflight():
     """Readiness check before (re)enabling the cadence, e.g. after the timing bench was down. MINTS NOTHING.
     Answers: would a commit be accepted right now, and if not, which dependency is the reason? Side effects are the same
@@ -338,4 +367,5 @@ if __name__ == "__main__":
     elif cmd == "abort-unpublished": cmd_abort_unpublished()
     elif cmd == "recover": cmd_recover()
     elif cmd == "preflight": cmd_preflight()
+    elif cmd == "skip": cmd_skip(" ".join(a[1:]) or "unspecified")
     else: cmd_status()

@@ -1,6 +1,6 @@
 # NotBefore — specification
 
-**Status:** draft 0.2, 2026-09-12 — 0.1 as received, reviewed against the live code and chain by claude-main; every correction is listed in §16  
+**Status:** draft 0.3, 2026-09-12 — 0.2 plus the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
 **Implements over:** `qrng-beacon-log` protocol v0.5 (live log)  
 **Normative language:** MUST / MUST NOT / SHOULD / MAY
 
@@ -163,6 +163,10 @@ Reveal MUST be pushed **≤ 600 s** after `release(R_target)`. GNSS reveal ancho
 
 If the reveal cannot be published in time, the chain MUST grow a signed `failure` bound to the commit pulse hash. Consumers MUST treat that hour as having **no** \(V\). There is no substitute leaf and no “use last hour.”
 
+### 4.3a Skip (protocol v0.5.1)
+
+If a cycle cannot commit at all (a host unreachable or unhealthy, drand/TSA/git unavailable), the aggregator publishes a `type: "skip"` pulse with `derived.reason` and `derived.refused_by`, aggregator-signed, RFC 3161 when available. It is **not** consumable and produces no \(V\). It MAY follow a reveal, failure, legacy pulse or skip; it MUST NOT follow an unresolved commit. Verifiers older than this rule reject the first commit after a skip ("state machine: commit follows a reveal, failure or legacy pulse"); `notbefore` ≥ 0.3.0 accepts it.
+
 ### 4.4 Host isolation (v0.5)
 
 From seq **18** statements are per-host. From seq **26** each statement MUST carry an `execution` block matching `hosts/EXPECTED.json` (user `beacon`, forced command, published `beacon-cmd` and host-config hashes).  
@@ -222,7 +226,7 @@ A reveal pulse \(N\) is a **NotBefore-eligible** seed if and only if:
 | Pair | Predecessor is commit \(N-1\), verified together |
 | Execution | If \(N-1 \ge 26\), execution blocks enforce |
 | CI list | seq not in `ci/KNOWN_NONCOMPLIANT.json` |
-| Type | reveal succeeded (not `failure`) |
+| Type | reveal succeeded (not `failure`, not `skip`) |
 | Verifier | current `verify.py` + `tsa.py` exit 0 |
 | Anchor | SHOULD: `verify_anchors.py` passes for the pair; for \(N \ge 42\) the commit's Rekor `integratedTime` precedes `release(R)`; for \(N \le 41\) anchors are retroactive (existence from 2026-09-12 12:47 UTC only) |
 
@@ -366,7 +370,7 @@ Do not implement this until isolation can hold a vector of \(E\) and refuse the 
 
 | Item | Version |
 |---|---|
-| This spec | `notbefore/spec/0.2` |
+| This spec | `notbefore/spec/0.3` |
 | Derive domain | `notbefore/derive/v1` |
 | Shuffle domain | `notbefore/shuffle/v1` |
 | Live log protocol | `0.5` (`schema.py`) |
@@ -422,6 +426,8 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 ---
 
 ## 16. Changelog
+
+**0.3 (2026-09-12).** Protocol v0.5.1 adds the `skip` pulse (§4.3a): a refused commit becomes a signed, timestamped chain event instead of a silent gap. Eligibility (§6) excludes it explicitly. `notbefore` 0.3.0 vendors the verifier that accepts a commit after a skip; 0.2.0 rejects the first commit after any skipped hour. \(V\), \(S\), shuffle and split are unchanged (same domains).
 
 **0.2 (2026-09-12, claude-main review of the 0.1 draft against `pulse.py`, `schema.py`, `beacon-cycle.py`, `verify.py`, `tsa.py` and pulses 0040/0041).** Everything in 0.1 that could be checked against the code was correct — domains, `release(R)`, lead 100 rounds, margin 120 s, deadline 600 s, "missed margin ⇒ signed failure", the TSA CLI, the mix order, \(\rho = \mathrm{SHA256}(\sigma)\), the eligibility floors — except:
 

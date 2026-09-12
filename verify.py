@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-verify.py — standalone verifier for attested randomness pulses (legacy, commit, reveal).
+verify.py — standalone verifier for attested randomness pulses (legacy, commit, reveal, failure, skip).
 
     pip install cryptography
     python3 verify.py <pulse.json | URL | -> [--prev <file|URL>] [--pin <keys dir|URL prefix>] [--refetch]
@@ -273,7 +273,7 @@ def strict_main():
         eg = sts["time"]["statement"]["measurement"].get("epoch_guard", {})
         # (p550 guard is covered by clock_health above)
         if prev is not None:
-            chk(prev["core"].get("type", "legacy") in ("legacy", "reveal", "failure") or "type" not in prev["core"], "state machine: commit follows a reveal, failure or legacy pulse")
+            chk(prev["core"].get("type", "legacy") in ("legacy", "reveal", "failure", "skip") or "type" not in prev["core"], "state machine: commit follows a reveal, failure, skip or legacy pulse")
     elif typ in ("reveal", "failure"):
         cs, cph, C = d.get("commit_seq"), d.get("commit_pulse_hash"), d.get("entropy_commitment")
         chk(isinstance(cs, int) and _hex(cph, 64) and _hex(C, 64), "derived commit_seq / commit_pulse_hash / entropy_commitment well-formed")
@@ -303,6 +303,19 @@ def strict_main():
                 if n in sts: stmt_ok(n, core["seq"], "failure", cph)
             if prev is not None:
                 chk(prev["core"].get("type") == "commit" and prev["pulse_hash"] == cph and prev["core"]["seq"] == cs, "state machine: predecessor IS the failed commit")
+    elif typ == "skip":
+        # v0.5.1: an aggregator-only record that a commit was REFUSED. It carries no host statements because the
+        # refusing dependency is usually the one that cannot be asked. It proves when the operator recorded the
+        # refusal (aggregator signature; RFC 3161 tokens when a TSA was reachable) and what it claimed - not that the
+        # claim is true. Nothing was selected or withheld: no commitment existed.
+        chk(sts == {}, "skip carries no host statements")
+        chk(isinstance(d.get("reason"), str) and d["reason"].strip() != "", "derived.reason is a non-empty string")
+        chk(d.get("refused_by") in S.SKIP_REFUSED_BY, f"derived.refused_by is one of {S.SKIP_REFUSED_BY}")
+        chk(isinstance(d.get("attempted_unix_s"), int), "derived.attempted_unix_s is an int")
+        toks = _glob.glob(src + ".*.tsr") if not src.startswith(("http://", "https://")) else []
+        print(f"[INFO] skip: {len(toks)} RFC 3161 token(s) beside the pulse (best-effort for skips; verify with tsa.py)")
+        if prev is not None:
+            chk(prev["core"].get("type", "legacy") in ("legacy", "reveal", "failure", "skip"), "state machine: a skip follows a reveal, failure, skip or legacy pulse - never an unresolved commit")
     # ---- 3. tooling drift (informational) ----
     here = os.path.dirname(os.path.abspath(__file__))
     for name, tools in (core.get("tooling") or {}).items():

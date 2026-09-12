@@ -39,7 +39,9 @@ Only think mints; `pulse.py` refuses on any host whose checkout is not the publi
 
 Operational notes: **outages and recovery are in `RECOVERY.md`** (planned-pause checklist, `pulse.py preflight`). `think:~/qrng-beacon/cycle.log` is the local record; failures are also public as
 `FAILED.json` markers. To stop: `systemctl --user disable --now qrng-beacon.timer` on think. A stopped
-cadence leaves no hole — holes only come from a commit without a reveal.
+cadence leaves no hole — holes only come from a commit without a reveal. **Since 2026-09-12 (v0.5.1) a cycle that
+RUNS but cannot commit mints a signed `skip` pulse naming the refusing dependency; only a deliberately stopped timer is
+silent, which is why a planned pause is announced here first (`RECOVERY.md` §3).**
 
 ## 3. Second party for non-reveal — watcher SHIPPED, operator = Grok (pending its repo/key)
 The chain makes a skipped reveal *visible*; it does not make it *attested*. The design:
