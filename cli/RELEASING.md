@@ -94,3 +94,9 @@ published 2026-09-12 13:41 UTC; confirmed by a fresh-venv install verifying pair
 published 2026-09-12 21:36 UTC; ERR-014 (pinned RFC 3161 trust roots). Confirmed by a fresh-venv install with the
 host certificate store hidden (`SSL_CERT_FILE=/dev/null`) verifying pair 0058/0059 and reproducing the USAGE.md
 split of pulse 45 byte-for-byte (A/B sha256 unchanged from the 0.4.0 run). 0.3.0–0.7.0 same day: see git tags.
+
+`notbefore 0.8.0` — tag `cli-v0.8.0` on `75f8e33`, verifier vendored at `bef0e70`, workflow run 34722438210, published
+2026-09-12 22:2x UTC; spec 0.6 (keygen, signed contract/2, decision-log client; log shipped `enabled: false` pending the
+Worker deployment). Confirmed by a fresh-venv install: `keygen` → signed `plan --no-timestamp` → `execute
+--allow-unregistered` reproduces the rule-selected pulse with `decision_log.status: disabled`, and `verify 61` passes.
+
