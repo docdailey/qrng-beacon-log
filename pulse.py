@@ -39,8 +39,8 @@ F9T       = "willy@192.168.68.46"      # GNSS telemetry from timehat DB
 
 COMMIT_DOMAIN = b"grok_antics/commit/v1"
 MIX_DOMAIN    = b"grok_antics/pulse-mix/v1"
-DEFAULT_LEAD  = 20        # rounds; x3 s = 60 s
-MIN_LEAD      = 5         # never commit to a round fewer than 15 s away
+DEFAULT_LEAD  = 100       # rounds; x3 s = 300 s - room to TSA-stamp and push >=120 s before the round
+MIN_LEAD      = 60        # 180 s; anything shorter cannot honour the 120 s publication margin
 
 # ---------------------------------------------------------------- helpers
 def ssh(host, cmd, timeout=120):
@@ -206,6 +206,9 @@ DISCLOSURE = {
 def cmd_commit(lead):
     if lead < MIN_LEAD: die(f"lead {lead} < MIN_LEAD {MIN_LEAD}")
     require_synced()
+    pend = glob.glob(os.path.join(PENDING, "pulse-*.secret"))
+    if pend: die("a commit is already pending (%s); reveal it or record a failure before committing again"
+                 % ", ".join(os.path.basename(x) for x in pend))
     try: now = drand_anchor.fetch()
     except Exception as e: die(f"drand unreachable - {e}")
     if not now["randomness_equals_sha256_signature"]: die("drand randomness != sha256(signature)")

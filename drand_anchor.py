@@ -10,7 +10,8 @@ Unchained means each round is signed over the round number alone, so there is no
 `previous_signature` field and rounds are independently verifiable. `randomness` is
 defined as SHA-256(signature) — which is checkable with no crypto library at all.
 
-Round R is released at  genesis_time + R * period  (UTC seconds).
+Round R is released at  genesis_time + (R - 1) * period  (UTC seconds): ROUND 1 IS AT GENESIS.
+(ERR-004: earlier code used R * period and was 3 s late on every release time.)
 """
 import json, hashlib, urllib.request, time
 
@@ -32,7 +33,7 @@ def _get(path, timeout=10):
     raise RuntimeError(f"all drand endpoints failed; last={last}")
 
 def round_time(rnd):
-    return GENESIS + rnd * PERIOD
+    return GENESIS + (int(rnd) - 1) * PERIOD
 
 def fetch(rnd=None):
     """Fetch `latest` (default) or a specific round. Returns a dict ready to embed in a pulse."""

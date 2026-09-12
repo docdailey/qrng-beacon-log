@@ -49,6 +49,15 @@ at time T; `tsa.py verify` checks the digest and the TSA's certificate chain. Tw
 single party, including us, can move T. This replaces GitHub's committer date as the primary evidence
 that a commitment predates its round. Tokens for pulses 0010/0011 are **retroactive** and labelled.
 
+## What RFC 3161 does and does not prove
+
+A token proves the stamped bytes **existed** at time T. It does **not** prove they were *published*, nor that
+they were the *only* candidate: an operator could stamp several commitments before the round and publish
+the favourable one afterward. GitHub's `committer.date` is supplied by the committer, not an independent
+push time. Therefore: **the published commitment has third-party proof of pre-round existence; durable proof
+that this was the uniquely public commitment depends on a third party observing or mirroring the repository
+before the round.** That is what a watcher's pre-round COMMIT-RECEIPT provides.
+
 ## What publication does NOT do
 
 - It does not make drand honest — that rests on the League of Entropy's threshold of independent

@@ -29,6 +29,16 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.exceptions import InvalidSignature
 
 COMMIT_DOMAIN = b"grok_antics/commit/v1"
+QN_GENESIS, QN_PERIOD = 1692803367, 3
+def release_time(rnd):                     # drand: round 1 is AT genesis
+    return QN_GENESIS + (int(rnd) - 1) * QN_PERIOD
+def published_release_check(label, published, rnd):
+    """Use the COMPUTED release time for every ordering check; warn if the pulse's own field disagrees."""
+    true = release_time(rnd)
+    if published is not None and int(published) != true:
+        print(f"[WARN] ERR-004: {label} publishes release {int(published)} but round {rnd} released at {true} "
+              f"({int(published)-true:+d} s); ordering checks below use the computed value")
+    return true
 OK = True
 def chk(cond, msg, detail=None):
     global OK
@@ -118,8 +128,9 @@ def main():
         c = core["commitment"]; now = core["drand_at_commit"]
         verify_drand(now, refetch)
         chk(c["target_round"] > now["round"], f"target round {c['target_round']} is strictly after the round current at commit ({now['round']})")
-        chk(core["time"]["anchor"]["utc_unix_s"] < c["target_release_unix_s"],
-            f"GNSS anchor {core['time']['utc']} precedes target release {utc(c['target_release_unix_s'])}")
+        rel = published_release_check("commitment.target_release_unix_s", c.get("target_release_unix_s"), c["target_round"])
+        chk(core["time"]["anchor"]["utc_unix_s"] < rel,
+            f"GNSS anchor {core['time']['utc']} precedes target release {utc(rel)} (computed) by {rel - core['time']['anchor']['utc_unix_s']:.1f} s")
         chk(len(c["entropy_commitment"]) == 64, "entropy_commitment is a 32-byte digest")
         print(f"\nThis pulse fixes a value (by hash) that will be revealed after drand round {c['target_round']} "
               f"releases at {utc(c['target_release_unix_s'])}. It only means something if it was PUBLISHED before then.")
@@ -134,25 +145,31 @@ def main():
             pc = prev["core"]["commitment"]
             chk(pc["entropy_commitment"] == rv["entropy_commitment"], "commitment value matches the commit pulse")
             chk(pc["target_round"] == da["round"], f"drand round {da['round']} == committed target round {pc['target_round']}")
-            chk(prev["core"]["time"]["anchor"]["utc_unix_s"] < da["round_release_unix_s"],
-                f"commit anchor {prev['core']['time']['utc']} precedes round release {utc(da['round_release_unix_s'])}")
-        chk(core["time"]["anchor"]["utc_unix_s"] >= da["round_release_unix_s"], "reveal anchor is not before the round release")
+        rel = published_release_check("external_anchor.round_release_unix_s", da.get("round_release_unix_s"), da["round"])
+        if prev is not None:
+            chk(prev["core"]["time"]["anchor"]["utc_unix_s"] < rel,
+                f"commit anchor {prev['core']['time']['utc']} precedes round release {utc(rel)} (computed) by {rel - prev['core']['time']['anchor']['utc_unix_s']:.1f} s")
+        chk(core["time"]["anchor"]["utc_unix_s"] >= rel,
+            f"reveal anchor is not before the round release (computed), {core['time']['anchor']['utc_unix_s'] - rel:.1f} s after")
         verify_drand(da, refetch)
         m = core["mix"]; buf = m["domain_tag"].encode() + E + bytes.fromhex(da["randomness"]) + bytes.fromhex(da["chain_hash"]) + int(da["round"]).to_bytes(8, "big")
         rec = hashlib.sha256(buf).hexdigest()
         chk(rec == core["attested_value"], f"attested_value == {m['algorithm']}", f"published {core['attested_value']}\n       recomputed {rec}")
         tl = core.get("timeline", {})
         print(f"\nAttested value {core['attested_value']}")
-        print(f"Unknowable to anyone before {utc(da['round_release_unix_s'])} (drand round {da['round']}); the entropy was "
-              f"committed {tl.get('commit_before_round_by_s')} s before that round existed, so it could not have been chosen "
-              f"after. Residual assumption: the commit was PUBLISHED before the round - check the public log's history.")
+        cb = (rel - prev["core"]["time"]["anchor"]["utc_unix_s"]) if prev is not None else None
+        print(f"Unknowable to anyone before {utc(rel)} (drand round {da['round']}, computed release); the entropy was "
+              f"committed {cb if cb is not None else '?'} s before that round existed, so it could not have been chosen after. "
+              f"Residual assumptions: the commit was PUBLISHED before the round (third-party TSA tokens prove the published "
+              f"candidate existed; uniqueness of the public commitment depends on pre-round observation of the log).")
     else:
         da = core.get("external_anchor")
         if da:
             verify_drand(da, refetch)
             m = core.get("mix", {}); buf = m.get("domain_tag", "").encode() + bytes.fromhex(core["entropy"]["hex"]) + bytes.fromhex(da["randomness"]) + bytes.fromhex(da["chain_hash"]) + int(da["round"]).to_bytes(8, "big")
             chk(hashlib.sha256(buf).hexdigest() == core.get("attested_value"), "attested_value == documented mix")
-            print(f"\nLegacy single-phase pulse: not computable before {utc(da['round_release_unix_s'])}, but selection after that moment is NOT excluded.")
+            rel = published_release_check("external_anchor.round_release_unix_s", da.get("round_release_unix_s"), da["round"])
+            print(f"\nLegacy single-phase pulse: not computable before {utc(rel)} (computed), but selection after that moment is NOT excluded.")
         else:
             print("\n[INFO] legacy pulse without external anchor: integrity + attestation only.")
 

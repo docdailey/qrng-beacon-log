@@ -160,3 +160,14 @@ were stamped from it and are superseded.
   progress (<checked>/42,935)". Never say "verified" without the number.
 - Public log trust assumptions (GitHub timestamps, force-push detectability) are stated in
   `PUBLICATION.md` and must accompany any claim that depends on publication time.
+
+
+## Added 2026-09-12 after external review (binding)
+
+- ❌ Do not say "the selection gap is closed". ✅ Say: *the published commitment has third-party proof of
+  pre-round existence (RFC 3161, two TSAs, at mint); durable proof that it was the uniquely public
+  commitment depends on observing or mirroring the repository before the round.*
+- ❌ Until v0.5, do not describe the three signatures as independent role attestations. ✅ "Three named
+  hosts signed the record's digest" (ERR-005).
+- drand release times are `genesis + (round − 1)·period`. Any figure derived from the old formula is 3 s late
+  (ERR-004); quote recomputed margins, not the published `timeline` fields, for pulses 0009–0015.

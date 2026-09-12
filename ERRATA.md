@@ -6,6 +6,55 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-005 — role signatures were digest signatures, not role attestations (architecture)
+
+**Affected:** every pulse to date (**0001–0015** and any minted before the v0.5 cut-over).
+**What was wrong:** the orchestrator computed `pulse_hash` and asked each host to sign that digest.
+The entropy host never checked that the commitment was over bytes it produced; the time host never
+checked that the timestamp in `core` was its own measurement; the witness signed without seeing the
+observation. A dishonest orchestrator could fabricate `core` and still collect all three signatures.
+**How to read the affected signatures:** "three named machines signed this digest" — evidence that the
+record was not altered after signing and that three hosts participated; **not** independent attestation
+by each host of the fact its role names.
+**Fix (v0.5, in progress):** each host produces and signs its own statement (entropy host generates and
+holds `E` and signs `{commitment, target_round}`; time host signs its own measurement object; witness signs
+its own observation); the aggregator assembles the already-signed statements and signs the assembly with a
+fourth key. Host-side scripts are published and version-bound into each pulse by hash. Effective from the
+first v0.5 pulse, which will be named here.
+**Found by:** external reviewer, 2026-09-12.
+
+## ERR-004 — every drand release time was computed 3 s late
+
+**Affected:** pulses **0009–0015**: `commitment.target_release_unix_s` / `target_release_utc` (commits),
+`external_anchor.round_release_unix_s` and `drand_at_commit.round_release_unix_s` (all), `timeline.*`
+(reveals), `commitment.next_target_round_release_unix_s` (0009).
+**What was wrong:** `drand_anchor.round_time()`, `watcher.py` and `PROTOCOL.md` used
+`genesis + round × period`. drand defines **round 1 as occurring at genesis**, so the correct expression is
+`genesis + (round − 1) × period`. Verified empirically 2026-09-12: under the old formula the live round's
+"release time" sat up to 2 s in the future while the round was already being served.
+**Consequences:** every published release time is **+3 s**; every "commit before round" margin was
+overstated by 3 s and every "reveal after round" margin understated by 3 s; the verifier compared against
+the published (late) value, so it could in principle have accepted a commitment made up to 3 s after the
+round existed; the watcher waited 3 s too long. **All published claims survive** — the smallest true
+commit-before-round margin is 171 s.
+**Recomputed interpretation of every affected pulse:**
+
+| seq | type | round | published release | true release | recomputed margin |
+|---|---|---|---|---|---|
+| 9 | legacy | 32122254 | 1789170129 | 1789170126 | single-phase |
+| 10 | commit | 32122604 | 1789171179 | 1789171176 | commit precedes round by 171 s (published 174) |
+| 11 | reveal | 32122604 | 1789171179 | 1789171176 | reveal follows round by 49 s (published 46) |
+| 12 | commit | 32123484 | 1789173819 | 1789173816 | commit precedes round by 296 s (published 299) |
+| 13 | reveal | 32123484 | 1789173819 | 1789173816 | reveal follows round by 4 s (published 1) |
+| 14 | commit | 32123921 | 1789175130 | 1789175127 | commit precedes round by 297 s (published 300) |
+| 15 | reveal | 32123921 | 1789175130 | 1789175127 | reveal follows round by 3 s (published 0) |
+
+**Fix (commit on 2026-09-12, before pulse 0016):** formula corrected in `drand_anchor.py`, `watcher.py`,
+`PROTOCOL.md`; **`verify.py` now computes release times itself from the round number and never trusts the
+pulse's field** — for the affected pulses it prints a `[WARN] ERR-004` naming the +3 s and runs every
+ordering check against the true time.
+**Found by:** external reviewer, 2026-09-12, citing the drand specification ("round 1 starts at genesis time").
+
 ## ERR-003 — verifying pulses 0001–0002 with `--pin` failed after the time key rotated
 
 **Affected:** verification of pulses **0001, 0002** with `verify.py --pin keys/` (the pulses themselves are correct).

@@ -30,13 +30,16 @@ records that pulse `NNNN` breached §5 and MUST be treated as failed by consumer
 ```
 core.commitment.entropy_commitment = SHA256( "grok_antics/commit/v1" || E )      E = 32 bytes
 core.commitment.target_round       = R          (drand quicknet round, strictly > drand_at_commit.round)
-core.commitment.target_release_unix_s = 1692803367 + 3·R
+core.commitment.target_release_unix_s = 1692803367 + 3·(R − 1)      (drand: round 1 is AT genesis — see ERR-004)
 core.drand_at_commit               = the latest drand round at mint (proves "not earlier than")
 core.time                          = §6 time block; core.time.anchor.utc_unix_s MUST be < target_release
 ```
 The entropy `E` MUST NOT appear anywhere in a commit pulse. The publisher MUST publish the commit pulse
-before `target_release`; the evidence is (a) RFC 3161 tokens `pulse-NNNN.json.<tsa>.tsr` over the exact
-file bytes, taken at mint, and (b) the public log's history.
+before `target_release`. Evidence: (a) RFC 3161 tokens `pulse-NNNN.json.<tsa>.tsr` over the exact file
+bytes, taken at mint — these prove the **published** commitment **existed** before the round; (b) the public
+log's history. **Neither proves uniqueness**: an operator could stamp several candidates and publish one.
+Durable proof that the published commitment was the uniquely public one depends on a third party
+observing or mirroring the log before the round (`watcher.py` COMMIT-RECEIPT records).
 
 ## 4. Reveal pulse
 
@@ -87,8 +90,9 @@ latency is reported under `orchestration` and is a freshness limit, not part of 
 
 ## 8. What a valid reveal proves, and what it assumes
 
-Proves: the attested value was not computable by anyone before `target_release`, and `E` was fixed
-before `R` existed, so `E` was not chosen with knowledge of `R`.
+Proves: the attested value was not computable by anyone before `target_release`, and the **published**
+commitment to `E` existed (third-party TSA) before `R`, so `E` was not chosen with knowledge of `R` —
+**provided** that commitment was the uniquely public one, which requires pre-round observation of the log.
 Assumes: the commit was published before `R` (check the TSA tokens and log history); drand's threshold
 is honest; SHA-256 preimage resistance; Ed25519 keys are the operator's.
 Does not claim: fitness for gambling, certification by any body, or absolute UTC accuracy (L1-only GNSS).

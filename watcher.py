@@ -54,7 +54,7 @@ def signed(k, doc):
 def main():
     k = key()
     drand_round = get(f"https://api.drand.sh/{CHAIN_HASH}/public/latest")["round"]
-    drand_now = GENESIS + drand_round * PERIOD          # external clock: what drand has released
+    drand_now = GENESIS + (drand_round - 1) * PERIOD    # external clock; round 1 is AT genesis (ERR-004)
     listing = get(f"https://api.github.com/repos/{REPO}/contents/chain")
     pulses = {}
     for f in listing:

@@ -79,7 +79,7 @@ bounded. Full commit-then-reveal for a pulse's own entropy is the remaining step
 
 ## Commit-then-reveal (shipped 2026-09-11, pulses 0010/0011) — the second half
 
-The selection gap is closed for every pulse from 0010 onward:
+From pulse 0010 onward, selection after the round is excluded **conditional on the commitment having been the uniquely public one before the round** (reviewer, 2026-09-12 — see below):
 
 ```
 COMMIT  (pulse N)    publish  C = SHA256("grok_antics/commit/v1" || E)  bound to FUTURE drand round R
@@ -114,6 +114,12 @@ measurement anyone can re-derive.
 4. **SHA-256 is preimage resistant.**
 
 None of these is "trust us about the random value". That was the point.
+
+**Precise statement (2026-09-12):** the published commitment has third-party proof of pre-round *existence*
+(two RFC 3161 tokens at mint); durable proof that it was the *uniquely public* commitment still depends on
+observing or mirroring the repository before the round. An operator could stamp several candidates and
+publish one. A watcher that signs receipts for commitments it sees before their round closes this; that is
+the watcher's second job.
 
 
 ## Where this stands (Bill, 2026-09-12)
