@@ -19,7 +19,7 @@ def log(msg):
     print(line, flush=True); open(LOG, "a").write(line + "\n")
 
 def run(*a, check=True, timeout=600):
-    r = subprocess.run(a, cwd=REPO, capture_output=True, text=True, timeout=timeout)
+    r = subprocess.run(a, cwd=REPO, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
     if check and r.returncode != 0:
         raise RuntimeError(f"{' '.join(a[:3])} failed: {(r.stderr or r.stdout).strip()[:300]}")
     return r.stdout.strip()

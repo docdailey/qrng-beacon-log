@@ -17,7 +17,10 @@ key (`think-beacon-cycle`, write access to this one repository only). First auto
 (commit, pushed 269 s before round 32123484, two at-commit TSA tokens) → pulse 0013 (reveal, pushed 28 s
 after release)**. **First UNATTENDED fire: 01:00:26 UTC 2026-09-12** (systemd `Result=success`, no human involved) → pulse 0014
 (commit, pushed 273 s before round 32123921, two at-commit TSA tokens 01:00:55Z) → pulse 0015 (reveal, pushed
-31 s after release). Only think mints; `pulse.py` refuses on any host whose checkout is not the published head.
+31 s after release). **v0.5 cut-over 2026-09-12 02:09–02:20 UTC** (timer paused, one supervised pair): pulse **0018** commit (E held on the entropy host,
+four host-signed statements, two TSA tokens 02:13:48Z, pushed 224 s before round 32125363) → pulse **0019** reveal (anchored 7 s after
+release, pushed 126 s after). First v0.5 pair verified as a stranger; watcher issued a pre-round COMMIT-RECEIPT at drand round 32125316.
+Only think mints; `pulse.py` refuses on any host whose checkout is not the published head.
 
 | parameter | value | enforced by |
 |---|---|---|

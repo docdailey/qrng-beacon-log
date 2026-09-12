@@ -14,7 +14,7 @@
 The CI badge above re-verifies every pulse, link, commit/reveal pair, RFC 3161 token and the archive
 Merkle root hourly and on every push, with a live drand re-fetch.
 
-Each `chain/pulse-NNNN.json` is a hash-chained record. **From pulse 0018 (protocol v0.5) every fact is signed by
+Each `chain/pulse-NNNN.json` is a hash-chained record. **From pulse 0018 (protocol v0.5, live since 2026-09-12 02:13 UTC) every fact is signed by
 the host that produced it** — the entropy host generates, holds and reveals E; the GNSS, time and witness hosts
 sign their own measurements; the aggregator signs only the assembly (`PROTOCOL.md §0`). From pulse 0010 the
 chain uses **commit-then-reveal**: a `commit` pulse publishes `sha256(entropy)` bound to a *future*

@@ -67,8 +67,11 @@ def drand_clock():
 
 def main():
     k = key()
+    # The clone is a READ-ONLY mirror of the watched log: always match origin exactly, never keep local state.
+    os.environ["PYTHONDONTWRITEBYTECODE"] = "1"; sys.dont_write_bytecode = True
     if not os.path.isdir(os.path.join(LOG, ".git")): sh("git", "clone", "-q", f"https://github.com/{REPO}.git", LOG)
-    else: sh("git", "pull", "-q", "--ff-only", cwd=LOG)
+    else:
+        sh("git", "fetch", "-q", "origin", "main", cwd=LOG); sh("git", "reset", "-q", "--hard", "origin/main", cwd=LOG); sh("git", "clean", "-fdq", cwd=LOG)
     head = sh("git", "rev-parse", "HEAD", cwd=LOG).strip()
     dround, relays = drand_clock(); dnow = rel(dround)
     files = sorted(f for f in glob.glob(os.path.join(LOG, "chain", "pulse-*.json")) if re.search(r"pulse-\d{4}\.json$", f))

@@ -32,7 +32,8 @@ _PULSE_RE = re.compile(r"^pulse-\d{4}\.json$")
 
 def die(m): sys.stderr.write("REFUSING TO MINT: %s\n" % m); sys.exit(2)
 def ssh(host, cmd, timeout=150):
-    r = subprocess.run(["ssh", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes", SSH[host], cmd], capture_output=True, text=True, timeout=timeout)
+    # stdin=DEVNULL: an inherited stdin let inner ssh sessions swallow the caller's script stream (2026-09-12 cut-over incident)
+    r = subprocess.run(["ssh", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes", SSH[host], cmd], capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
     if r.returncode != 0: raise RuntimeError(f"{host}: {r.stderr.strip()[:200]}")
     return r.stdout.strip()
 def git(*a):
