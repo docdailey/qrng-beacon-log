@@ -342,9 +342,9 @@ uploaded); `key_id = SHA256(raw public key)[:16]` (the log's own key convention,
 recovery and no escrow: a lost key is an abandoned namespace.
 
 **Contract/2** = contract/1 plus `signer {alg: ed25519, key_id, public_key_b64}` and `decision_id` (default: the
-purpose string; ^[A-Za-z0-9._:/=@+-]{1,256}$). For high-stakes use `decision_id` SHOULD be derived from an external
-artifact (protocol registration number and version, audit order digest) so that renaming is visible to whoever holds
-that artifact — cryptography does not recognise semantic aliases.
+purpose string; ^[A-Za-z0-9._:/=@+-]{1,256}$). For serious use `decision_id` SHOULD be bound to an external artifact
+so that renaming is visible to whoever holds it — cryptography does not recognise semantic aliases. Convention:
+`<registry id>/<protocol version>/<decision>`, e.g. `NCT01234567/protocol-3/randomization-1` or `audit-order-8812/v2/sample-1`.
 
 **Decision statement.** `plan` signs `{"spec": "notbefore/decision/1", decision_id, key_id, public_key_b64,
 contract_sha256, contract_spec, created_utc}` (canonical JSON) with the identity key and writes statement + signature

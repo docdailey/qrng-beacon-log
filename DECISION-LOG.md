@@ -11,9 +11,9 @@ already had (RFC 6962 tree, C2SP checkpoints, witnesses, Rekor anchors) plus one
 uploaded). `key_id = SHA256(raw public key)[:16]` — the convention the log's own host keys use.
 
 **Contract** (`notbefore/contract/2`) = contract/1 + `signer {alg, key_id, public_key_b64}` + `decision_id`.
-`decision_id` defaults to the purpose string; for high-stakes use derive it from an external artifact (a protocol
-registration number and version, an audit order digest, an IRB protocol digest) so that renaming is visible to the
-people who hold that artifact — cryptography cannot recognise semantic aliases.
+`decision_id` defaults to the purpose string; for serious use bind it to an external artifact so that renaming is
+visible to the people who hold that artifact — cryptography cannot recognise semantic aliases. Convention:
+`<registry id>/<protocol version>/<decision>`, e.g. `NCT01234567/protocol-3/randomization-1` or `audit-order-8812/v2/sample-1`.
 
 **Decision statement** — what the key signs and what the log stores (canonical JSON, RFC 8785):
 ```json

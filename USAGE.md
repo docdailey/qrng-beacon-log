@@ -156,8 +156,10 @@ package before it was written). The log stores the **hash**; add `--disclose` to
 **Write-once.** `(key_id, decision_id)` is a namespace and the first statement in it wins. Register a second contract
 under the same `decision_id` and the log appends it as an *amendment* (`seq_in_namespace 2`) — visible, but `execute`
 will refuse it: "this contract is not the first registered for its decision_id". That is the point: you cannot
-timestamp three plans and publish the lucky one. `decision_id` defaults to the purpose string; for anything
-high-stakes derive it from an artifact your peers hold (`--decision-id irb:2026-0142/v3`) so a rename is visible.
+timestamp three plans and publish the lucky one. `decision_id` defaults to the purpose string. For anything that
+matters, bind it to an artifact your peers already hold — the convention is `<registry id>/<protocol version>/<decision>`, e.g. `NCT01234567/protocol-3/randomization-1` or `audit-order-8812/v2/sample-1` (`--decision-id NCT01234567/protocol-3/randomization-1`). Two keys or two ids can still name one
+experiment; that is a naming problem the log makes visible, not one it solves, and an external registry id is what
+makes the duplicate visible outside NotBefore.
 
 ```
 $ notbefore execute notbefore-plan-chart-audit-2026-q4.json       # after 2026-10-01

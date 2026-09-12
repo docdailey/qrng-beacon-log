@@ -68,7 +68,7 @@ def build_parser():
     for fl in (("--json",), ("-q", "--quiet")): rg2.add_argument(*fl, action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     pl = sub.add_parser("plan", help="write a decision contract (selection rule, purpose, operation, parameters, input sha256), sign it with your identity, timestamp it with two RFC 3161 TSAs and register it in the write-once decision log — all BEFORE the pulse exists")
     pl.add_argument("--key", help="identity key (default $NOTBEFORE_KEY or ~/.config/notbefore/identity.key; run `notbefore keygen` once)")
-    pl.add_argument("--decision-id", help="write-once namespace under your key (default: the purpose string). For high-stakes use derive it from an external artifact (protocol registration number+version, audit order digest) so renaming is visible")
+    pl.add_argument("--decision-id", help="write-once namespace under your key (default: the purpose string). For anything that matters, bind it to an artifact your peers hold: <registry id>/<protocol version>/<decision>, e.g. NCT01234567/protocol-3/randomization-1 — then a duplicate preregistration is visible outside NotBefore too")
     pl.add_argument("--unsigned", action="store_true", help="legacy contract/1 without signer or decision log (discouraged; execute labels it)")
     pl.add_argument("--no-log", action="store_true", help="sign and timestamp but do not submit to the decision log now (register later with `notbefore register`)")
     pl.add_argument("--disclose", action="store_true", help="publish the contract body in the decision log, not just its hash")
