@@ -1,0 +1,6 @@
+# notbefore.net — publication surface for the qrng-beacon-log.
+# Verification data must stay fetchable by non-browser clients (witnesses,
+# `notbefore verify`). Nothing here may be used to gate those paths.
+
+User-agent: *
+Allow: /

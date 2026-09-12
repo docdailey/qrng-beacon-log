@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>notbefore.net — qrng-beacon-log</title>
+<title>NotBefore</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root { --fg:#111; --dim:#555; --bg:#fafafa; --line:#ddd; --acc:#0b5; }
@@ -22,21 +22,31 @@
   .note { border-left:3px solid var(--line); padding-left:1rem; color:var(--dim); }
 </style>
 <main>
-  <h1>qrng-beacon-log</h1>
+  <h1>NotBefore</h1>
   <p class="sub">An hourly, commit-then-reveal, host-attested randomness log.</p>
 
   <p>Each pulse fixes a 32-byte value <em>before</em> a given
-  <a href="https://drand.love/">drand</a> round exists, and publishes it after. The
-  commitment is anchored to RFC&nbsp;3161 timestamps, Rekor and OpenTimestamps, so a
+  <a href="https://drand.love/">drand</a> round exists, and publishes it after — so a
   third party can check that a value was neither predicted in advance nor selected
-  after the fact — <strong>not before, and not after</strong>.</p>
+  after the fact: <strong>not before, and not after</strong>.</p>
+
+  <p class="note">Anchoring, precisely: two independent RFC&nbsp;3161 timestamp tokens
+  are published beside every pulse. Rekor entries with inclusion proofs, and
+  OpenTimestamps submissions, live on the repository's <code>anchors</code> branch and
+  are checked by the CLI from git — <em>this site does not serve them.</em>
+  OpenTimestamps proofs are currently <strong>pending</strong> Bitcoin confirmation.
+  Log checkpoints for independent witnesses are specified in
+  <a href="/TLOG.md">TLOG.md</a> but <strong>not yet enabled</strong>, so
+  <code>/checkpoint</code> is intentionally absent.</p>
 
   <h2>Verify it yourself</h2>
-  <pre>pip install notbefore
-notbefore verify</pre>
-  <p class="note">The verifier is pinned and vendored, runs offline against published
-  keys, and emits a reproducible JSON transcript. It does not require trusting this
-  site.</p>
+  <pre>pip install notbefore py_ecc
+notbefore verify 49</pre>
+  <p class="note">Also needs <code>git</code> and <code>openssl</code> on PATH.
+  Without <code>py_ecc</code> the drand BLS check cannot run and the CLI
+  <strong>fails closed</strong> — it will not print a value it could not fully verify.</p>
+  <p class="note">The verifier is pinned and vendored, reads the log from git as data,
+  and emits a reproducible JSON transcript. It does not require trusting this site.</p>
 
   <h2>Published data</h2>
   <ul>
