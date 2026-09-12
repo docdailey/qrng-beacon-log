@@ -6,6 +6,23 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-012 — copy and probe framed userspace clock-read latency as the timestamp precision bound; the beacon never uses such a read (2026-09-12)
+
+**What was wrong.** `CLAIMS.md`, `HARDWARE.md`, `NOTBEFORE.md` §9 and `TLOG.md` §14 said a pulse stamp was "good to
+27–47 µs" because a userspace PHC read costs that much, and `hosts/stamp_probe.py` spent 41 back-to-back reads
+choosing the "cheapest" one and reporting read-cost statistics. But no software clock read is part of a pulse's
+time: the anchor is the GNSS epoch of an edge captured in i210 silicon (SDP0 EXTTS) and disciplined by `ts2phc`;
+the `CLOCK_REALTIME` field in a time statement is freshness and ordering only. Presenting read latency as the
+precision term understated what the anchor is and confused readers about what is measured (Bill, 2026-09-12: "we
+don't even use the userspace read").
+
+**Fix.** The read-cost sections and figures are removed; the precision model is stated as *receiver epoch error ⊕
+ts2phc discipline ⊕ uncalibrated fixed delays*, with software timestamps labelled freshness. `stamp_probe.py` now
+takes one `CLOCK_REALTIME` reading as freshness, keeps the PHC-vs-REALTIME cross-check (it shows chrony tracking the
+PHC), and no longer reports read costs. Tool hashes in statements change accordingly (informational drift warning).
+The 2026-09-11 k3-vs-p550 read-latency comparison remains in the notebook and in git history; it was a real
+measurement, just not a property of a pulse.
+
 ## ERR-011 — checkpoint anchor statements hashed the whole note, so the first cosignature broke the anchor check (2026-09-12)
 
 **What happened.** The Rekor anchor statement for a checkpoint included `note_sha256` over the entire

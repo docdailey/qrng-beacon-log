@@ -317,8 +317,8 @@ A separate GNSS attester role that signs its own measurement on the receiver hos
 hardware, the receiver's per-epoch sawtooth logged, a stated error budget, and a time host whose statement carries
 its own clock-health guard. Witness operators see plenty of logs; they rarely see one whose time claims are made
 by the instruments and bounded in writing. Lead with that — and **not** with nanosecond figures or the word
-"traceable": `CLAIMS.md` forbids quoting nanoseconds as timestamp accuracy (the userspace read is 27–47 µs; only
-the anchoring epoch is hardware-captured) and forbids any traceability claim. Draft 1's "PTP-locked within ~15 ns
+"traceable": `CLAIMS.md` forbids quoting nanoseconds as timestamp accuracy (only the anchoring epoch is hardware-captured;
+nothing else in a statement is an accuracy claim) and forbids any traceability claim. Draft 1's "PTP-locked within ~15 ns
 of TAI … metrologically traceable" would have been a CLAIMS violation on first contact.
 
 ---

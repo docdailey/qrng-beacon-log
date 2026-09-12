@@ -51,9 +51,11 @@ were stamped from it and are superseded.
 - "chrony reports stratum 1, RefID IPHC, root dispersion ~2.2 µs."
 
 ### We MAY NOT say
-- **Any nanosecond figure as the accuracy of a timestamp.** The PHC tracks GNSS to ~8 ns; a
-  userspace read of it costs **27–47 µs**, and that is the honest bound on a pulse stamp. Quoting
-  "nanosecond-accurate timestamps" would be false.
+- **Any nanosecond figure as the accuracy of a timestamp.** A pulse's time is anchored on the GNSS epoch of an
+  edge captured in hardware (F9T TP1 → i210 EXTTS, `ts2phc`, ~8 ns RMS discipline) with an **uncalibrated**
+  absolute budget; the `CLOCK_REALTIME` fields in statements are freshness and ordering only and are never an
+  accuracy claim. No software clock read is part of the anchor, so read latency is not a precision term and must
+  not be presented as one (ERR-012). Quoting "nanosecond-accurate timestamps" would still be false.
 - **"Accurate to UTC" / "NIST-traceable time" / "calibrated".** Absolute accuracy is uncalibrated —
   antenna cable delay, PPS coax length, i210 SDP0 input latency, and the receiver's own UTC error
   are all unmeasured by us. We claim *precision* and a *traceable discipline chain*.
@@ -67,8 +69,8 @@ were stamped from it and are superseded.
 - **p550 / i210 remains the authoritative time base.** k3 / Milk-V is an **independent witness**, not
   the authority. Its chain starts at a different receiver (LEA-6T via the P550-BMC), so calling it
   "the clock" would silently change which reference a pulse is on.
-- k3 is **faster to read, not more accurate**: 2–3× lower read cost, but 41 ns discipline vs p550's
-  8 ns. Never describe k3 as the better clock — it is the better stamper.
+- k3 is an **independent witness**, not a better clock: 41 ns discipline vs p550's 8 ns. Never describe k3 as
+  the better clock.
 - The published `primary_minus_witness_ns` is **not** an offset between the two time bases. Both
   stamps are fetched over SSH and the delta is dominated by acquisition skew. Never quote it as a
   clock comparison; the pulse states this and carries the skew bound beside it.
@@ -95,7 +97,8 @@ were stamped from it and are superseded.
   quantisation jitter. It is **not** the system's accuracy and **not** the stamp uncertainty.
 - ❌ **Never call this a "2 ns system".** The delivered i210 discipline is 8.3 ns RMS; removing the
   sawtooth in quadrature leaves ~8.0 ns, so the receiver is not the dominant error term. Quote the
-  8.3 ns when describing the clock and the microsecond read cost when describing a stamp.
+  8.3 ns when describing the clock; describe a pulse's time by its hardware-captured anchor and its stated,
+  uncalibrated absolute budget — never by a software clock read.
 - **The sawtooth is logged, not applied.** Never imply the i210 is sawtooth-corrected. If that
   changes, re-measure before changing a word of copy.
 - RAWX `leapS` is **GPS−UTC (18)**. TAI−UTC = leapS + 19 = 37. Publishing leapS as "TAI−UTC" would

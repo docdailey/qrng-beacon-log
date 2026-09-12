@@ -364,7 +364,7 @@ May say:
 - Commit bytes existed at TSA time \(T\) (two operators).
 - \(T < \mathrm{release}(R)\) by ≥ 120 s on a consumed pulse.
 - GNSS envelope from i210 PHC on p550, disciplined to ZED-F9T PPS; quote RMS **with window**.
-- Stamp uncertainty is dominated by userspace PHC read (27–47 µs), not 8 ns discipline.
+- A pulse's time is anchored on the hardware-captured GNSS epoch (F9T TP1 → i210 EXTTS, `ts2phc` ~8 ns RMS); software timestamps in statements are freshness only, never an accuracy claim.
 
 MUST NOT say: nanosecond-accurate timestamps; NIST-traceable UTC; calibrated absolute time.
 

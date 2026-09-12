@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""stamp_probe.py <phc_dev> — take a timestamp and report MEASURED stamp quality.
+"""stamp_probe.py <phc_dev> — report this host's clock state for a time/witness statement.
 
-Stamps from CLOCK_REALTIME (cheap) rather than the PHC (expensive), and cross-checks
-CLOCK_REALTIME against the PHC in the same breath so the choice is justified by data.
+The pulse's time is anchored elsewhere, in hardware (GNSS epoch of the i210-captured edge); nothing here is a
+timestamp accuracy claim. The CLOCK_REALTIME reading is FRESHNESS/ordering; the PHC cross-check shows chrony tracking
+the PHC; the epoch guard, discipline and mesh sections are the clock-health evidence the verifier enforces. (ERR-012)
 """
 import ctypes, ctypes.util, os, sys, time, json, re, statistics, subprocess
 CLOCK_REALTIME = 0
@@ -44,28 +45,23 @@ tai = tai_kernel if tai_kernel > 0 else IERS_TAI_UTC
 tai_source_note = ("kernel adjtimex" if tai_kernel > 0 else
                    "kernel TAI offset unset on this host; using the IERS constant %d (guard fallback)" % IERS_TAI_UTC)
 
-# THE STAMP: 41 back-to-back reads; keep the one with the smallest surrounding delta.
-cand=[]; prev=gettime(CLOCK_REALTIME)
-for _ in range(41):
-    cur=gettime(CLOCK_REALTIME); cand.append((cur-prev,cur)); prev=cur
-cand_sorted=sorted(cand,key=lambda x:x[0])
-stamp_cost, stamp_ns = cand_sorted[0]
-read_cost = st([c[0] for c in cand if c[0]>=0])
+# Freshness reading: one CLOCK_REALTIME read. Not a precision term (ERR-012).
+stamp_ns=gettime(CLOCK_REALTIME)
 
 # Cross-check: does CLOCK_REALTIME actually track the PHC?
 phc_x={}
 try:
     fd=os.open(phc_dev, os.O_RDONLY); clkid=((~fd)<<3)|3
-    d=[]; rt=[]
+    d=[]
     for _ in range(21):
         a=gettime(CLOCK_REALTIME); p=gettime(clkid); b=gettime(CLOCK_REALTIME)
-        d.append(p-(a+b)//2); rt.append(b-a)
+        d.append(p-(a+b)//2)
     ds=sorted(d)
     phc_x={"device":phc_dev,
            "clock_name":open(f"/sys/class/ptp/{os.path.basename(phc_dev)}/clock_name").read().strip(),
            "phc_minus_realtime_median_ns":ds[len(ds)//2],
            "phc_minus_realtime_spread_ns":ds[-1]-ds[0],
-           "phc_read_roundtrip":st(rt)}
+           "meaning":"how closely CLOCK_REALTIME follows the PHC (chrony tracking); not a stamp accuracy"}
     os.close(fd)
 except Exception as e:
     phc_x={"device":phc_dev,"error":str(e)}
@@ -177,9 +173,7 @@ tr=chrony()
 print(json.dumps({
  "host":os.uname().nodename,"kernel":os.uname().release,"arch":os.uname().machine,
  "stamp":{"clock":"CLOCK_REALTIME","utc_ns":stamp_ns,
-          "chosen_read_cost_ns":stamp_cost,"read_cost":read_cost,
-          "why":"CLOCK_REALTIME is disciplined to the PHC by chrony; reading it costs far less "
-                "than reading the PHC, and the discipline error is orders of magnitude below the read cost."},
+          "meaning":"freshness/ordering of this statement only; the pulse's time is the hardware-captured GNSS epoch"},
  "tai_minus_utc_s":tai,"tai_source":f"adjtimex ret={ret} status=0x{tx.status:x}; {tai_source_note}",
  "phc_crosscheck":phc_x,"discipline":disc,"mesh_crosscheck":mesh,"epoch_guard":guard,
  "chrony":{"reference_id":tr.get("Reference ID"),"stratum":tr.get("Stratum"),

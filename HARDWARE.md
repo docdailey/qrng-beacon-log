@@ -84,13 +84,12 @@ stamping with the wrong clock.
 | chrony system ↔ PHC | RMS 8–10 ns, root delay 1 ns, root dispersion 2.2–2.8 µs, Leap Normal | `chronyc tracking`, RefID `IPHC`, stratum 1 |
 | PHC − UTC | **+36.999999354 s** → the PHC holds **TAI** | interleaved `clock_gettime` |
 | TAI − UTC | **37 s**, from `adjtimex` (ret=0) — read, never hardcoded | kernel |
-| **userspace PHC read latency** | **27–47 µs** | interleaved sys/phc/sys, 11 reads |
 | kernel error bounds | maxerror ~500 µs, esterror 0 µs | `adjtimex` |
 
-⚠️ **The nanoseconds are real but they describe the clock, not a timestamp.** Reading the PHC from
-userspace costs tens of microseconds, so a pulse stamp is good to ~27 µs even though the PHC tracks
-GNSS to ~8 ns. Any claim that conflates the two is false. Closing that gap needs hardware
-timestamping of the event itself (an SDP/EXTTS capture), not a better `clock_gettime`.
+⚠️ **The nanoseconds describe the clock and the hardware-captured anchor, not any software timestamp.** A pulse's
+time comes from the GNSS epoch of an edge latched in i210 silicon (SDP0 EXTTS) and disciplined by `ts2phc`; no
+`clock_gettime` is in that path. The `CLOCK_REALTIME` fields a statement also carries are freshness and ordering
+only. (Earlier copies of this file presented userspace clock-read latency as the stamp bound — removed, ERR-012.)
 
 ⚠️ **Precision is not accuracy.** Everything above is how tightly the PHC *tracks the PPS*. Absolute
 accuracy versus UTC(k) is **uncalibrated**: antenna cable delay (69 ns is configured in the F9T but
@@ -384,10 +383,9 @@ chronyc tracking     RMS offset 9 ns | Root delay 1 ns | Root dispersion 2.447 u
 | stamping method | error bound you can defend | why |
 |---|---|---|
 | **GNSS epoch anchor** (what pulses use) | **ns-class**: sawtooth 2.24 ns sd ⊕ ts2phc residual ~8 ns ⊕ uncalibrated path | chrony is **not involved at all** — the edge was latched in i210 silicon and exists whether or not chronyd is running |
-| PHC read (`clock_gettime` on /dev/ptp0) | ns-class clock, but ~15 µs ioctl to ask | same clock chrony reads, minus chrony's servo |
 | `CLOCK_REALTIME` | **µs-class — 2.447 µs** | the 9 ns RMS is chrony's *internal* residual; the defensible published bound is **root dispersion**, which grows between updates |
 
-⚠️ **The important consequence.** Even ignoring read cost entirely, a `CLOCK_REALTIME` stamp is only
+⚠️ **The important consequence.** A `CLOCK_REALTIME` stamp is only
 defensible to chrony's **root dispersion (~2.4 µs)**, because that is the error bound chrony itself
 publishes. The GNSS-epoch anchor bypasses chrony completely and stays ns-class. **chrony is a
 consumer of the i210 PHC, not a link in the anchor chain** — which is exactly why the anchored stamp
@@ -462,23 +460,10 @@ microsecond — which is exactly what the continuous i210-vs-BMC measurement exi
 error** the receiver itself reports. It is a jitter/granularity figure, **not** an accuracy figure
 versus UTC(k). Never quote it as "accurate to 2 ns".
 
-## Clock read latency — measured, apples-to-apples
+## Clock read latency
 
-Identical probe on both hosts: back-to-back `clock_gettime` calls, delta between consecutive reads.
-
-| measurement | p550 (i210) | k3 (Milk-V) | k3 advantage |
-|---|---|---|---|
-| `CLOCK_REALTIME` read cost, p50 | 9,000 ns | **4,667 ns** | 1.9× |
-| `CLOCK_REALTIME` jitter (stdev) | 2,549 ns | **1,170 ns** | 2.2× |
-| `CLOCK_MONOTONIC` read cost, p50 | 9,000 ns | **4,416 ns** | 2.0× |
-| `CLOCK_MONOTONIC` jitter (stdev) | 1,930 ns | **358 ns** | **5.4×** |
-| PHC read cost, p50 | 15,553 ns | **5,810 ns** | 2.7× |
-| PHC interleaved round-trip, p50 | 25,000 ns | **10,166 ns** | 2.5× |
-| PHC round-trip, max | 100,000 ns | **20,832 ns** | 4.8× |
-
-**Bill's "userspace on milkv is much tighter" is correct: 2–3× on read cost, 5.4× on monotonic
-jitter.** It is not the 1000× that "nanoseconds" would imply, but it is real and consistent across
-every metric.
+Removed 2026-09-12 (ERR-012): the beacon never stamps a pulse with a software clock read, so read latency is not a
+precision term. The 2026-09-11 k3-vs-p550 read-latency comparison lives in the notebook and in this file's git history.
 
 ## Clock *quality* runs the other way
 
@@ -490,23 +475,14 @@ every metric.
 
 So **p550 has the better-disciplined clock (≈5×); k3 is the cheaper clock to read (≈2.5×).**
 
-## What actually bounds a timestamp
+## What actually bounds a pulse's time
 
 ```
-stamp uncertainty  ≈  discipline error  ⊕  clock read cost
-                      (8–41 ns)            (4,667–25,000 ns)
+anchor uncertainty  ≈  receiver epoch error (sawtooth 2.2 ns sd, logged)  ⊕  ts2phc discipline (~8 ns RMS)  ⊕  uncalibrated fixed delays (antenna, coax, SDP0 input)
 ```
 
-**The read cost dominates by two to three orders of magnitude.** At the stamp level the difference
-between an 8 ns clock and a 41 ns clock is invisible — it is swamped by the microseconds it takes to
-read either one. Two consequences:
-
-1. **Stamp from `CLOCK_REALTIME`, not from the PHC.** chrony holds the system clock to the PHC at
-   8–10 ns, far below the read cost, so reading the cheap clock loses nothing measurable and saves
-   16 µs on p550 (25,000 ns → 9,000 ns). Pulses 0001–0003 read the PHC directly; that was a
-   self-inflicted 2.8× penalty.
-2. **Getting below ~4 µs needs hardware, not software.** The fix is to hardware-timestamp the pulse
-   event itself (i210 SDP/EXTTS capture), so the stamp never pays a userspace clock read at all.
+The edge is captured in hardware; software touches the record afterwards, not the time. `CLOCK_REALTIME` values in
+statements bound *freshness* (chrony's root dispersion, ~2.4 µs) and are labelled as such.
 
 ## macstu — 192.168.71.75 (archive)
 
