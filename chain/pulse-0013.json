@@ -1,0 +1,261 @@
+{
+  "core": {
+    "version": "0.4",
+    "type": "reveal",
+    "seq": 13,
+    "prev_hash": "c5f21d1284ba45874d405264d321af5f72ce64be5a539886c35fc8df8555b29d",
+    "reveals": {
+      "commit_seq": 12,
+      "commit_pulse_hash": "c5f21d1284ba45874d405264d321af5f72ce64be5a539886c35fc8df8555b29d",
+      "entropy_hex": "0a1e3ed73323030bc31913d98de62b92bd4b0ddd87356106faaa23cc9bb8140a",
+      "entropy_sha256": "a2cf7db2ae91a979a9fd85e7a707e4e964035288591edf5fc4f3cf8429bb8067",
+      "entropy_commitment": "f0a3d8eff1aef56a52a310a854df9b302623c88dca91d47a48bdaddbcf0d55fe",
+      "commit_anchor_utc": "2026-09-12T00:38:40.000000000Z",
+      "commit_anchor_unix_s": 1789173520.0
+    },
+    "external_anchor": {
+      "network": "drand League of Entropy \u2014 quicknet",
+      "beacon_id": "quicknet",
+      "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+      "scheme": "bls-unchained-g1-rfc9380",
+      "period_s": 3,
+      "genesis_time": 1692803367,
+      "round": 32123484,
+      "randomness": "cf9834aec879db904e69cd104b708491d84c0218d798a877a9b4ac42fd82b27b",
+      "signature": "ac2904b23df1271321378ec5c8e82181f7245baec2986bcb9fff17419becdc31c170e522b0d6d145f38fb5b7ddbc9972",
+      "round_release_unix_s": 1789173819,
+      "randomness_equals_sha256_signature": true,
+      "fetched_from": "https://api.drand.sh",
+      "fetch_unix_s": 1789173818.273,
+      "fetch_latency_s": 0.178,
+      "reverify": "curl -s https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/32123484  -> must return this exact round/randomness/signature. randomness == sha256(signature) is checkable offline. Full BLS threshold verification requires a drand client and the chain public key from https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/info",
+      "is_committed_target": true
+    },
+    "attested_value": "449b85ad618915a013b30327f78437f089b2b6cba6d543f410350d32c69d0787",
+    "mix": {
+      "algorithm": "SHA256(domain || entropy || drand_randomness || chain_hash || round_be8)",
+      "domain_tag": "grok_antics/pulse-mix/v1",
+      "preimage_len_bytes": 128,
+      "attested_value": "449b85ad618915a013b30327f78437f089b2b6cba6d543f410350d32c69d0787"
+    },
+    "time": {
+      "utc": "2026-09-12T00:43:40.000000000Z",
+      "tai": "2026-09-12T00:44:17.000000000Z",
+      "tai_minus_utc_s": 37,
+      "tai_source": "GNSS broadcast leapS + 19; cross-checked against p550 kernel adjtimex = 37",
+      "anchor": {
+        "what": "A GNSS second whose TP1 rising-to-on-time edge was captured by the i210 timestamping unit on SDP0 (ts2phc EXTTS). The capture timestamp is taken in hardware at the instant of the edge.",
+        "gps_week": 2435,
+        "gps_tow_ms": 521020000,
+        "tow_time_base": "UTC",
+        "tow_time_base_flag_note": "UBX-TIM-TP flags bit0. When set, towMS is already UTC and no leap subtraction applies; subtracting one anyway is an 18 s error.",
+        "utc_available_flag": true,
+        "week_tow_seconds": 1473209020.0,
+        "utc_unix_s": 1789173820.0,
+        "tai_unix_s": 1789173857.0,
+        "leap_seconds_gps_minus_utc": 18,
+        "tai_minus_utc_s": 37,
+        "leap_note": "leapS is GPS-UTC as broadcast by the satellites; TAI-GPS is a fixed 19 s, so TAI-UTC = leapS + 19. Derived from the constellation, not from the host OS.",
+        "sawtooth_qerr_ns_this_epoch": -2.934,
+        "sawtooth_flags": 11,
+        "sawtooth_meaning": "Deviation of THIS epoch's TP1 edge from its ideal instant, as reported by the receiver for this exact week/tow. Logged, NOT applied to the servo.",
+        "db_row_ts": "2026-09-12 00:43:39.482000",
+        "db_row_minus_anchor_s": -0.518,
+        "anchor_is_independent_of_software_read": true,
+        "sanity_check": "db_row_minus_anchor_s is the lag between the anchoring epoch and the moment the logger wrote the row. UBX-TIM-TP describes the NEXT pulse, so a value within about +/-2 s is expected. A value near 18 s would mean the leap handling is wrong."
+      },
+      "anchor_quality": {
+        "sawtooth_window": "15 min",
+        "samples": 901,
+        "expected_at_1Hz": 900,
+        "coverage_pct": 100.1,
+        "sawtooth_mean_ns": -0.208,
+        "sawtooth_sd_ns": 2.275,
+        "sawtooth_min_ns": -4.04,
+        "sawtooth_max_ns": 3.8,
+        "gnss_fix": {
+          "num_measurements": 30,
+          "constellations": {
+            "GPS": 9,
+            "Galileo": 8,
+            "SBAS": 2,
+            "BeiDou": 11
+          },
+          "rec_stat": "0x01",
+          "rawx_tow_ms": 521033999,
+          "rawx_week": 2435
+        }
+      },
+      "timehat_db": {
+        "host": "nas1",
+        "port": 3309,
+        "schema": "timehat",
+        "receiver_src": "f9t",
+        "tables": [
+          "qerr_stream",
+          "rawx_stream"
+        ]
+      },
+      "clock_chain": {
+        "stamper": "Intel i210 (PCI 01:00.0) PHC /dev/ptp0 on p550; TP1 captured on SDP0 via ts2phc EXTTS",
+        "reference": "u-blox ZED-F9T TP1 PPS, falling edge, 100 ms",
+        "i210_discipline": {
+          "servo": "ts2phc",
+          "reference": "u-blox ZED-F9T TP1 PPS -> i210 SDP0",
+          "last_offset_ns": -8,
+          "state": "s2",
+          "freq_ppb": -52826
+        },
+        "bmc_crosscheck": {
+          "what": "i210 PHC continuously measures the P550-BMC PHC (ptp4l free_running=1, slaveOnly=1 -> read-only instrument; it never steers the i210)",
+          "monitor": "bmc-phc-monitor.service",
+          "samples": 6,
+          "window_s": 20,
+          "offset_ns_min": 21,
+          "offset_ns_max": 46,
+          "offset_ns_rms": 31.9,
+          "offset_ns_stdev": 9.8,
+          "path_delay_ns": 446,
+          "servo_states": [
+            "s0"
+          ],
+          "bmc_announced_health": "clockClass 6 (GPS-locked), accuracy 100ns, source GPS, UTC 37"
+        },
+        "epoch_guard": {
+          "check": "PHC - CLOCK_REALTIME must equal TAI-UTC (+37 s) within 0.5 s",
+          "why": "lab notebook entry 220: a link bounce wipes the i210 epoch while ts2phc still reports a healthy lock. Servo metrics cannot detect this; only this difference can.",
+          "self_heal": "iphc-epoch-check.service via udev 99-iphc-epoch.rules on enp1s0 change",
+          "phc_minus_realtime_minus_tai_s": -2e-06,
+          "epoch_ok": true,
+          "iphc_epoch_check_status": "2026-09-10 21:25:01 UTC PHC-REALTIME +36.999985s, err -0.000015s - epoch OK, no action\n2026-09-10 21:25:37 UTC PHC-REALTIME -0.005700s, err -37.005700s (SIMULATED) - EPOCH LOST, restarting ts2phc-f9t.service\n2026-09-10 21:25:37 UTC --dry-run, not restarting",
+          "chrony_iphc_line": "#* IPHC                          0   0   377     0     -2ns[   -3ns] +/- 1000ns",
+          "chrony_selects_iphc": true
+        },
+        "chrony_primary": {
+          "reference_id": "49504843 (IPHC)",
+          "stratum": "1",
+          "rms_offset": "0.000000010 seconds",
+          "root_delay": "0.000000001 seconds",
+          "root_dispersion": "0.000002485 seconds",
+          "leap_status": "Normal"
+        },
+        "chrony_witness": {
+          "reference_id": "50484300 (PHC)",
+          "stratum": "1",
+          "rms_offset": "0.000000016 seconds",
+          "root_delay": "0.000000001 seconds",
+          "root_dispersion": "0.000001900 seconds",
+          "leap_status": "Normal"
+        },
+        "witness_discipline": {
+          "servo": "ptp4l",
+          "reference": "P550-BMC GPS GM (domain 44, UDPv4)",
+          "samples": 60,
+          "offset_ns_min": -79,
+          "offset_ns_max": 64,
+          "offset_ns_rms": 36.2,
+          "offset_ns_stdev": 36.2,
+          "path_delay_ns_last": 895,
+          "states": [
+            "s2"
+          ]
+        }
+      },
+      "orchestration": {
+        "note": "Software latency of assembling this record. A FRESHNESS limit, never added to the anchor.",
+        "primary_observation": {
+          "host": "p550",
+          "observed_utc": "2026-09-12T00:43:40.613894573Z",
+          "read_cost_ns": 10000,
+          "acquisition": {
+            "local_pre_ns": 1789173818451534682,
+            "local_post_ns": 1789173840840660957,
+            "acquisition_window_ns": 22389126275
+          }
+        },
+        "witness_observation": {
+          "host": "k3",
+          "observed_utc": "2026-09-12T00:43:39.571996892Z",
+          "read_cost_ns": 5416,
+          "acquisition": {
+            "local_pre_ns": 1789173818451980751,
+            "local_post_ns": 1789173839690472695,
+            "acquisition_window_ns": 21238491944
+          }
+        },
+        "observation_minus_anchor_s": 0.614
+      },
+      "precision": {
+        "model": "anchored",
+        "anchor_uncertainty": {
+          "receiver_sawtooth_sd_ns": 2.275,
+          "sawtooth_this_epoch_ns": -2.934,
+          "sawtooth_applied_in_servo": false,
+          "phc_sawtooth_residual_note": "This epoch's TP1 edge fell -2.934 ns from ideal (sign: corrected = raw + qErr, notebook 212). The servo does not correct it; it is reported so a consumer can.",
+          "i210_servo_residual_ns_rms": -8,
+          "dominant_term": "ts2phc servo residual plus uncalibrated path delays",
+          "not_dominant": "userspace clock read cost - it does not enter the anchor"
+        },
+        "calibrated_terms": [
+          "GNSS antenna cable delay 69 ns, MEASURED (notebook 213/215)",
+          "BMC EXTI+PHC-read latency trimmed via ptptgt 900 (notebook 214)"
+        ],
+        "uncalibrated_terms": [
+          "PPS coax length F9T TP1 -> i210 SDP0",
+          "i210 SDP0 input latency",
+          "i210-monitor path asymmetry, bounded +/-445 ns",
+          "6T-vs-F9T receiver difference"
+        ],
+        "absolute_utc_limit": "F9T is L1-ONLY today (0 signals on L2): absolute UTC carries an uncorrected ionospheric term. L1/L2 (TW3972) is roadmap.",
+        "absolute_accuracy_claimed": false
+      }
+    },
+    "timeline": {
+      "commit_anchor_unix_s": 1789173520.0,
+      "target_round_release_unix_s": 1789173819,
+      "reveal_anchor_unix_s": 1789173820.0,
+      "commit_before_round_by_s": 299.0,
+      "reveal_after_round_by_s": 1.0,
+      "reading": "commit_before_round_by_s > 0 means the entropy was fixed before the round existed; exact timing is what makes both edges of this window checkable rather than asserted."
+    }
+  },
+  "pulse_hash": "10d9501c2f56df8ef651e25bb8fbc825160974870d6013e20976a4a64c8375ed",
+  "signatures": {
+    "entropy": {
+      "signer": "protectli",
+      "role": "entropy_signer",
+      "alg": "ed25519",
+      "key_id": "1fc857c9f439ab9a",
+      "public_key_b64": "a2ANhyUVHQGpi1mQRKG+L7siT0ptYH9/MpLQ/UunILA=",
+      "sig_b64": "purYX2h4FS8fcg3d2H7WOCznRJNY32sD3Ga08VwufVpSZOya/GNHkBr52l1gaFioGL7iKb2jZ4yqDpZy+iPaCQ=="
+    },
+    "time": {
+      "signer": "p550",
+      "role": "time_attester",
+      "alg": "ed25519",
+      "key_id": "6dae96e8faa9678a",
+      "public_key_b64": "XAsLFvZJFrZvYnqg7+t9AN8qgppLCfMa+iOQJc0f8U8=",
+      "sig_b64": "TXJbkDzzN/EV2Nit8DuFfzNd23IOB+vYAIaIBRUW5l8X6p9WVMU2EeUcrlHkBlVPSGuF84itK4V1yy5A5kjVBw=="
+    },
+    "time_witness": {
+      "signer": "k3",
+      "role": "time_witness",
+      "alg": "ed25519",
+      "key_id": "817a5238d784c4b4",
+      "public_key_b64": "Y7uoa5a7ctiX+kN3P9SEbRbRKX49fF1thOUSqj+PmT0=",
+      "sig_b64": "NoAa5HdOIpBkGfAKY0cDRz/3fdQ5VJguN8zvBhJJmgvy4OlSaIWNP3HCa8Jp8zX3Qi+jSnmwjD2cwf9gMvzlCw=="
+    }
+  },
+  "disclosure": {
+    "signed_payload": "sha256 of canonical(core); all signatures cover the same digest",
+    "time_precision_vs_accuracy": "We claim precision and a traceable discipline chain, NOT calibrated absolute accuracy versus UTC(k).",
+    "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md.",
+    "attested_value_is_the_output": "Use core.attested_value.",
+    "what_this_proves": "The attested value was unknowable to ANYONE - the publisher included - before drand round 32123484 released, and the publisher could not have chosen the entropy after seeing that round, because sha256(entropy) was committed in pulse 12 beforehand.",
+    "residual_assumptions": [
+      "the commit pulse was PUBLISHED (not merely signed) before the round - see PUBLICATION.md",
+      "drand's threshold network is honest (League of Entropy, >= threshold of independent operators)",
+      "SHA-256 is preimage resistant"
+    ]
+  }
+}
