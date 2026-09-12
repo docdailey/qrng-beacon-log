@@ -210,6 +210,9 @@ async function handle(req, env) {
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
+    if (url.hostname === "www.notbefore.net") {                                    // one canonical host: www -> apex, path and query kept
+      url.hostname = "notbefore.net"; return Response.redirect(url.toString(), 301);
+    }
     if (url.pathname === "/decisions" || url.pathname.startsWith("/decisions/")) {
       try { return await handle(req, env); } catch (e) { return json({ error: "internal: " + (e.message || String(e)) }, 500); }
     }
