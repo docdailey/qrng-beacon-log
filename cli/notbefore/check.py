@@ -34,7 +34,7 @@ class CheckResult:
 def _run(args, cwd=None):
     r = subprocess.run([sys.executable, *args], cwd=cwd, capture_output=True, text=True); return r.returncode, r.stdout + r.stderr
 
-def check_pair(seq: int, src: LogSource, refetch=True, anchors=True, verbose=False) -> CheckResult:
+def check_pair(seq: int, src: LogSource, refetch=True, anchors=True, verbose=False, site_url=None) -> CheckResult:
     R = CheckResult(seq); R.log_git_sha, R.log_ref = src.log_git_sha, (src.ref or "working tree")
     knc = known_noncompliant()
     # ---- eligibility (§6) before anything is executed
@@ -74,7 +74,7 @@ def check_pair(seq: int, src: LogSource, refetch=True, anchors=True, verbose=Fal
         R.anchors = _check_anchors(R, src, (seq - 1, seq), rc_, refetch)
     else: R.anchors = "skipped (--no-anchors)"
     try:
-        from . import tlogcheck; R.tlog = tlogcheck.check(src, (seq - 1, seq), R, refetch)
+        from . import tlogcheck; R.tlog = tlogcheck.check(src, (seq - 1, seq), R, refetch, site_url)
     except Exception as e: R.say(True, f"transparency-log check unavailable: {e}", "WARN"); R.tlog = "error"
     return R
 

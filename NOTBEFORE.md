@@ -311,7 +311,7 @@ notbefore shuffle <seq> --purpose <P> <file>
 notbefore split   <seq> --purpose <P> --frac 0.8 <file>
 ```
 
-- `verify` prints PASS/FAIL lines, exit 0/1.
+- `verify` prints PASS/FAIL lines to **stderr**, exit 0/1. Every payload (`value`, `seed`, shuffled lines) is **stdout only**, so `V=$(notbefore value N)` is the bare hex. `-q` suppresses PASS/INFO lines; failures still print and exit 1.
 - `value` prints \(V\) hex only if verify would pass; else exit 1, no stdout hex.
 - `seed` prints \(S\) hex under the same rule.
 - Implementation MAY wrap the published `verify.py` rather than reimplement BLS.

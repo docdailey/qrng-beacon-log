@@ -29,7 +29,30 @@ def _chain_leaves_from_source(src):
         leaves.append(T.canonical(j))
     return leaves
 
-def check(src, seqs, R, refetch=True):
+def fetch_site_checkpoint(url, timeout=15):
+    import urllib.request
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "notbefore-cli"}), timeout=timeout) as r: return r.read().decode()
+
+def cross_check_site(R, ident, pub_raw, git_note, git_size, git_root, leaves, url=None):
+    """The site (notbefore.net) and git are two publication surfaces of the same log. Fetch the site's checkpoint and
+    require it to be the same head or an append-only relative of the git head. Unreachable -> WARN; different -> FAIL."""
+    origin = ident["origin"]; url = url or ident.get("site_checkpoint_url")
+    if not url: return "no site"
+    try: note = fetch_site_checkpoint(url)
+    except Exception as e: R.say(True, f"site checkpoint {url} not fetched ({str(e)[:80]}); git head stands alone", "WARN"); return "unreachable"
+    ok, text = T.verify_note(note, origin, pub_raw)
+    if not ok: R.say(False, f"site checkpoint at {url} does NOT verify under {origin}'s key"); return "bad site signature"
+    o, ssize, sroot = T.parse_checkpoint(text)
+    if note == git_note: R.say(True, f"site {url} serves the same checkpoint as git (size {ssize})"); return "same"
+    lo, hi = (ssize, git_size) if ssize <= git_size else (git_size, ssize)
+    if hi > len(leaves): R.say(False, f"site checkpoint size {ssize} exceeds the pulses available ({len(leaves)}); cannot reconcile"); return "site ahead"
+    oroot, nroot = (sroot, git_root) if ssize <= git_size else (git_root, sroot)
+    cons = T.verify_consistency(lo, hi, T.consistency_proof(lo, leaves[:hi]), oroot, nroot)
+    R.say(cons, f"site checkpoint (size {ssize}) and git checkpoint (size {git_size}) are consistent heads of one log" if cons else
+               f"SPLIT VIEW between publication surfaces: site {url} (size {ssize}, root {sroot.hex()[:16]}…) vs git (size {git_size}, root {git_root.hex()[:16]}…) are not append-only relatives")
+    return "consistent" if cons else "SPLIT VIEW"
+
+def check(src, seqs, R, refetch=True, site_url=None):
     """Appends [PASS]/[FAIL]/[WAIT] lines to R (a CheckResult). Returns a status string."""
     ident = identity()
     if not ident: R.say(True, "transparency log: no checkpoint identity vendored in this release — skipped", "INFO"); return "no identity"
@@ -53,6 +76,7 @@ def check(src, seqs, R, refetch=True):
             inc = T.verify_inclusion(T.leaf_hash(leaves[i]), i, size, T.inclusion_path(i, leaves[:size]), root)
             R.say(inc, f"pulse {s:04d} is included in the checkpointed tree (leaf {i}, RFC 6962 inclusion proof)")
         else: R.say(True, f"pulse {s:04d} is newer than the published checkpoint (size {size}); inclusion not yet provable", "WAIT")
+    if refetch: cross_check_site(R, ident, pub_raw, note, size, root, leaves, site_url)
     # cached head: the client's own split-view detector
     hp = os.path.join(heads_dir(), re.sub(r"[^A-Za-z0-9._-]", "_", origin) + ".checkpoint")
     status = "ok"

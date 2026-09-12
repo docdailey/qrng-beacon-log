@@ -359,4 +359,6 @@ of TAI … metrologically traceable" would have been a CLAIMS violation on first
 | CI: checkpoint required once enabled, size == pulses, consistent with the previous one | implemented |
 | `notbefore checkpoint`; `verify` proves the pair's inclusion and checks consistency with the head this machine last saw | implemented; ships as 0.4.0 with the first checkpoint |
 | witness submission (`tlog-witness`) | after the above; needs operators to configure the log (outreach is HELD) |
-| `notbefore.net` serving `/checkpoint`, `/checkpoints/NNNNNN`, the spec and install line | Bill is standing the site up; content can be published from this repo by CI |
+| `notbefore.net` serving the repository root statically (Workers Static Assets, `wrangler.jsonc`; `/checkpoint` and `/checkpoints/*` text/plain, CORS-open) | **live 2026-09-12** (Bill); `/checkpoint` answers 404 until the first checkpoint is committed |
+| client cross-check: `https://notbefore.net/checkpoint` must be the git head or an append-only relative of it | implemented (`notbefore` ≥ 0.3.1, `--checkpoint-url`) |
+| verification over HTTPS alone (no git clone): needs served inclusion/consistency material — `c2sp.org/tlog-tiles` or CI-published proofs | next; today the site is a publication and cross-check surface, git is the verification source |

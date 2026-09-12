@@ -17,6 +17,11 @@ notbefore shuffle 41 --purpose split:iris-csv:v3 rows.txt      # deterministic s
 notbefore split 41 --purpose split:iris-csv:v3 --frac 0.8 rows.txt
 ```
 
+**Streams, for scripting.** Payloads go to **stdout only**; the verification transcript goes to **stderr**. So
+`V=$(notbefore value 45)` is the 64-hex value and nothing else, and `notbefore shuffle … > out.txt` is clean. `-q`
+silences the PASS/INFO lines; FAIL/WARN lines and a non-zero exit still report a bad pair. `--json` gives a
+machine-readable result on stdout.
+
 `seed`, `shuffle` and `split` write a **transcript** JSON (`notbefore-<seq>-<purpose>.json`) — the engineering
 artifact that lets anyone reproduce the result from the public log.
 
@@ -24,6 +29,11 @@ artifact that lets anyone reproduce the result from the public log.
 expected host configuration are **vendored inside this package**, pinned at a named commit of the log repository
 (`notbefore --version` prints it). The CLI executes only those files; the log is read as data. Updating the
 verifier means updating the package — deliberately.
+
+**Two publication surfaces.** The log is read from git (a cached clone of the repository, or `--log-dir`);
+`https://notbefore.net` serves the same repository statically. Once checkpoints are enabled, `verify` also fetches
+`https://notbefore.net/checkpoint` and requires it to be the same head as git's, or an append-only relative of it —
+two different heads under the log's key is a split between surfaces and fails loudly (`--checkpoint-url` overrides).
 
 Eligible pairs start at 0020/0021 (0026/0027 preferred, execution enforced). `verify 19` fails by design (ERR-007).
 Pulses 0001–0041 carry retroactive anchors (2026-09-12 12:47 UTC); from 0042 anchors are contemporaneous.

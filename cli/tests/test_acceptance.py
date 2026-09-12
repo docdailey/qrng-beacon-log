@@ -102,3 +102,27 @@ def test_15_client_side_split_view_detector(tmp_path, monkeypatch):
     leaves3 = T.chain_leaves(str(log / "chain")); publish(n + 1, leaves3)      # a checkpoint that honestly covers the FORKED history
     R4 = C.CheckResult(23); st4 = TC.check(NL.LogSource(log_dir=str(log)), (22, 23), R4, refetch=False)
     assert st4 == "SPLIT VIEW" and any("SPLIT VIEW / ROLLBACK" in l for l in R4.lines), R4.lines
+def test_16_streams_and_quiet_mode():
+    """Payload on stdout only; transcript on stderr; -q keeps stderr empty on success and still fails loudly on a bad pair."""
+    rc, out, err = nb("value", "23"); assert rc == 0 and len(out.strip()) == 64 and "\n" not in out.strip() and "[PASS]" in err
+    rc, out, err = nb("-q", "value", "23"); assert rc == 0 and len(out.strip()) == 64 and err.strip() == "", err
+    rc, out, err = nb("value", "23", "-q"); assert rc == 0 and err.strip() == ""          # flag after the subcommand too
+    rc, out, err = nb("-q", "value", "19"); assert rc == 1 and out.strip() == "" and "[FAIL]" in err and "NOT VERIFIED" in err
+def test_17_site_cross_check(tmp_path, monkeypatch):
+    """The checkpoint served by the site must be the git head or an append-only relative of it."""
+    import notbefore.tlogcheck as TC, notbefore.check as C, notbefore.log as NL
+    T = TC.T; monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    log = tmp_path / "log"; (log / "chain").mkdir(parents=True)
+    for f in sorted(os.listdir(os.path.join(LOG, "chain"))):
+        if f.endswith(".json") and "tsa" not in f: shutil.copy2(os.path.join(LOG, "chain", f), log / "chain" / f)
+    priv = T.Ed25519PrivateKey.generate(); pub_raw = priv.public_key().public_bytes(T.serialization.Encoding.Raw, T.serialization.PublicFormat.Raw); origin = "test.invalid/log"
+    monkeypatch.setattr(TC, "identity", lambda: {"origin": origin, "public_key_file": "keys/x.pub", "enabled": True}); monkeypatch.setattr(T, "load_pub_raw", lambda p: pub_raw)
+    leaves = T.chain_leaves(str(log / "chain")); n = len(leaves)
+    def note(size, lv): return T.sign_note(T.checkpoint_body(origin, size, T.mth(lv[:size])), origin, priv)
+    (log / "checkpoint").write_text(note(n, leaves))
+    site = tmp_path / "site.txt"
+    site.write_text(note(n, leaves)); R = C.CheckResult(23); TC.check(NL.LogSource(log_dir=str(log)), (23,), R, refetch=True, site_url=site.as_uri()); assert any("serves the same checkpoint" in l for l in R.lines), R.lines
+    site.write_text(note(n - 5, leaves)); R = C.CheckResult(23); TC.check(NL.LogSource(log_dir=str(log)), (23,), R, refetch=True, site_url=site.as_uri()); assert R.ok and any("consistent heads of one log" in l for l in R.lines), R.lines
+    forked = list(leaves); forked[3], forked[4] = forked[4], forked[3]
+    site.write_text(note(n, forked)); R = C.CheckResult(23); TC.check(NL.LogSource(log_dir=str(log)), (23,), R, refetch=True, site_url=site.as_uri()); assert not R.ok and any("SPLIT VIEW between publication surfaces" in l for l in R.lines), R.lines
+
