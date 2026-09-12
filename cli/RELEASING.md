@@ -100,3 +100,11 @@ split of pulse 45 byte-for-byte (A/B sha256 unchanged from the 0.4.0 run). 0.3.0
 Worker deployment). Confirmed by a fresh-venv install: `keygen` → signed `plan --no-timestamp` → `execute
 --allow-unregistered` reproduces the rule-selected pulse with `decision_log.status: disabled`, and `verify 61` passes.
 
+`notbefore 0.8.1` — tag `cli-v0.8.1` on `6f5dd2e`, verifier vendored at `1548d6d`, workflow run 34725882908, published
+2026-09-12 23:40 UTC; decision log ENABLED. Confirmed from a fresh venv against PyPI: `keygen` → `plan` signed,
+timestamped and registered live (entry 3, AUTHORITATIVE, receipt verified at checkpoint size 4) → `execute` refused
+on late tokens as designed → a `--no-log` dry run reproduced reveal 0023 → `verify 61` passed. **Lesson, again:** the
+first 0.8.1 tag was withdrawn (run cancelled, tag deleted before publish) because a `git pull --rebase` after
+vendoring had moved the commit, leaving VENDORED.json naming a sha that never reached origin — vendor AFTER the
+rebase, immediately before the push, every time.
+
