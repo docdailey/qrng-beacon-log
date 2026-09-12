@@ -30,6 +30,7 @@ def build_parser():
     g.add_argument("--offline", action="store_true", help="no network: no fetch, no drand/Rekor refetch (BLS + proofs still verify offline)")
     g.add_argument("--no-anchors", action="store_true", help="skip the Rekor/OpenTimestamps anchor check")
     g.add_argument("--checkpoint-url", help="cross-check the log's checkpoint served over HTTPS (default: the vendored identity's site, https://notbefore.net/checkpoint)")
+    g.add_argument("--witness-quorum", type=int, default=0, help="require this many INDEPENDENT witness cosignatures on the checkpoint (default 0: report only; same-sponsor witnesses never count)")
     g.add_argument("--lock", help="read log_git_sha from this notbefore.lock (written by `pin`) and verify at exactly that log commit; ./notbefore.lock is used automatically if present")
     ap.add_argument("-v", "--verbose", action="store_true", help="print the vendored verifier's full output")
     ap.add_argument("-q", "--quiet", action="store_true", help="suppress the PASS/INFO lines on stderr; FAIL/WARN lines and a non-zero exit still report a bad pair. Payloads were always stdout-only")
@@ -110,8 +111,9 @@ def _write_transcript(a, t, slug):
 
 def main(argv=None):
     a = build_parser().parse_args(argv)
-    for k, d in (("verbose", False), ("quiet", False), ("json", False), ("offline", False), ("no_anchors", False), ("seq", 0), ("checkpoint_url", None), ("transcript", None)):
+    for k, d in (("verbose", False), ("quiet", False), ("json", False), ("offline", False), ("no_anchors", False), ("seq", 0), ("checkpoint_url", None), ("transcript", None), ("witness_quorum", 0)):
         if not hasattr(a, k): setattr(a, k, d)
+    if getattr(a, "witness_quorum", 0): os.environ["NOTBEFORE_WITNESS_QUORUM"] = str(a.witness_quorum)
     lock = a.lock or ("notbefore.lock" if os.path.exists("notbefore.lock") and a.cmd != "pin" else None)
     if lock and not a.log_ref:
         try: a.log_ref = json.load(open(lock))["log_git_sha"]; _err(f"pinned by {lock}: log {a.log_ref[:12]}")

@@ -259,3 +259,10 @@ were stamped from it and are superseded.
 - ❌ Never present the checkpoint as proof that a pulse is *honest*; it proves the pulse is in *this* log and that the
   log did not rewrite or fork its past relative to a head someone holds.
 
+## Added 2026-09-12 — cosignatures (binding)
+
+- ✅ Say: "checkpoints are cosigned by `notbefore.net/witness/ryzen`, a witness we operate ourselves (same sponsor,
+  second system); it proves the witness protocol path works, not independence."
+- ❌ "Witnessed", "independently witnessed", "cosigned by the Witness Network" — not until an operator we do not
+  control has cosigned; then name them. `notbefore verify --witness-quorum N` counts only independent witnesses.
+

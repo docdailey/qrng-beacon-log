@@ -357,7 +357,8 @@ of TAI … metrologically traceable" would have been a CLAIMS violation on first
 | Rekor-anchoring of each checkpoint (`anchors/checkpoint-NNNNNN.*`, expected by the split-view check) | implemented |
 | CI: checkpoint required once enabled, size == pulses, consistent with the previous one | implemented |
 | `notbefore checkpoint`; `verify` proves the pair's inclusion and checks consistency with the head this machine last saw | **0.4.0** (2026-09-12): identity vendored and enabled; inclusion, site cross-check and cached-head consistency active on every `verify` |
-| witness submission (`tlog-witness`) | after the above; needs operators to configure the log (outreach is HELD) |
+| witness submission (`tlog-witness` v1 client in `tlog.py`; cosignatures appended by the log at publish) | **implemented 2026-09-12**; first cosigned checkpoint 000051 (17:2x UTC) |
+| a witness that cosigns us | **same-sponsor** `notbefore.net/witness/ryzen` (`witness/nbwitness.py`, LAN) — a second system, not independence; **independent witnesses: Witness Network request drafted in `WITNESS-ONBOARDING.md`, sending is Bill's call** |
 | `notbefore.net` serving the repository root statically (Workers Static Assets, `wrangler.jsonc`; `/checkpoint` and `/checkpoints/*` text/plain, CORS-open) | **live 2026-09-12** (Bill); `/checkpoint` answers 404 until the first checkpoint is committed |
 | client cross-check: `https://notbefore.net/checkpoint` must be the git head or an append-only relative of it | implemented (`notbefore` ≥ 0.3.1, `--checkpoint-url`) |
 | verification over HTTPS alone (no git clone): needs served inclusion/consistency material — `c2sp.org/tlog-tiles` or CI-published proofs | next; today the site is a publication and cross-check surface, git is the verification source |

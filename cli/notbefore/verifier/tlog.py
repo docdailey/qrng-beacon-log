@@ -14,7 +14,10 @@ NOT the archive tree in merkle/ (that one promotes odd nodes and has a different
   tlog.py verify <checkpoint-file> --origin O --pub P.pub [--old <older-checkpoint>]
                                       verify signature, recompute root at its size, and consistency with an older one
   tlog.py keygen <path>               new Ed25519 checkpoint key (PEM) + .pub
-  tlog.py publish-checkpoint          sign the current head per keys/CHECKPOINT.json -> checkpoint + checkpoints/NNNNNN (append-only self-check)
+  tlog.py publish-checkpoint          sign the current head per keys/CHECKPOINT.json -> checkpoint + checkpoints/NNNNNN (append-only self-check), then ask the witnesses in keys/WITNESSES.json to cosign
+  tlog.py cosign                      ask the witnesses to cosign the CURRENT checkpoint (back-fill)
+  tlog.py verifier-key                this log's key in c2sp verifier-key form (what a witness operator configures)
+  tlog.py verify ... [--witness-quorum N]
   tlog.py selftest                    RFC 6962 / CT test vectors and signed-note round trip
 """
 import sys, os, json, base64, hashlib, glob, re
@@ -123,6 +126,80 @@ def load_priv(path): return serialization.load_pem_private_key(open(path, "rb").
 def load_pub_raw(path):
     k = serialization.load_pem_public_key(open(path, "rb").read()); return k.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
 
+# ---------------------------------------------------------------- witnesses (c2sp.org/tlog-witness@v1.0.0, tlog-cosignature@v1.0.1)
+COSIG_ALG, NOTE_ALG = b"\x04", b"\x01"                          # Ed25519 cosignature v1 / plain Ed25519 note key
+def cosig_key_id(name, pub_raw): return H(name.encode() + b"\n" + COSIG_ALG + pub_raw)[:4]
+def verifier_key_string(name, pub_raw, alg=NOTE_ALG):
+    """c2sp.org/signed-note verifier key: name+<8 hex of the 4-byte key hash>+base64(alg || pubkey)."""
+    kh = H(name.encode() + b"\n" + alg + pub_raw)[:4]
+    return f"{name}+{kh.hex()}+{base64.b64encode(alg + pub_raw).decode()}"
+def parse_verifier_key(s):
+    name, kh, b64 = s.strip().split("+", 2); blob = base64.b64decode(b64)      # base64 may itself contain "+": split on the first two only
+    if H(name.encode() + b"\n" + blob)[:4].hex() != kh: raise ValueError("verifier key hash mismatch")
+    return name, blob[0], blob[1:]
+def cosign(text, name, priv, ts=None):
+    """A witness's cosignature over a checkpoint TEXT (the three lines): message = 'cosignature/v1\\ntime <ts>\\n' + text."""
+    import time as _t; ts = int(ts if ts is not None else _t.time())
+    pub_raw = priv.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    sig = priv.sign(f"cosignature/v1\ntime {ts}\n".encode() + text.encode())
+    return "\u2014 " + name + " " + base64.b64encode(cosig_key_id(name, pub_raw) + ts.to_bytes(8, "big") + sig).decode() + "\n"
+def verify_cosignatures(note, cosigners):
+    """cosigners: {name: pub_raw}. Returns [(name, timestamp)] of cosignature lines that verify; unknown names are ignored."""
+    text, sigs = parse_note(note); out = []
+    for name, kid, blob in sigs:
+        pub_raw = cosigners.get(name)
+        if pub_raw is None or kid != cosig_key_id(name, pub_raw) or len(blob) != 72: continue
+        ts = int.from_bytes(blob[:8], "big")
+        try: Ed25519PublicKey.from_public_bytes(pub_raw).verify(blob[8:], f"cosignature/v1\ntime {ts}\n".encode() + text.encode()); out.append((name, ts))
+        except InvalidSignature: pass
+    return out
+def witness_submit(url, note, leaves, timeout=8):
+    """POST /add-checkpoint per tlog-witness v1: 'old <n>' + consistency proof + blank + note. Handles the 409 size dance.
+    Returns the cosignature lines the witness returned ('' if it declined)."""
+    import urllib.request, urllib.error
+    text, _ = parse_note(note); _, size, root = parse_checkpoint(text); old = 0
+    for attempt in range(4):
+        proof = consistency_proof(old, leaves[:size]) if 0 < old < size else []
+        body = f"old {old}\n" + "".join(base64.b64encode(h).decode() + "\n" for h in proof) + "\n" + note
+        req = urllib.request.Request(url.rstrip("/") + "/add-checkpoint", data=body.encode(), method="POST", headers={"Content-Type": "text/plain; charset=utf-8"})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r: return r.read().decode()
+        except urllib.error.HTTPError as e:
+            if e.code == 409:
+                try: known = int(e.read().decode().strip().split()[0])
+                except Exception: raise
+                if known == old or known > size: raise RuntimeError(f"witness knows size {known} (ours {size}); {'stale checkpoint' if known > size else 'no progress'}")
+                old = known; continue
+            raise RuntimeError(f"witness HTTP {e.code}: {e.read().decode()[:120]}")
+    raise RuntimeError("witness: too many size retries")
+def witnesses(root_dir=HERE):
+    p = os.path.join(root_dir, "keys", "WITNESSES.json")
+    return json.load(open(p)).get("witnesses", []) if os.path.exists(p) else []
+def cosigners_from(root_dir=HERE):
+    out = {}
+    for w in witnesses(root_dir):
+        try:
+            name, alg, pub = parse_verifier_key(w["verifier_key"])
+            if alg == 4: out[name] = pub
+        except Exception as e: sys.stderr.write(f"WITNESSES.json: cannot parse verifier key for {w.get('name')}: {e}\n")
+    return out
+def gather_cosignatures(note, leaves, root_dir=HERE, log=None):
+    """Ask every configured witness; append the cosignature lines that VERIFY; never raise (a witness outage must not delay a pulse)."""
+    cos = cosigners_from(root_dir); added = []
+    for w in witnesses(root_dir):
+        if not w.get("url") or not w.get("enabled", True): continue
+        try:
+            lines = witness_submit(w["url"], note, leaves, timeout=int(w.get("timeout_s", 8)))
+            good = verify_cosignatures(note.rstrip("\n") + "\n" + lines, cos)
+            names = {n for n, _ in good}
+            for l in lines.splitlines():
+                m = re.match(r"^\u2014 (\S+) ", l)
+                if m and m.group(1) in names and l + "\n" not in note: note = note + l + "\n"; added.append(m.group(1))
+            if log: log(f"witness {w['name']}: {'cosigned' if added and w['name'] in added else 'no valid cosignature (' + (lines.strip()[:60] or 'empty') + ')'}")
+        except Exception as e:
+            if log: log(f"witness {w.get('name', w.get('url'))}: {str(e)[:120]}")
+    return note, added
+
 # ---------------------------------------------------------------- publishing (called by beacon-cycle.publish on think)
 def identity(root_dir=HERE):
     """keys/CHECKPOINT.json: origin, public key file, enabled flag. Returns None when absent."""
@@ -152,6 +229,7 @@ def write_checkpoint(root_dir=HERE, key_path=None):
         if not verify_consistency(psize, n, consistency_proof(psize, leaves), proot, root): raise SystemExit(f"new head (size {n}) is NOT consistent with checkpoint {psize} — refusing to sign a fork")
         if psize == n and proot == root: return n, root.hex(), prev            # nothing new; idempotent
     note = sign_note(checkpoint_body(origin, n, root), origin, priv)
+    note, cosigned_by = gather_cosignatures(note, leaves, root_dir, log=lambda m: sys.stderr.write(m + "\n"))
     os.makedirs(os.path.join(root_dir, "checkpoints"), exist_ok=True)
     out = os.path.join(root_dir, "checkpoints", f"{n:06d}")
     if os.path.exists(out) and open(out).read() != note:
@@ -159,6 +237,15 @@ def write_checkpoint(root_dir=HERE, key_path=None):
         if parse_checkpoint(t2)[2] != root: raise SystemExit(f"{out} exists with a DIFFERENT root — refusing")
     open(out, "w").write(note); open(os.path.join(root_dir, "checkpoint"), "w").write(note)
     return n, root.hex(), out
+def cosign_existing(root_dir=HERE):
+    """Back-fill: ask the witnesses to cosign the CURRENT published checkpoint (no new head). Returns the names added."""
+    ident = identity(root_dir); origin = ident["origin"]; pub_raw = load_pub_raw(os.path.join(root_dir, ident["public_key_file"]))
+    cp = os.path.join(root_dir, "checkpoint"); note = open(cp).read(); ok, text = verify_note(note, origin, pub_raw)
+    if not ok: raise SystemExit("published checkpoint does not verify")
+    leaves = chain_leaves(os.path.join(root_dir, "chain")); note2, added = gather_cosignatures(note, leaves, root_dir, log=lambda m: sys.stderr.write(m + "\n"))
+    if added:
+        _, size, _ = parse_checkpoint(text); open(cp, "w").write(note2); open(os.path.join(root_dir, "checkpoints", f"{size:06d}"), "w").write(note2)
+    return added
 
 # ---------------------------------------------------------------- self-test against RFC 6962 / certificate-transparency test vectors
 CT_LEAVES = [b"", b"\x00", b"\x10", b"\x20\x21", b"\x30\x31", b"\x40\x41\x42\x43", b"\x50\x51\x52\x53\x54\x55\x56\x57",
@@ -201,6 +288,10 @@ def main(a):
     if cmd == "selftest": return selftest()
     if cmd == "publish-checkpoint":
         n, root, out = write_checkpoint(opt("--root-dir", HERE), opt("--key")); print(json.dumps({"size": n, "root_sha256": root, "file": os.path.relpath(out, HERE)})); return 0
+    if cmd == "cosign":
+        added = cosign_existing(opt("--root-dir", HERE)); print(json.dumps({"cosigned_by": added})); return 0
+    if cmd == "verifier-key":
+        i = identity(); print(verifier_key_string(i["origin"], load_pub_raw(i["public_key_file"]))); return 0
     if cmd == "identity":
         i = identity(); print(json.dumps(i, indent=1) if i else "no keys/CHECKPOINT.json"); return 0
     if cmd == "keygen":
@@ -236,7 +327,11 @@ def main(a):
             old_ok, old_text = verify_note(open(opt("--old")).read(), origin, pub_raw); oo, osize, oroot = parse_checkpoint(old_text)
             cons = old_ok and verify_consistency(osize, size, consistency_proof(osize, leaves[:size]), oroot, root)
             print(f"[{'PASS' if cons else 'FAIL'}] consistent with older checkpoint at size {osize} (append-only)"); good &= cons
-        print("CHECKPOINT " + ("VALID" if good else "INVALID")); return 0 if good else 1
+        cos = verify_cosignatures(note, cosigners_from(opt("--root-dir", HERE)))
+        for name, ts in cos: print(f"[PASS] cosigned by witness {name} at {ts}")
+        q = int(opt("--witness-quorum", 0))
+        if q: print(f"[{'PASS' if len(cos) >= q else 'FAIL'}] {len(cos)} valid cosignature(s) >= quorum {q}"); good &= len(cos) >= q
+        print("CHECKPOINT " + ("VALID" if good else "INVALID") + (f" ({len(cos)} cosignature(s))" if cos else " (no cosignatures)")); return 0 if good else 1
     print(__doc__); return 2
 
 if __name__ == "__main__": sys.exit(main(sys.argv[1:]))

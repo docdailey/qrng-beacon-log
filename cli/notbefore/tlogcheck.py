@@ -76,6 +76,20 @@ def check(src, seqs, R, refetch=True, site_url=None):
             inc = T.verify_inclusion(T.leaf_hash(leaves[i]), i, size, T.inclusion_path(i, leaves[:size]), root)
             R.say(inc, f"pulse {s:04d} is included in the checkpointed tree (leaf {i}, RFC 6962 inclusion proof)")
         else: R.say(True, f"pulse {s:04d} is newer than the published checkpoint (size {size}); inclusion not yet provable", "WAIT")
+    # cosignatures (c2sp tlog-cosignature v1.0.1) against the VENDORED witness list; same-sponsor witnesses are named as such
+    try:
+        wj = json.load(open(os.path.join(KEYS, "WITNESSES.json"))) if os.path.exists(os.path.join(KEYS, "WITNESSES.json")) else {}
+        cos = {}
+        for w in wj.get("witnesses", []) + wj.get("independent_witnesses", []):
+            n, alg, pub = T.parse_verifier_key(w["verifier_key"])
+            if alg == 4: cos[n] = pub
+        indep = {w["name"] for w in wj.get("independent_witnesses", [])}
+        good = T.verify_cosignatures(note, cos); R.cosignatures = [n for n, _ in good]; R.independent_cosignatures = [n for n in R.cosignatures if n in indep]
+        for n, ts in good: R.say(True, f"checkpoint cosigned by witness {n} at {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(ts))}{'' if n in indep else ' (same sponsor as the log — a second system, not an independent party)'}")
+        if not good: R.say(True, "checkpoint carries no cosignature from a known witness", "INFO")
+        q = int(os.environ.get("NOTBEFORE_WITNESS_QUORUM", "0") or 0)
+        if q: R.say(len(R.independent_cosignatures) >= q, f"{len(R.independent_cosignatures)} independent cosignature(s) >= quorum {q}")
+    except Exception as e: R.say(True, f"cosignature check unavailable: {e}", "WARN")
     if refetch: cross_check_site(R, ident, pub_raw, note, size, root, leaves, site_url)
     # cached head: the client's own split-view detector
     hp = os.path.join(heads_dir(), re.sub(r"[^A-Za-z0-9._-]", "_", origin) + ".checkpoint")

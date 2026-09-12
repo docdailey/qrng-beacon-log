@@ -6,6 +6,21 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-011 — checkpoint anchor statements hashed the whole note, so the first cosignature broke the anchor check (2026-09-12)
+
+**What happened.** The Rekor anchor statement for a checkpoint included `note_sha256` over the entire
+`checkpoints/NNNNNN` file. Signed notes accumulate signature lines: when `notbefore.net/witness/ryzen` cosigned
+checkpoint 000051 at 17:21 UTC (commit `7839b04`), the file changed and CI reported *"published statement differs
+from the file — a checkpoint changed after anchoring"* — a false alarm; the head had not changed, only a witness
+line had been appended. The verify run on `7839b04` failed on that.
+
+**Fix.** `note_sha256` is now over the note **reduced to the log's own signature line** (cosignatures stripped).
+For a note anchored before any cosignature the reduced note is byte-identical to what was anchored, so the existing
+Rekor entries for 000049–000051 match without re-anchoring; a cosignature appended later no longer disturbs the
+anchor. Verified against the live anchors branch: all three checkpoints PASS, no unexplained entries.
+
+**Lesson.** Anchor the *head* (origin, size, root, the log's signature), never the mutable envelope around it.
+
 ## ERR-010 — a doc push during the minting window made the 16:00 UTC cycle refuse its own reveal; rescued by hand inside the deadline (2026-09-12)
 
 **What happened.** Commit 0048 was minted and pushed at 16:01:47 UTC. At 16:04:49 claude-main pushed two

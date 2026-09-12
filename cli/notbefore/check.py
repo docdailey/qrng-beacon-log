@@ -21,7 +21,7 @@ class CheckResult:
     def __init__(self, seq):
         self.seq = seq; self.ok = True; self.lines = []; self.verbose = []
         self.commit_seq = self.pulse_hash_reveal = self.pulse_hash_commit = self.attested_value = self.drand_round = None
-        self.bls_offline = False; self.tsa_pass = 0; self.anchors = "not checked"; self.tlog = "not checked"
+        self.bls_offline = False; self.tsa_pass = 0; self.anchors = "not checked"; self.tlog = "not checked"; self.cosignatures = []; self.independent_cosignatures = []
         self.log_git_sha = self.log_ref = None; self.verifier_git_sha = vendored_meta().get("git_sha")
     def say(self, ok, msg, level=None):
         tag = level or ("PASS" if ok else "FAIL")
@@ -29,7 +29,7 @@ class CheckResult:
         self.lines.append(f"[{tag}] {msg}")
     def summary(self):
         return {"ok": self.ok, "bls_offline": self.bls_offline, "tsa_tokens_verified": self.tsa_pass, "anchors": self.anchors, "tlog": self.tlog,
-                "lines": self.lines}
+                "cosignatures": self.cosignatures, "independent_cosignatures": self.independent_cosignatures, "lines": self.lines}
 
 def _run(args, cwd=None):
     r = subprocess.run([sys.executable, *args], cwd=cwd, capture_output=True, text=True); return r.returncode, r.stdout + r.stderr

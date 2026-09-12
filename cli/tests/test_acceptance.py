@@ -161,4 +161,9 @@ def test_22_diff_transcript(tmp_path):
     nb("split", "23", "--purpose", "demo:roster", "--frac", "0.7", str(f), "--out-a", str(tmp_path / "x.A"), "--out-b", str(tmp_path / "x.B"), "--transcript", str(d))
     nb("split", "23", "--purpose", "demo:roster", "--frac", "0.7", str(f), "--out-a", str(tmp_path / "y.A"), "--out-b", str(tmp_path / "y.B"), "--transcript", str(e))
     rc, out, err = nb("diff-transcript", str(d), str(e)); assert rc == 0 and "IDENTICAL" in out, out      # different output file names, same allocation
+def test_23_cosignature_reporting_and_quorum():
+    """The live checkpoint carries a same-sponsor cosignature: reported, named as such, never counted toward an independent quorum."""
+    if not os.path.exists(os.path.join(LOG, "checkpoint")) or "\u2014 notbefore.net/witness/" not in open(os.path.join(LOG, "checkpoint")).read(): pytest.skip("no cosigned checkpoint in this checkout")
+    rc, out, err = nb("--offline", "checkpoint"); assert rc == 0 and "cosigned by witness notbefore.net/witness/" in err and "same sponsor" in err, err
+    rc, out, err = nb("--offline", "--witness-quorum", "1", "verify", "23"); assert rc == 1 and "0 independent cosignature(s) >= quorum 1" in err, err
 

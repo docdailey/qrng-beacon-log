@@ -74,7 +74,8 @@ minutes of its push, so a commit's Rekor time precedes its drand release. See `P
 
 - **Log identity `notbefore.net/log`** (enabled 2026-09-12). Every pulse commit carries a C2SP checkpoint (RFC 6962 tree over all pulses) signed
   by `keys/checkpoint.pub`; `python3 tlog.py verify checkpoint --origin notbefore.net/log --pub keys/checkpoint.pub --old checkpoints/<older>`
-  proves the log only ever grew. Self-signed and Rekor-anchored; no witness has cosigned yet (see `TLOG.md`).
+  proves the log only ever grew. Rekor-anchored and cosigned by our own witness (`notbefore.net/witness/ryzen` — same sponsor, so not
+  "witnessed"); the request for independent witnesses is drafted in `WITNESS-ONBOARDING.md` (see `TLOG.md`).
 - **No silent hours.** A cycle that runs but cannot commit publishes a signed `skip` pulse naming the refusing dependency
   (v0.5.1); only a deliberately stopped timer is silent, and that is announced in `CADENCE.md` first.
 - **Not a blockchain.** Hash-linked and append-only, yes; but one writer, no consensus, no proof-of-work. The

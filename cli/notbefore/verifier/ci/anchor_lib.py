@@ -42,10 +42,14 @@ def statement_for(pulse_path):
 
 CHECKPOINT_RE = re.compile(r"checkpoints/(\d{6})$")
 def checkpoint_statement_for(path):
-    """Canonical anchor statement for a published signed checkpoint (TLOG.md). Derivable from the file alone."""
-    raw = open(path, "rb").read(); lines = raw.decode().split("\n")
+    """Canonical anchor statement for a published signed checkpoint (TLOG.md). Derivable from the file alone.
+    note_sha256 is over the note REDUCED to the log's own signature line: witness cosignatures are appended to the same
+    file later (c2sp signed notes accumulate signature lines), and an anchor made before a cosignature must still
+    match the file after it. For a note that carries no cosignature the reduced note is the file itself."""
+    raw = open(path, "rb").read(); note = raw.decode(); text, _, sigs = note.partition("\n\n"); lines = text.split("\n"); origin = lines[0]
+    reduced = text + "\n\n" + "".join(l + "\n" for l in sigs.splitlines() if l.startswith("\u2014 " + origin + " "))
     st = {"anchor": ANCHOR_VERSION, "repo": REPO, "genesis": GENESIS_PULSE_HASH, "type": "checkpoint",
-          "origin": lines[0], "tree_size": int(lines[1]), "root_b64": lines[2], "note_sha256": sha256(raw)}
+          "origin": origin, "tree_size": int(lines[1]), "root_b64": lines[2], "note_sha256": sha256(reduced.encode())}
     return canon(st), st
 
 def checkpoint_files(root):
