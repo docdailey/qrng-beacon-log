@@ -139,3 +139,22 @@ were stamped from it and are superseded.
   a drand client and the chain public key — say so.
 - `make_pulse.py` fails closed if drand is unreachable or if `randomness != sha256(signature)`.
   A pulse without an external anchor is a pre-v0.3 artifact and must not be sold as anchored.
+
+
+## Added 2026-09-11 — commit-then-reveal, public log, archive commitment (binding)
+
+- ✅ For **reveal pulses (0011+)** we MAY say: "the attested value was unknowable to anyone, including
+  us, before <round release UTC>, and the entropy could not have been chosen after — its hash was
+  published in pulse N at <push time> and is visible in the public log's history." Always cite the
+  public log; the claim rests on publication, not signature.
+- ❌ Still MAY NOT say "provably fair", "unbiased", or anything implying fitness for gambling. The
+  scheme is honest; the market it must not enter is a legal matter, not a cryptographic one.
+- ⚠️ A **commit with no following reveal is a failed pulse** and must be described as such. Never
+  quietly skip one.
+- **Archive commitment**: quote **root `c88c4320…2738`, 42,935 blocks, 4.50 TB, 2025-07-18 →
+  2025-11-15**. Never quote 43,010 (bins on disk) or 43,421 (sidecars) as the committed count: 57
+  sidecars were unparseable, 429 point at missing files, and 75 bins have no valid sidecar — none of
+  those are committed. Until the full re-hash finishes, say "sample-verified; full verification in
+  progress (<checked>/42,935)". Never say "verified" without the number.
+- Public log trust assumptions (GitHub timestamps, force-push detectability) are stated in
+  `PUBLICATION.md` and must accompany any claim that depends on publication time.

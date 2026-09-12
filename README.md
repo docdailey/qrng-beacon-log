@@ -4,11 +4,18 @@ Each `chain/pulse-NNNN.json` is a hash-chained, multi-host-signed record. From p
 chain uses **commit-then-reveal**: a `commit` pulse publishes `sha256(entropy)` bound to a *future*
 drand round; the following `reveal` pulse discloses the entropy after that round exists.
 
-**Verify anything here with no access to our systems:**
+**Verify anything here with no access to our systems — one command, from an empty directory:**
 ```bash
 pip install cryptography
-python3 verify.py chain/pulse-0010.json --pin keys/ --refetch
-python3 verify.py chain/pulse-0011.json --pin keys/ --prev chain/pulse-0010.json --refetch
+RAW=https://raw.githubusercontent.com/docdailey/qrng-beacon-log/main
+curl -sfLO $RAW/verify.py
+python3 verify.py $RAW/chain/pulse-0011.json --prev $RAW/chain/pulse-0010.json --pin $RAW/keys --refetch
+```
+Then confirm the commit was published before its round, using GitHub's timestamp rather than ours:
+```bash
+curl -s "https://api.github.com/repos/docdailey/qrng-beacon-log/commits?path=chain/pulse-0010.json" \
+  | python3 -c "import json,sys;print(json.load(sys.stdin)[-1]['commit']['committer']['date'])"
+# 2026-09-11T23:58:46Z  <  round 32122604 release 2026-09-11T23:59:39Z
 ```
 
 Why this repository exists: a commitment proves what it claims only if it was **published before**
