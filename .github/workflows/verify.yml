@@ -12,4 +12,4 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install cryptography py_ecc
       - name: Verify every pulse, link, pair, TSA token, drand BLS signature (pinned group key) and the Merkle root, with live drand re-fetch
-        run: REFETCH=1 python3 ci/verify_chain.py
+        run: REFETCH=1 REQUIRE_BLS=1 python3 ci/verify_chain.py

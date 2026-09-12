@@ -83,3 +83,8 @@ is in progress; its status is published as it advances. Until it completes, the 
   repo and drand, and publishes signed `NON-REVEAL` findings under *your* key to *your* repo whenever a
   commit passes its reveal deadline without a reveal. It also records every reveal it observed, so its
   own history proves it was watching. `WATCH_REPO=docdailey/qrng-beacon-log OUT_DIR=~/beacon-watch python3 watcher.py`
+
+## License
+
+Software: [MIT](LICENSE). Published log data and documents: [CC BY 4.0](LICENSE-DATA). Pulse files must be
+redistributed byte-for-byte to remain verifiable.

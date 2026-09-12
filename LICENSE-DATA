@@ -1,0 +1,15 @@
+Creative Commons Attribution 4.0 International (CC BY 4.0)
+SPDX-License-Identifier: CC-BY-4.0
+
+Copyright (c) 2026 Bill Dailey (docdailey)
+
+Applies to the published log data and documents in this repository: chain/, keys/, merkle/*.json,
+merkle/*.tsv, and every *.md file.
+
+You are free to share and adapt this material for any purpose, including commercially, provided you
+give appropriate credit, link to the license, and indicate if changes were made. The full legal code
+is at https://creativecommons.org/licenses/by/4.0/legalcode
+
+Note on integrity: adapting a pulse file changes its hash and invalidates its signatures. Redistribute
+pulses byte-for-byte if you want them to remain verifiable; attribution belongs in accompanying text,
+not inside the signed JSON.
