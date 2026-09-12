@@ -7,7 +7,8 @@
 
 **Spec:** [`PROTOCOL.md`](PROTOCOL.md) (normative) · **Claims discipline:** [`CLAIMS.md`](CLAIMS.md) ·
 **Trust assumptions:** [`PUBLICATION.md`](PUBLICATION.md) · **Cadence + failure semantics:** [`CADENCE.md`](CADENCE.md) ·
-**Why:** [`THESIS.md`](THESIS.md) · **Keys:** [`keys/KEYS.json`](keys/KEYS.json) (history with validity windows)
+**Why:** [`THESIS.md`](THESIS.md) · **Keys:** [`keys/KEYS.json`](keys/KEYS.json) (history with validity windows) ·
+**Known defects:** [`ERRATA.md`](ERRATA.md) — published pulses are never edited; defects are logged and fixed forward
 
 **Status: research prototype and adversarially honest design exercise — not infrastructure to consume.**
 The CI badge above re-verifies every pulse, link, commit/reveal pair, RFC 3161 token and the archive
