@@ -1,0 +1,16 @@
+{
+  // notbefore.net — static publication of the qrng-beacon-log.
+  // Workers Static Assets (the successor to Pages). The dashboard build runs
+  // `npx wrangler deploy`, which reads this file to find what to publish.
+  //
+  // assets.directory is the repo root on purpose: verifiers fetch chain/pulse-*.json
+  // and (once §4 of TLOG.md lands) /checkpoint directly. Serving the repo means
+  // publication needs no build step and no copy — the hourly pulse commit IS the deploy.
+  // .assetsignore keeps operational files out.
+  "name": "notbefore",
+  "compatibility_date": "2026-09-12",
+  "assets": {
+    "directory": ".",
+    "not_found_handling": "404-page"
+  }
+}

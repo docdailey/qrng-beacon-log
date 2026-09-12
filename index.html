@@ -1,0 +1,54 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>notbefore.net — qrng-beacon-log</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --fg:#111; --dim:#555; --bg:#fafafa; --line:#ddd; --acc:#0b5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg:#e6e6e6; --dim:#999; --bg:#111; --line:#333; --acc:#3d8; }
+  }
+  body { background:var(--bg); color:var(--fg); margin:0;
+         font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:46rem; margin:0 auto; padding:3rem 1.25rem 5rem; }
+  h1 { font-size:1.6rem; margin:0 0 .25rem; letter-spacing:-.01em; }
+  .sub { color:var(--dim); margin:0 0 2.5rem; }
+  h2 { font-size:1rem; text-transform:uppercase; letter-spacing:.08em;
+       color:var(--dim); margin:2.5rem 0 .75rem; font-weight:600; }
+  code, pre { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.875rem; }
+  pre { background:color-mix(in srgb, var(--fg) 6%, transparent);
+        border:1px solid var(--line); border-radius:6px; padding:.85rem 1rem; overflow-x:auto; }
+  a { color:var(--acc); }
+  ul { padding-left:1.1rem; } li { margin:.3rem 0; }
+  .note { border-left:3px solid var(--line); padding-left:1rem; color:var(--dim); }
+</style>
+<main>
+  <h1>qrng-beacon-log</h1>
+  <p class="sub">An hourly, commit-then-reveal, host-attested randomness log.</p>
+
+  <p>Each pulse fixes a 32-byte value <em>before</em> a given
+  <a href="https://drand.love/">drand</a> round exists, and publishes it after. The
+  commitment is anchored to RFC&nbsp;3161 timestamps, Rekor and OpenTimestamps, so a
+  third party can check that a value was neither predicted in advance nor selected
+  after the fact — <strong>not before, and not after</strong>.</p>
+
+  <h2>Verify it yourself</h2>
+  <pre>pip install notbefore
+notbefore verify</pre>
+  <p class="note">The verifier is pinned and vendored, runs offline against published
+  keys, and emits a reproducible JSON transcript. It does not require trusting this
+  site.</p>
+
+  <h2>Published data</h2>
+  <ul>
+    <li><a href="/chain/">chain/</a> — every pulse record, signed</li>
+    <li><a href="/PROTOCOL.md">PROTOCOL.md</a> — pulse format and verification, normative</li>
+    <li><a href="/NOTBEFORE.md">NOTBEFORE.md</a> — what the guarantee is, and is not</li>
+    <li><a href="/CLAIMS.md">CLAIMS.md</a> · <a href="/ERRATA.md">ERRATA.md</a> —
+        what is claimed, and every correction to it</li>
+    <li><a href="/HARDWARE.md">HARDWARE.md</a> — the attesting hosts and their clocks</li>
+  </ul>
+
+  <h2>Source</h2>
+  <p><a href="https://github.com/docdailey/qrng-beacon-log">github.com/docdailey/qrng-beacon-log</a>
+     · <a href="https://pypi.org/project/notbefore/">notbefore on PyPI</a> · MIT; log data CC&nbsp;BY&nbsp;4.0</p>
+</main>

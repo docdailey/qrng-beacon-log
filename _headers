@@ -1,0 +1,18 @@
+# Security headers. NOTE: nothing here may challenge or block non-browser clients —
+# witnesses and `notbefore verify` fetch these paths programmatically.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+
+# Verification data: explicitly CORS-open so browser-based verifiers work.
+/chain/*
+  Access-Control-Allow-Origin: *
+  Content-Type: application/json
+/checkpoint
+  Access-Control-Allow-Origin: *
+  Content-Type: text/plain; charset=utf-8
+/checkpoints/*
+  Access-Control-Allow-Origin: *
+  Content-Type: text/plain; charset=utf-8
