@@ -10,3 +10,6 @@ cli/dist/
 cli/.venv/
 cli/*.egg-info/
 .pytest_cache/
+
+# wrangler CLI cache (created by any local `wrangler` command; never content)
+.wrangler/
