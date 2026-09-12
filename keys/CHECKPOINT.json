@@ -9,9 +9,10 @@
   "signer_host": "think",
   "private_key_path_on_signer": "~/beacon/checkpoint.key",
   "created_utc": "2026-09-12",
-  "enabled": false,
-  "enabled_note": "set true (and commit) only after the origin string is confirmed; the first signed checkpoint fixes the identity",
+  "enabled": true,
+  "enabled_note": "Enabled by Bill ('go', 2026-09-12). The origin line notbefore.net/log is now permanent.",
   "site": "https://notbefore.net",
   "site_checkpoint_url": "https://notbefore.net/checkpoint",
-  "site_note": "notbefore.net serves this repository's root as static assets (wrangler.jsonc); /checkpoint and /checkpoints/* are text/plain, CORS-open. Clients cross-check the checkpoint served by the site against the one in git: two different heads under this key is a split between publication surfaces."
+  "site_note": "notbefore.net serves this repository's root as static assets (wrangler.jsonc); /checkpoint and /checkpoints/* are text/plain, CORS-open. Clients cross-check the checkpoint served by the site against the one in git: two different heads under this key is a split between publication surfaces.",
+  "enabled_utc": "2026-09-12T16:20:00Z"
 }

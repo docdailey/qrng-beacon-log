@@ -5,7 +5,7 @@ name: anchor-pulses
 on:
   push:
     branches: [main]
-    paths: ["chain/pulse-*.json"]
+    paths: ["chain/pulse-*.json", "checkpoints/*"]
   schedule: [{ cron: "37 * * * *" }]   # catch-up + upgrade pending OpenTimestamps proofs once they reach Bitcoin
   workflow_dispatch:
 concurrency: { group: anchors, cancel-in-progress: false }
