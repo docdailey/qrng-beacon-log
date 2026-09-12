@@ -1,6 +1,6 @@
 # NotBefore — specification
 
-**Status:** draft 0.5, 2026-09-12 — 0.4 plus **decision contracts** (§7.11: the consumer's commitment, registered before the pulse); 0.4 added the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
+**Status:** draft 0.6, 2026-09-12 — 0.5 plus **signed contracts and the write-once decision log** (§7.12: a consumer identity, `contract/2`, and a second transparency log in which the first statement per decision wins); 0.5 added decision contracts (§7.11: the consumer's commitment, timestamped before the pulse); 0.4 added the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
 **Implements over:** `qrng-beacon-log` protocol v0.5 (live log)  
 **Normative language:** MUST / MUST NOT / SHOULD / MAY
 
@@ -333,8 +333,50 @@ one, idempotently.
 **What it proves.** That this exact decision — rule, purpose, operation, parameters, input — existed at the TSA
 times, before the value it depends on was knowable; combined with the log's own commitment, neither party chose
 after seeing the thing that mattered. **What it does not prove:** that the *only* contract registered was this one.
-A user can still register several and publish one; the defence is the same as for any preregistration — publish the
-contract hash where it cannot be quietly withdrawn (a repository commit, a registry, a dated message).
+A user can still timestamp several and publish one; §7.12 closes that with the write-once decision log. (Before 0.6
+the defence was the same as for any preregistration — publish the hash where it cannot be quietly withdrawn.)
+
+### 7.12 Signed contracts and the decision log — first statement wins (spec 0.6)
+**Identity.** `notbefore keygen` creates one Ed25519 key per consumer (`~/.config/notbefore/identity.key`, 0600, never
+uploaded); `key_id = SHA256(raw public key)[:16]` (the log's own key convention, PROTOCOL.md §5). There is no
+recovery and no escrow: a lost key is an abandoned namespace.
+
+**Contract/2** = contract/1 plus `signer {alg: ed25519, key_id, public_key_b64}` and `decision_id` (default: the
+purpose string; ^[A-Za-z0-9._:/=@+-]{1,256}$). For high-stakes use `decision_id` SHOULD be derived from an external
+artifact (protocol registration number and version, audit order digest) so that renaming is visible to whoever holds
+that artifact — cryptography does not recognise semantic aliases.
+
+**Decision statement.** `plan` signs `{"spec": "notbefore/decision/1", decision_id, key_id, public_key_b64,
+contract_sha256, contract_spec, created_utc}` (canonical JSON) with the identity key and writes statement + signature
+to `<contract>.sig.json`. The statement names the contract by **hash**: registering discloses nothing about the
+decision unless `--disclose` publishes the body too.
+
+**The decision log** (`DECISION-LOG.md`) is a second C2SP transparency log, origin `notbefore.net/decisions`
+(`keys/DECISIONS.json`, key `keys/decisions.pub`), RFC 6962 over canonical leaves
+`{"spec": "notbefore/decision-leaf/1", index, received_utc, seq_in_namespace, statement, signature_b64, tsa_sha256,
+contract_disclosed}`. **Write-once rule:** `(key_id, decision_id)` is a namespace; the first valid statement appended
+for it has `seq_in_namespace 1` and is the authoritative preregistration; later ones are amendments and are never the
+entry `execute` accepts for the original randomization. Submission is idempotent per `contract_sha256`; nothing is
+updated or deleted. The log is mirrored byte-for-byte into `decisions/` in the repository, its checkpoints are
+witness-cosigned there and anchored into Rekor like the pulse log's.
+
+**Client trust.** The CLI trusts only the vendored origin and key: a receipt or lookup counts only after the
+checkpoint note verifies under `keys/decisions.pub`, the leaf is canonical and its statement verifies, and the
+inclusion proof reaches the note's root. A receipt that fails is an error.
+
+**Execution** additionally MUST: verify the `.sig.json` statement against the contract's bytes, signer and
+`decision_id` (refuse otherwise); look the namespace up (live, or the `decisions/` mirror when `--offline`); **refuse
+if the first entry for the namespace is a different contract** (superseded) or if the authoritative entry was received
+at or after the round release; record `decision_log {status, index, seq_in_namespace, size, root_b64, received_unix}` in
+the transcript. `unregistered` / `unreachable` / `disabled` are WARN by default and refusals with `--require-log`.
+Legacy `contract/1` files still execute only with `--allow-unregistered`, labelled `contract_spec` and
+`contract_signature_verified: false`. `plan` exits non-zero if the submission fails; `notbefore register <contract>`
+retries it idempotently.
+
+**What it proves, now.** Both that this exact decision existed before the value was knowable (RFC 3161 tokens, and
+the log's receipt time fixed by anchored checkpoints) and that it was **the** preregistration for its
+`(key_id, decision_id)`. **What it still does not prove:** that two decision ids, or two keys, are not the same
+experiment under different names — that is what the `decision_id` convention and publishing your `key_id` are for.
 
 ### 7.5 Transcript (MUST keep)
 
@@ -373,8 +415,10 @@ notbefore assign   <seq> --purpose <P> --arms 2 <file>     # record<TAB>arm, arm
 notbefore id       <seq> --purpose <P> --from <file>       # pseudonym per line (--len 16)
 notbefore range    <seq> --purpose <P> --lo 1 --hi 6       # one uniform integer
 notbefore bytes    <seq> --purpose <P> --n 32              # hex bytes (public)
-notbefore plan --after <UTC> --purpose <P> --sample 12 <file>   # decision contract + RFC 3161 registration (also --split/--assign/--id/--range/--bytes/--seed)
-notbefore execute <contract.json>                          # no choices: rule-selected pulse, registration must predate the round, committed input only
+notbefore keygen                                           # once: the consumer identity (Ed25519) that signs decision statements (§7.12)
+notbefore plan --after <UTC> --purpose <P> --sample 12 <file>   # signed decision contract: two RFC 3161 tokens + write-once decision-log entry (also --split/--assign/--id/--range/--bytes/--seed; --decision-id, --disclose, --no-log)
+notbefore register <contract.json>                         # (re)submit a signed contract's statement to the decision log, idempotently
+notbefore execute <contract.json>                          # no choices: rule-selected pulse, latest token before the round, FIRST entry for its decision_id (--require-log), committed input only
 notbefore explain  <seq>                                   # methods-section paragraph: commit/TSA/round/release/V/eligibility
 notbefore checkpoint                                       # the log's signed head, verified; site cross-check; cached-head consistency
 notbefore pin                                              # write notbefore.lock (log sha, CLI, verifier); --lock makes re-runs bit-stable
@@ -503,6 +547,8 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 ## 16. Changelog
 
 **0.5.1 (2026-09-12, later).** §7.11 hardened after code review (ERR-013): both TSAs required, no failing token tolerated, gate on the LATEST token, no candidate cutoff in the rule, JCS/no-float canonical form, "timestamping" not "registration". Package and spec versions decoupled (§12). `DECISION-LOG.md` sketches the write-once decision log that would turn timestamping into registration.
+
+**0.6 (2026-09-12).** Signed contracts and the write-once decision log (§7.12): `notbefore keygen`, `contract/2` with `signer` + `decision_id`, `.sig.json` decision statements, the second log `notbefore.net/decisions` (first statement per namespace is authoritative; `execute` refuses a superseded contract or a registration at/after the round; `--require-log`; `decisions/` mirror for offline checks). Prompted by the review that timestamping proves *when* but not *which*. \(V\), \(S\) and all derived functions unchanged. `notbefore` 0.8.0.
 
 **0.5 (2026-09-12).** Decision contracts (§7.11): `plan` (canonical contract, two RFC 3161 tokens, published hash) and `execute` (choice-free; rule-selected pulse; registration must predate the round; committed input only). Prompted by a review pointing out that the operator's commitment was first-class while the consumer's preregistration was prose. \(V\), \(S\) and all derived functions unchanged. Doc correction after ERR-014 (same day): §8 now states that both RFC 3161 trust chains are vendored and pinned — the verifier trusts no host certificate store and downloads nothing; `notbefore` ≥ 0.7.1 behaves that way.
 

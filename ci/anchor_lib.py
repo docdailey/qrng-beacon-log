@@ -55,6 +55,11 @@ def checkpoint_statement_for(path):
 def checkpoint_files(root):
     d = os.path.join(root, "checkpoints")
     return sorted(os.path.join(d, f) for f in os.listdir(d) if re.fullmatch(r"\d{6}", f)) if os.path.isdir(d) else []
+def decision_checkpoint_files(root):
+    """The decision log's mirrored checkpoints (DECISION-LOG.md): decisions/checkpoints/NNNNNNNN. Same statement shape
+    (checkpoint_statement_for derives the origin from the note), separate record names decisions-checkpoint-NNNNNNNN."""
+    d = os.path.join(root, "decisions", "checkpoints")
+    return sorted(os.path.join(d, f) for f in os.listdir(d) if re.fullmatch(r"\d{8}", f)) if os.path.isdir(d) else []
 
 # ------------------------------------------------------------------ keys
 def load_priv(pem): return serialization.load_pem_private_key(pem, password=None)

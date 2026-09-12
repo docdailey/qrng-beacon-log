@@ -19,8 +19,9 @@ notbefore assign 45 --purpose pilot-arms-2026-09 --arms 2 cohort.txt            
 notbefore id 45 --purpose blind-ids-2026-09 --from cohort.txt                   # pseudonyms, no names in the output
 notbefore range 45 --purpose start-page --lo 1 --hi 240                         # one uniform integer
 notbefore bytes 45 --purpose sim-seed --n 32                                    # public bytes to seed a simulation
-notbefore plan --after 2026-10-01T00:00Z --purpose chart-audit-2026-q4 --sample 50 eligible.txt   # decision contract, timestamped by two TSAs
-notbefore execute notbefore-plan-chart-audit-2026-q4.json   # later: no choices; rule-selected pulse; latest token must predate the round
+notbefore keygen                                                # once: your Ed25519 identity (~/.config/notbefore/identity.key)
+notbefore plan --after 2026-10-01T00:00Z --purpose chart-audit-2026-q4 --sample 50 eligible.txt   # signed decision contract: two TSA tokens + write-once decision-log entry
+notbefore execute notbefore-plan-chart-audit-2026-q4.json   # later: no choices; rule-selected pulse; latest token must predate the round; must be the FIRST entry for its decision_id
 notbefore explain 45             # a methods-section paragraph
 notbefore pin                    # notbefore.lock: re-runs verify at exactly this log commit
 notbefore diff-transcript a.json b.json

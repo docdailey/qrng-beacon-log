@@ -1,9 +1,15 @@
 """NOTBEFORE.md §14 acceptance tests, run against the repository checkout two levels up (or NOTBEFORE_LOG_DIR).
 Network: drand refetch + Rekor refetch are exercised unless NOTBEFORE_OFFLINE=1."""
-import os, sys, json, subprocess, shutil, tempfile, pytest
+import os, sys, json, subprocess, shutil, tempfile, hashlib, pytest
 CLI_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG = os.environ.get("NOTBEFORE_LOG_DIR") or os.path.dirname(CLI_DIR)
 OFF = ["--offline"] if os.environ.get("NOTBEFORE_OFFLINE") == "1" else []
+
+@pytest.fixture(autouse=True, scope="session")
+def _consumer_identity(tmp_path_factory):
+    """Since 0.8.0 `plan` signs with the consumer's identity; the suite uses a throwaway key, never ~/.config."""
+    import notbefore.identity as I
+    p = tmp_path_factory.mktemp("identity") / "identity.key"; I.generate(str(p)); os.environ["NOTBEFORE_KEY"] = str(p); yield str(p)
 
 def nb(*args, log=LOG, **kw):
     r = subprocess.run([sys.executable, "-m", "notbefore.cli", "--log-dir", log, *OFF, *args], capture_output=True, text=True, cwd=kw.get("cwd"))
@@ -214,7 +220,7 @@ def test_26_contract_negatives(tmp_path):
     rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and "does NOT verify" in e, e              # corrupt token, even with --allow-unregistered:
     rc, o, e = nb("execute", *base, "--allow-unregistered", cwd=str(tmp_path)); assert rc == 1 and "does NOT verify" in e
     shutil.copy2(keep / "d.tsr", str(c) + ".digicert.tsr")
-    raw = open(c, "rb").read(); open(c, "wb").write(raw.replace(b'"k":3', b'"k":4')); rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and ("does NOT verify" in e or "canonical" in e)   # edited byte
+    raw = open(c, "rb").read(); open(c, "wb").write(raw.replace(b'"k":3', b'"k":4')); rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and ("does NOT verify" in e or "canonical" in e or "does not verify for this contract" in e)   # edited byte: since 0.8.0 the signed statement catches it before the tokens do
     open(c, "wb").write(raw)
 def test_27_rule_traverses_failures_without_a_cutoff(tmp_path):
     """Six consecutive non-verifying candidates, then a good one: the rule must reach it (0.6.0 stopped after five)."""
@@ -255,3 +261,82 @@ def test_28_tsa_trust_roots_are_pinned_not_borrowed(tmp_path, monkeypatch):
     ok, res = _tsa.verify(str(p)); by = {r["tsa"]: r for r in res}; assert not ok and "fail closed" in (by["digicert"]["detail"] or ""), res
     empty = tmp_path / "empty"; empty.mkdir(); monkeypatch.setattr(_tsa, "PIN_DIR", str(empty))                            # no pins at all
     ok, res = _tsa.verify(str(p)); assert not ok and len(res) == 2 and not any(r["digest_and_chain_verified"] for r in res), res
+def test_29_identity_and_signed_contracts(tmp_path, monkeypatch):
+    """§7.12: keygen writes a 0600 Ed25519 key; plan signs a decision statement bound to the contract bytes, signer and
+    decision_id; execute verifies it and refuses a tampered statement, a swapped key, or a legacy unsigned contract
+    without the labelled flag. No network beyond the log checkout (--no-timestamp, --allow-unregistered)."""
+    import stat, notbefore.identity as I, notbefore.decisionlog as DL
+    key = tmp_path / "id.key"; monkeypatch.setenv("NOTBEFORE_KEY", str(key))
+    rc, o, e = nb("keygen"); assert rc == 0 and len(o.strip()) == 16, e
+    assert stat.S_IMODE(os.stat(key).st_mode) == 0o600 and (tmp_path / "id.pub").exists()
+    rc, o, e = nb("keygen"); assert rc == 1 and "exists" in e                                    # never silently replaces an identity
+    rc, o, e = nb("whoami"); kid = o.split()[0]; assert rc == 0 and len(kid) == 16
+    f = tmp_path / "r.txt"; f.write_text("\n".join(f"p{i}" for i in range(9)) + "\n"); c = tmp_path / "c.json"
+    rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:signed", "--decision-id", "trial:abc@v1", "--sample", "2", "--out", str(c), "--no-timestamp", str(f), cwd=str(tmp_path)); assert rc == 0, e
+    j = json.load(open(c)); assert j["spec"] == "notbefore/contract/2" and j["signer"]["key_id"] == kid and j["decision_id"] == "trial:abc@v1"
+    st, sig = DL.read_signature(str(c)); assert DL.verify_statement(st, sig)[0] and st["contract_sha256"] == hashlib.sha256(open(c, "rb").read()).hexdigest()
+    base = [str(c), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "t.json"), "--no-anchors"]
+    rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 0 and "Ed25519 statement verifies" in e and len(o.split()) == 2, e
+    t = json.load(open(tmp_path / "t.json")); assert t["signer_key_id"] == kid and t["decision_id"] == "trial:abc@v1" and t["contract_signature_verified"] and t["decision_log"]["status"] in ("disabled", "unreachable", "unregistered", "authoritative")
+    # tamper: statement edited -> signature fails; statement re-signed by ANOTHER key -> not the contract's signer
+    sp = DL.sig_path(str(c)); good = open(sp).read()
+    bad = json.loads(good); bad["statement"]["decision_id"] = "trial:xyz@v1"; json.dump(bad, open(sp, "w"))
+    rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and "does not verify" in e, e
+    other = tmp_path / "other.key"; I.generate(str(other)); priv2, pub2, kid2, pub2_b64 = I.load(str(other))
+    st2 = dict(st, key_id=kid2, public_key_b64=pub2_b64); DL.write_signature(str(c), st2, DL.sign_statement(priv2, st2))
+    rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and "different contract, key or decision_id" in e, e
+    open(sp, "w").write(good); os.remove(sp)
+    rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and "no " in e and ".sig.json" in e          # signed contract without its statement file
+    # legacy unsigned contract/1: refused unless labelled
+    c1 = tmp_path / "c1.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:legacy", "--sample", "2", "--out", str(c1), "--no-timestamp", "--unsigned", str(f), cwd=str(tmp_path)); assert rc == 0
+    assert json.load(open(c1))["spec"] == "notbefore/contract/1"
+    rc, o, e = nb("execute", str(c1), "--input", str(f), "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "legacy unsigned" in e
+    rc, o, e = nb("execute", str(c1), "--input", str(f), "--transcript", "none", "--no-anchors", "--allow-unregistered", cwd=str(tmp_path)); assert rc == 0 and "legacy unsigned" in e
+def test_30_decision_log_receipts_verify_only_against_vendored_trust(tmp_path, monkeypatch):
+    """The client trusts nothing the log says until the note verifies under the vendored key and the proof reaches its
+    root. Synthetic log with a throwaway key: a good receipt passes; wrong-key note, wrong index, tampered leaf, or a
+    different statement all fail. Also the write-once verdicts from check_authoritative on a faked lookup."""
+    import base64, notbefore.decisionlog as DL, notbefore.identity as I
+    sys.path.insert(0, os.path.join(CLI_DIR, "notbefore", "verifier")); import tlog as T
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives import serialization
+    logk = Ed25519PrivateKey.generate(); lpub = logk.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    origin = "notbefore.net/decisions"
+    monkeypatch.setattr(DL, "identity", lambda: {"origin": origin, "enabled": True, "base_url": "http://127.0.0.1:9", "key_id_hex": T.key_id(origin, lpub).hex(), "public_key_file": "x"})
+    monkeypatch.setattr(DL, "pub_raw", lambda: lpub)
+    ck = tmp_path / "id.key"; I.generate(str(ck)); priv, pub, kid, pub_b64 = I.load(str(ck))
+    def leaf(i, st, sig, k=1): return DL.canon({"spec": DL.LEAF_SPEC, "index": i, "received_utc": "2026-09-12T02:00:00Z", "seq_in_namespace": k, "statement": st, "signature_b64": sig, "tsa_sha256": {}, "contract_disclosed": False})
+    sts = [DL.statement("%064x" % (i + 1), "d:%d" % i, kid, pub_b64, "notbefore/contract/2") for i in range(5)]
+    leaves = [leaf(i, s, DL.sign_statement(priv, s)) for i, s in enumerate(sts)]
+    root = T.mth(leaves); note = T.sign_note(T.checkpoint_body(origin, 5, root), origin, logk)
+    rc = lambda i: {"index": i, "size": 5, "checkpoint": note, "leaf": leaves[i].decode(), "proof": [base64.b64encode(h).decode() for h in T.inclusion_path(i, leaves)]}
+    assert DL.verify_receipt(rc(3), sts[3])[0]
+    assert not DL.verify_receipt(rc(3), sts[2])[0]                                          # different statement than submitted
+    assert not DL.verify_receipt(dict(rc(3), index=2), sts[3])[0]                           # wrong index for that proof
+    other = Ed25519PrivateKey.generate(); bad_note = T.sign_note(T.checkpoint_body(origin, 5, root), origin, other)
+    assert not DL.verify_receipt(dict(rc(3), checkpoint=bad_note), sts[3])[0]               # note signed by a key that is not the vendored one
+    tl = json.loads(leaves[3]); tl["received_utc"] = "2026-09-12T02:00:01Z"; assert not DL.verify_receipt(dict(rc(3), leaf=DL.canon(tl).decode()), sts[3])[0]   # tampered leaf
+    # write-once verdicts: lookup answers are faked; the client still verifies everything it is handed
+    def fake_lookup(entries_idx):
+        return lambda key_id, decision_id: {"size": 5, "checkpoint": note, "entries": [{"index": i, "seq_in_namespace": n + 1, "contract_sha256": sts[i]["contract_sha256"], "received_utc": "2026-09-12T02:00:00Z"} for n, i in enumerate(entries_idx)],
+                                            "authoritative": ({"index": entries_idx[0], "leaf": leaves[entries_idx[0]].decode(), "proof": rc(entries_idx[0])["proof"]} if entries_idx else None)}
+    monkeypatch.setattr(DL, "lookup", fake_lookup([3])); r = DL.check_authoritative(sts[3]); assert r["status"] == "authoritative" and r["index"] == 3 and r["verified"], r
+    monkeypatch.setattr(DL, "lookup", fake_lookup([2, 3])); r = DL.check_authoritative(sts[3]); assert r["status"] == "superseded", r     # someone registered first under this namespace
+    monkeypatch.setattr(DL, "lookup", fake_lookup([])); assert DL.check_authoritative(sts[3])["status"] == "unregistered"
+    def boom(*a): raise OSError("down")
+    monkeypatch.setattr(DL, "lookup", boom); assert DL.check_authoritative(sts[3])["status"] == "unreachable"
+    monkeypatch.setattr(DL, "lookup", fake_lookup([3])); monkeypatch.setattr(DL, "pub_raw", lambda: other.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw))
+    assert DL.check_authoritative(sts[3])["status"] == "unreachable"                          # a log whose note does not verify under OUR key is not believed, whatever it says
+def test_31_live_decision_log_roundtrip(tmp_path, monkeypatch):
+    """Against the live log when the vendored identity is enabled (skipped otherwise): plan registers, the receipt verifies,
+    a second contract under the same decision_id is an amendment, and execute refuses the superseded one."""
+    import notbefore.decisionlog as DL
+    if not DL.enabled() or OFF: pytest.skip("decision log not enabled in this release (or offline)")
+    key = tmp_path / "id.key"; monkeypatch.setenv("NOTBEFORE_KEY", str(key)); nb("keygen")
+    f = tmp_path / "r.txt"; f.write_text("a\nb\nc\nd\n"); did = "test:live:" + hashlib.sha256(os.urandom(8)).hexdigest()[:12]
+    c1 = tmp_path / "c1.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:live1", "--decision-id", did, "--sample", "1", "--out", str(c1), "--no-timestamp", str(f), cwd=str(tmp_path)); assert rc == 0 and "AUTHORITATIVE" in e, e
+    r1 = json.load(open(DL.receipt_path(str(c1)))); assert r1["summary"]["seq_in_namespace"] == 1
+    c2 = tmp_path / "c2.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:live2", "--decision-id", did, "--sample", "1", "--out", str(c2), "--no-timestamp", str(f), cwd=str(tmp_path)); assert rc == 0 and "AMENDMENT" in e, e
+    rc, o, e = nb("execute", str(c2), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "not the first registered" in e, e
+    rc, o, e = nb("execute", str(c1), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "AT/AFTER the round release" in e, e   # registered today, round in the past
+    rc, o, e = nb("register", str(c1), cwd=str(tmp_path)); assert rc == 0 and "already present" in e                     # idempotent

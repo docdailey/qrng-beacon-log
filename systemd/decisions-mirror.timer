@@ -1,0 +1,11 @@
+[Unit]
+Description=decision-log mirror at :20 and :50 (never inside the :00-:07 minting window)
+
+[Timer]
+OnCalendar=*-*-* *:20,50:00
+RandomizedDelaySec=0
+Persistent=true
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

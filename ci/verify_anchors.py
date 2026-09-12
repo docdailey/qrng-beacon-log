@@ -95,18 +95,18 @@ for pf in L.pulse_files(os.path.join(ROOT, "chain")):
     else: T["failures"] += 1
 # ---- signed checkpoints (TLOG.md): each published checkpoints/NNNNNN should be anchored; its statement hash is expected under the key
 T["checkpoints"] = 0; T["checkpoints_anchored"] = 0
-for cf in L.checkpoint_files(ROOT):
-    size = int(os.path.basename(cf)); T["checkpoints"] += 1
-    statement, st = L.checkpoint_statement_for(cf); expected_hash[L.sha256(statement)] = f"checkpoint {size:06d}"
-    stem = os.path.join(A, f"checkpoint-{size:06d}"); rec_path = stem + ".anchor.json"
+for cf in L.checkpoint_files(ROOT) + L.decision_checkpoint_files(ROOT):
+    size = int(os.path.basename(cf)); T["checkpoints"] += 1; label = f"checkpoint {size:06d}" if "/decisions/" not in cf else f"decisions-checkpoint {size:08d}"
+    statement, st = L.checkpoint_statement_for(cf); expected_hash[L.sha256(statement)] = label
+    stem = os.path.join(A, label.replace(" ", "-")); rec_path = stem + ".anchor.json"
     if not os.path.exists(rec_path):
-        age = time.time() - os.path.getmtime(cf); in_flight[f"checkpoint {size:06d}"] = age
-        say(f"[{'FAIL' if age > GRACE_S else 'WAIT'}] checkpoint {size:06d}: no anchor ({age/60:.0f} min)"); T["failures"] += age > GRACE_S; continue
+        age = time.time() - os.path.getmtime(cf); in_flight[label] = age
+        say(f"[{'FAIL' if age > GRACE_S else 'WAIT'}] {label}: no anchor ({age/60:.0f} min)"); T["failures"] += age > GRACE_S; continue
     rec = json.load(open(rec_path)); entry = rec["rekor"]["entry"]; h, k = L.entry_hash_and_key(entry)
     ok = open(stem + ".stmt.json", "rb").read() == statement and h == L.sha256(statement) and k is not None and L.key_id(L.load_pub(k)) == L.key_id(anchor_pub) \
          and L.verify_sig(anchor_pub, base64.b64decode(rec["signature_b64"]), statement) and entry["logID"] == L.REKOR_LOG_ID and L.verify_set(entry, rekor_pub) and L.verify_inclusion(entry, rekor_pub)[0]
-    known_uuids[rec["rekor"]["uuid"]] = f"checkpoint {size:06d}"; T["checkpoints_anchored"] += ok; T["failures"] += not ok
-    say(f"[{'PASS' if ok else 'FAIL'}] checkpoint {size:06d} (root {st['root_b64'][:12]}…): Rekor anchor logIndex {entry['logIndex']} @ {rec['rekor']['integrated_utc']} verified offline")
+    known_uuids[rec["rekor"]["uuid"]] = label; T["checkpoints_anchored"] += ok; T["failures"] += not ok
+    say(f"[{'PASS' if ok else 'FAIL'}] {label} (root {st['root_b64'][:12]}…): Rekor anchor logIndex {entry['logIndex']} @ {rec['rekor']['integrated_utc']} verified offline")
 
 # ---- split-view detector: every entry under the anchor key must be a published anchor
 if REFETCH:

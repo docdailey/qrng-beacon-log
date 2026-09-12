@@ -362,3 +362,12 @@ of TAI … metrologically traceable" would have been a CLAIMS violation on first
 | `notbefore.net` serving the repository root statically (Workers Static Assets, `wrangler.jsonc`; `/checkpoint` and `/checkpoints/*` text/plain, CORS-open) | **live 2026-09-12** (Bill); `/checkpoint` answers 404 until the first checkpoint is committed |
 | client cross-check: `https://notbefore.net/checkpoint` must be the git head or an append-only relative of it | implemented (`notbefore` ≥ 0.3.1, `--checkpoint-url`) |
 | verification over HTTPS alone (no git clone): needs served inclusion/consistency material — `c2sp.org/tlog-tiles` or CI-published proofs | next; today the site is a publication and cross-check surface, git is the verification source |
+
+## A second origin: the decision log (2026-09-12)
+
+`notbefore.net/decisions` is a second C2SP log with the same tree, note and cosignature formats as this one
+(`DECISION-LOG.md`): leaves are consumers' signed decision statements instead of pulses, the writer is the Worker that
+serves notbefore.net (`worker/decisions.js`, key `keys/decisions.pub`, note key id `e516adc9`), and the mirror
+`decisions/` in this repository is where witnesses cosign and `ci/anchor_pulses.py` anchors its checkpoints
+(`decisions-checkpoint-NNNNNNNN`). Witnesses add one verifier-key line to their configuration; the two logs share
+`keys/WITNESSES.json`. `tlog.py`'s functions verify both — only the origin and key differ.

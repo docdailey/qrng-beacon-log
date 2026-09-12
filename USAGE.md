@@ -1,8 +1,8 @@
 # Using `notbefore` — the tool, not the theorem
 
 `notbefore` turns one hour of the public beacon into a reproducible allocation. Everything below was run against
-the live log on 2026-09-12 with `notbefore` 0.7.1 (spec 0.5); the outputs are real and anyone can regenerate them
-(the allocation below was first produced with 0.4.0 and is byte-identical under 0.7.1 — only the provenance fields moved).
+the live log on 2026-09-12: the split with `notbefore` 0.7.1, the contract section with 0.8.0; the outputs are real and anyone
+can regenerate them (the allocation below was first produced with 0.4.0 and is byte-identical since — only the provenance fields moved).
 
 ## The workflow
 
@@ -117,40 +117,75 @@ notbefore: pinned by notbefore.lock: log 77931e25abea
 With the lock, the log is read at exactly that commit, so "main moved" cannot change a result — and it cannot hide
 a split view either: the checkpoint check still runs against the head this machine saw before.
 
-## Commit your decision first: `plan` → wait → `execute`
+## Commit your decision first: `keygen` → `plan` → wait → `execute`
 
-The workflow above relies on you having *said* the pulse and purpose in advance. `plan` makes that a first-class,
-timestamped object; `execute` then accepts no choices at all.
+The workflow above relies on you having *said* the pulse and purpose in advance. `plan` makes that a first-class
+object: a canonical contract, **signed by your identity**, **timestamped** by two RFC 3161 authorities, and
+**registered** in the write-once decision log. `execute` then accepts no choices at all.
+
+Once per person or team, create an identity (an Ed25519 key that never leaves your machine; back it up):
+
+```
+$ notbefore keygen
+identity written: ~/.config/notbefore/identity.key (mode 0600). key_id 47df663fd3820dc6. Back it up; there is no recovery.
+$ notbefore whoami
+47df663fd3820dc6 ed25519 WZKMtBkeSXNeWgu4sCRg2lEkMU7mToXPUMJcRbD+4tk=
+```
+
+Then, before the hour exists:
 
 ```
 $ notbefore plan --after 2026-10-01T00:00Z --purpose chart-audit-2026-q4 --sample 50 eligible.txt
-contract written: notbefore-plan-chart-audit-2026-q4.json  sha256 3f9c…
-timestamped: freetsa Sep 12 20:41:07 2026 GMT
-timestamped: digicert Sep 12 20:41:07 2026 GMT
-this is timestamping, not registration: publish the sha256 where it cannot be withdrawn — then wait for the pulse and run: notbefore execute notbefore-plan-chart-audit-2026-q4.json
+contract written: notbefore-plan-chart-audit-2026-q4.json  sha256 3551…  signer 47df663fd3820dc6  decision_id chart-audit-2026-q4
+decision statement signed: notbefore-plan-chart-audit-2026-q4.json.sig.json
+timestamped: freetsa Sep 12 21:59:40 2026 GMT
+timestamped: digicert Sep 12 21:59:40 2026 GMT
+registered in notbefore.net/decisions: index 12, AUTHORITATIVE (first entry for this key_id/decision_id); receipt verified (checkpoint size 13): …log.json
+then wait for the pulse and run: notbefore execute notbefore-plan-chart-audit-2026-q4.json
 ```
 
-The contract is canonical JSON — selection rule (`first-eligible-reveal-released-at-or-after 2026-10-01T00:00Z`),
-purpose, operation `sample`, `k = 50`, and the SHA-256 and line count of `eligible.txt` — and the two `.tsr` files
-beside it are third-party proof of *when* it existed. They do not force you to disclose it — publish the hash where it
-cannot be quietly withdrawn (a commit, a registry, a dated email). If a TSA was down, `plan` exits 1 and
-`notbefore timestamp <contract>` fetches the missing token later.
+The `registered in …` line appears once the release you run has the decision log enabled (`keys/DECISIONS.json`,
+`enabled: true`). 0.8.0 ships the identity, the signing and the client with the log **disabled** until the Worker is
+live; until then `plan` prints `[INFO] decision log not enabled in this release` and `execute` records
+`decision_log.status: disabled`. Status: `DECISION-LOG.md`.
+
+Three files matter beside the contract: the two `.tsr` tokens (third-party proof of *when* these bytes existed), the
+`.sig.json` statement (your key saying "I commit to contract 3551… under decision_id chart-audit-2026-q4"), and the
+`.log.json` receipt (the log's signed checkpoint and an inclusion proof, verified against the key vendored in this
+package before it was written). The log stores the **hash**; add `--disclose` to publish the contract body too.
+
+**Write-once.** `(key_id, decision_id)` is a namespace and the first statement in it wins. Register a second contract
+under the same `decision_id` and the log appends it as an *amendment* (`seq_in_namespace 2`) — visible, but `execute`
+will refuse it: "this contract is not the first registered for its decision_id". That is the point: you cannot
+timestamp three plans and publish the lucky one. `decision_id` defaults to the purpose string; for anything
+high-stakes derive it from an artifact your peers hold (`--decision-id irb:2026-0142/v3`) so a rename is visible.
 
 ```
 $ notbefore execute notbefore-plan-chart-audit-2026-q4.json       # after 2026-10-01
-[PASS] contract timestamped: freetsa Sep 12 20:41:07 2026 GMT
-[PASS] contract timestamped: digicert Sep 12 20:41:07 2026 GMT
+[PASS] contract signed by key 47df663fd3820dc6 for decision_id 'chart-audit-2026-q4' (Ed25519 statement verifies)
+[PASS] contract timestamped: freetsa Sep 12 21:59:40 2026 GMT
+[PASS] contract timestamped: digicert Sep 12 21:59:40 2026 GMT
 [PASS] selected by rule 'first-eligible-reveal-released-at-or-after': reveal 0489 (round released 2026-10-01T00:05:27Z >= after 2026-10-01T00:00:00Z)
-[PASS] both TSAs verify; latest token < round release (latest token 2026-09-12T20:41:07Z, 1566860 s before release)
+[PASS] both TSAs verify; latest token < round release (latest token 2026-09-12T21:59:40Z, 1562147 s before release)
+[PASS] decision log notbefore.net/decisions: first entry for (47df663fd3820dc6, chart-audit-2026-q4) is this contract: index 12, received 2026-09-12T22:00:03Z, tree size 13
+[PASS] decision-log inclusion verified (leaf 12 of 13, log signature under the vendored key); 1562124 s before release
 … the pair's verification lines …
-transcript written: notbefore-executed-3f9c….json
+transcript written: notbefore-executed-3551….json
 ```
 
-`execute` refuses if either TSA token is missing or fails to verify, if the *latest* token is not strictly before the
-selected round (the decision could have been finalized knowing V), if the input bytes differ from the committed
-SHA-256, or if the contract file was edited. Failure/skip hours and
-non-compliant seqs are passed over by the rule, not by you. A contract without tokens runs only with
-`--allow-unregistered`, and the transcript says so.
+`execute` refuses if the statement does not verify for *this* contract, key and decision_id; if either TSA token is
+missing or fails to verify; if the *latest* token is not strictly before the selected round (the decision could have
+been finalized knowing V); if another contract was registered first under the decision_id; if the registration was
+received at or after the round; or if the input bytes differ from the committed SHA-256. An unregistered or
+unreachable log is a WARN by default (the timestamps still bound *when*) and a refusal with `--require-log`. Offline,
+the mirror in the log checkout (`decisions/`) answers the same question. A contract written before 0.8.0
+(`notbefore/contract/1`, unsigned) runs only with `--allow-unregistered`, labelled in the transcript.
+
+If a TSA was down, `plan` exits 1 and `notbefore timestamp <contract>` fetches the missing token; if the log was
+down, `notbefore register <contract>` submits the statement later, idempotently. The transcript carries
+`contract_sha256`, `signer_key_id`, `decision_id`, the token times, `decision_log {status, index, size, root_b64,
+received_unix}` and the selection, so a reviewer can re-run the same contract and get the same output — or run
+`notbefore execute` themselves from your published contract, `.sig.json` and tokens.
 
 ## The other derived functions (same S, one more deterministic step)
 

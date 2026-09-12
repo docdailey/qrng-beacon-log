@@ -1,0 +1,11 @@
+[Unit]
+Description=notbefore decision log: mirror notbefore.net/decisions into decisions/, verify, witness-cosign, push (DECISION-LOG.md)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/qrng-beacon
+ExecStartPre=/usr/bin/git -C %h/qrng-beacon pull -q --ff-only origin main
+ExecStart=/usr/bin/python3 %h/qrng-beacon/decisions_mirror.py --push
+TimeoutStartSec=600
+Nice=10
