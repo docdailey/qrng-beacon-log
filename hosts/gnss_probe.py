@@ -5,15 +5,16 @@ The anchor is a GNSS epoch (week + tow) whose TP1 edge was latched in i210 SILIC
 ts2phc on SDP0. Its uncertainty is set by the receiver sawtooth and the servo residual,
 NOT by what it costs software to read a clock afterwards.
 """
-import sys, struct, json
-sys.path.insert(0, "/home/willy/.local/lib/python3.14/site-packages")
+import sys, struct, json, os, glob
+# runs as whichever OS user owns the role (the confined `beacon` user under hosts/ISOLATION.md): look in THAT user's home
+for _sp in glob.glob(os.path.expanduser("~/.local/lib/python3*/site-packages")): sys.path.insert(0, _sp)
 import pymysql
 
 GPS_EPOCH_UNIX = 315964800          # 1980-01-06T00:00:00Z
 TAI_MINUS_GPS  = 19                 # fixed by definition
 
 d = {}
-for l in open("/home/willy/timehat-db.env"):
+for l in open(os.path.expanduser("~/timehat-db.env")):
     if "=" in l:
         k, v = l.strip().split("=", 1); d[k] = v
 c = pymysql.connect(host=d["TIMEHAT_DB_HOST"], port=int(d["TIMEHAT_DB_PORT"]),
