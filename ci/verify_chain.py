@@ -92,6 +92,18 @@ rc, _ = run("python3", "merkle/merkle_proof.py", "root", "--rehashed"); say(f"[{
 for pf in ("merkle/proof_quantum_20251115_054715.json", "merkle/proof_rehashed_concordant.json", "merkle/proof_rehashed_discordant.json"):
     if os.path.exists(os.path.join(ROOT, pf)):
         rc, _ = run("python3", "merkle/merkle_proof.py", "verify", pf); say(f"[{'PASS' if rc == 0 else 'FAIL'}] inclusion proof verifies: {os.path.basename(pf)}"); T["failures"] += rc != 0
+# transparency-log layer (TLOG.md): the RFC 6962 tree over chain/ must build, and the self-test against the CT vectors must pass
+rc, out = run("python3", "tlog.py", "selftest"); say(f"[{'PASS' if rc == 0 else 'FAIL'}] tlog.py self-test (RFC 6962 / certificate-transparency vectors, signed-note round trip)"); T["failures"] += rc != 0
+rc, out = run("python3", "tlog.py", "root")
+if rc == 0:
+    r = json.loads(out.strip().splitlines()[-1]); say(f"[INFO] tlog root over chain/ at size {r['size']}: {r['root_sha256']}  (checkpoints begin once the origin is decided; TLOG.md §4.1)")
+else: say("[FAIL] tlog.py root could not build the tree over chain/ (seq gap?)"); T["failures"] += 1
+if os.path.exists(os.path.join(ROOT, "checkpoint")) and os.path.exists(os.path.join(ROOT, "keys", "CHECKPOINT.json")):
+    cp = json.load(open(os.path.join(ROOT, "keys", "CHECKPOINT.json")))
+    older = sorted(glob.glob(os.path.join(ROOT, "checkpoints", "*")))
+    args = ["python3", "tlog.py", "verify", "checkpoint", "--origin", cp["origin"], "--pub", cp["public_key_file"]] + (["--old", older[-2]] if len(older) >= 2 else [])
+    rc, out = run(*args); say(f"[{'PASS' if rc == 0 else 'FAIL'}] signed checkpoint verifies (signature, root recomputes, consistency with the previous checkpoint)"); T["failures"] += rc != 0
+    if rc: print(out)
 if REQ_BLS and T["bls_skipped"]: say(f"[FAIL] BLS skipped {T['bls_skipped']} time(s) with REQUIRE_BLS=1"); T["failures"] += 1
 say("\n=== verification tally ===")
 for k, v in T.items(): say(f"  {k:24s} {v}")
