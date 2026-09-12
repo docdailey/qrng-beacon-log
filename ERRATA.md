@@ -6,6 +6,40 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-009 — the split-view check raised a false "possible hidden branch" on an anchor still in flight; a transient Rekor network error failed a run (2026-09-12)
+
+**Affected:** `ci/verify_anchors.py` between `dfaf75e` (12:50 UTC) and the fix; CI runs **34698076944** (14:01 UTC,
+COMMIT pulse 0044) and **34696292826** (13:23 UTC, hourly). No pulse, key or anchor was wrong; **no split view
+occurred.** Found by Bill's other Claude session reading the failed run, 2026-09-12 ~14:10 UTC.
+
+**What was wrong (1).** The check enumerated every Rekor entry under `keys/anchor.pub` and called any entry that was
+not yet a *record on the `anchors` branch* "unexplained". But the anchor job uploads to Rekor **before** it pushes the
+branch, and the verify job checks the branch out at job start; so a verify run inside that window saw pulse 0044's
+own anchor (logIndex 2808375615, 14:02:49 UTC) as a hidden branch while simultaneously listing 0044 as
+`missing_in_grace` — "44 pulses, 43 anchored, 44 entries under the key" was the same object counted from both sides.
+Intermittent: it fired only when the verify step ran between the upload and the branch push.
+
+**What was wrong (2).** In the 13:23 run, one live Rekor refetch (pulse 0021) failed with `Connection reset by peer`
+and was treated as a broken anchor. The offline proof — signed entry timestamp + inclusion proof + checkpoint, all
+verified against the pinned Rekor key — had passed; a transient network error is not evidence against it.
+
+**Why it matters.** For a log whose claim is verifiability, a verifier that cries "hidden branch" at its own
+in-flight anchor is worse than one that misses a real one: it teaches readers to ignore the alarm.
+
+**Fix.** (1) An entry under the anchor key is now matched **by its recorded hash** against the statement hash
+recomputed from *every* published pulse, not by the presence of a record on the branch. A match to a pulse whose
+record is still absent is reported `[WAIT] … in flight` (counted in `rekor_entries_in_flight`) and becomes a
+failure only if the record stays missing past the 25-minute grace; a hash that matches **no** published pulse is
+the alarm, as before. (2) Live refetches retry three times with backoff and then degrade to `[WARN]` with the
+offline proof standing (`rekor_refetch_failed` counts them). (3) Tally relabel: `commit_rekor_late` was 16 in every
+run — those are exactly the sixteen commit pulses ≤ 0041 whose anchors are retroactive by construction (ERR-008);
+they are now `commit_rekor_retroactive`, and `commit_rekor_late` counts only commits ≥ 0042 whose anchor missed the
+release (0 so far; every contemporaneous commit has anchored ~2 min before its round). Tested against the live
+branch with pulse 0045's record hidden (in flight → PASS with one WAIT) and pulse 0030's hidden (overdue → FAIL).
+
+**Not changed:** the CLI (`notbefore`) does not enumerate Rekor entries and was not affected; its per-pulse refetch
+already degraded to a warning.
+
 ## ERR-008 — the entropy host accepted a second commit at an already-resolved seq; operator equivocation was neither prevented nor documented (2026-09-12)
 
 **Affected:** `hosts/entropy_host.py` before hash `d2eaa923b7ac817f…`; `PROTOCOL.md`, `CLAIMS.md`, `THESIS.md`

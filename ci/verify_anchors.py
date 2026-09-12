@@ -26,9 +26,10 @@ REFETCH = os.environ.get("REFETCH") == "1"; GRACE_S = int(os.environ.get("ANCHOR
 anchor_pub = L.load_pub(open(os.path.join(ROOT, "keys", "anchor.pub"), "rb").read()); anchor_pem = L.pub_pem(anchor_pub)
 rekor_pub = L.load_pub(open(os.environ.get("REKOR_PUB_FILE") or os.path.join(ROOT, "keys", "rekor.pub"), "rb").read())
 if L.key_id(rekor_pub) != L.REKOR_LOG_ID: print("[FAIL] keys/rekor.pub does not hash to the pinned Rekor log ID"); sys.exit(1)
+RETROACTIVE_THROUGH = 41          # pulses 0001-0041 were anchored after the fact (2026-09-12 12:47 UTC, ERR-008)
 T = dict(pulses=0, anchored=0, missing_in_grace=0, missing_overdue=0, statement_ok=0, anchor_sig_ok=0, rekor_set_ok=0, rekor_inclusion_ok=0,
-         rekor_refetched=0, commit_rekor_before_release=0, commit_rekor_late=0, ots_complete=0, ots_pending=0,
-         rekor_entries_under_key=None, unexplained_rekor_entries=None, failures=0)
+         rekor_refetched=0, rekor_refetch_failed=0, commit_rekor_before_release=0, commit_rekor_retroactive=0, commit_rekor_late=0, ots_complete=0, ots_pending=0,
+         rekor_entries_under_key=None, rekor_entries_in_flight=None, unexplained_rekor_entries=None, failures=0)
 lines = []
 def say(s): print(s); lines.append(s)
 def published_time(pf):
@@ -36,13 +37,14 @@ def published_time(pf):
         out = subprocess.run(["git", "log", "-1", "--format=%ct", "--", os.path.relpath(pf, ROOT)], cwd=ROOT, capture_output=True, text=True).stdout.strip()
         return int(out) if out else os.path.getmtime(pf)
     except Exception: return os.path.getmtime(pf)
-known_uuids = {}
+known_uuids = {}; expected_hash = {}; in_flight = {}
 for pf in L.pulse_files(os.path.join(ROOT, "chain")):
     seq = int(L.PULSE_RE.search(pf).group(1)); T["pulses"] += 1
     stem = os.path.join(A, f"pulse-{seq:04d}"); rec_path = stem + ".anchor.json"; stmt_path = stem + ".stmt.json"; ots_path = stmt_path + ".ots"
     statement, st = L.statement_for(pf)
+    expected_hash[L.sha256(statement)] = seq          # what a legitimate Rekor entry for this pulse MUST record
     if not os.path.exists(rec_path):
-        age = time.time() - published_time(pf)
+        age = time.time() - published_time(pf); in_flight[seq] = age
         if age > GRACE_S: say(f"[FAIL] {seq:04d}: no anchor {age/60:.0f} min after publication (grace {GRACE_S//60} min)"); T["missing_overdue"] += 1; T["failures"] += 1
         else: say(f"[WAIT] {seq:04d}: anchor pending ({age:.0f} s since publication)"); T["missing_in_grace"] += 1
         continue
@@ -65,17 +67,22 @@ for pf in L.pulse_files(os.path.join(ROOT, "chain")):
     inc_ok, why = L.verify_inclusion(entry, rekor_pub); chk(inc_ok, "Rekor inclusion proof: " + why); T["rekor_inclusion_ok"] += inc_ok
     known_uuids[rec["rekor"]["uuid"]] = seq
     if REFETCH:
-        try:
-            live = L.rekor_get(rec["rekor"]["uuid"])
+        live = None
+        for attempt in range(3):                       # transient network errors must not read as a broken anchor (ERR-009)
+            try: live = L.rekor_get(rec["rekor"]["uuid"]); break
+            except Exception as e: err = e; time.sleep(2 * (attempt + 1))
+        if live is None:
+            say(f"[WARN] {seq:04d}: Rekor refetch failed 3x ({err}); the offline proof (SET + inclusion, pinned Rekor key) stands"); T["rekor_refetch_failed"] += 1
+        else:
             chk(live["body"] == entry["body"] and live["integratedTime"] == entry["integratedTime"] and live["logIndex"] == entry["logIndex"], "live Rekor entry differs from the published copy")
             T["rekor_refetched"] += 1
-        except Exception as e: chk(False, f"Rekor refetch failed: {e}")
     if st["type"] == "commit" and S is not None:
         core = json.load(open(pf))["core"]
         rel = (core.get("derived") or {}).get("target_release_unix_s") or (S.release_time(core["commitment"]["target_round"]) if core.get("commitment") else None)
         if rel is not None:
             margin = float(rel) - entry["integratedTime"]
             if margin > 0: T["commit_rekor_before_release"] += 1
+            elif seq <= RETROACTIVE_THROUGH: T["commit_rekor_retroactive"] += 1     # anchored after the fact on 2026-09-12; expected, documented (ERR-008)
             else: T["commit_rekor_late"] += 1; say(f"[WARN] {seq:04d}: Rekor integratedTime is {-margin:.0f} s AFTER the drand release (anchor late; TSA tokens remain the binding proof)")
     if os.path.exists(ots_path):
         try:
@@ -91,15 +98,30 @@ if REFETCH:
     try:
         uuids = L.rekor_search_by_key(anchor_pem) or []
         T["rekor_entries_under_key"] = len(uuids)
-        unexplained = [u for u in uuids if u not in known_uuids]
-        T["unexplained_rekor_entries"] = len(unexplained)
-        for u in unexplained:
-            try:
-                e = L.rekor_get(u); h, _ = L.entry_hash_and_key(e)
-                say(f"[FAIL] Rekor entry {u[:16]}… (logIndex {e['logIndex']}, {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(e['integratedTime']))}) is signed by the anchor key but matches NO published pulse (statement hash {h[:16]}…) — possible hidden branch / split view")
-            except Exception as ex: say(f"[FAIL] Rekor entry {u[:16]}… under the anchor key is not a published anchor and could not be fetched: {ex}")
+        # An entry whose anchor RECORD is not on the anchors branch yet is not a hidden branch if its recorded hash is the
+        # statement hash of a published pulse (the anchor job uploads to Rekor before it pushes the branch; ERR-009).
+        unexplained, flight = [], []
+        for u in uuids:
+            if u in known_uuids: continue
+            e = None
+            for attempt in range(3):
+                try: e = L.rekor_get(u); break
+                except Exception as ex: err = ex; time.sleep(2 * (attempt + 1))
+            if e is None:
+                say(f"[FAIL] Rekor entry {u[:16]}… under the anchor key could not be fetched 3x: {err}"); unexplained.append(u); continue
+            h, _ = L.entry_hash_and_key(e)
+            when = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e["integratedTime"]))
+            if h in expected_hash:
+                s_ = expected_hash[h]; age = in_flight.get(s_)
+                if age is not None and age > GRACE_S:
+                    say(f"[FAIL] Rekor entry logIndex {e['logIndex']} ({when}) IS pulse {s_:04d}'s anchor, but its record has been missing from the anchors branch for {age/60:.0f} min"); unexplained.append(u)
+                else:
+                    say(f"[WAIT] Rekor entry logIndex {e['logIndex']} ({when}) is pulse {s_:04d}'s anchor; its record is not on the anchors branch yet (in flight)"); flight.append(u)
+            else:
+                say(f"[FAIL] Rekor entry {u[:16]}… (logIndex {e['logIndex']}, {when}) is signed by the anchor key but its hash {h[:16]}… matches NO published pulse — possible hidden branch / split view"); unexplained.append(u)
+        T["unexplained_rekor_entries"] = len(unexplained); T["rekor_entries_in_flight"] = len(flight)
         T["failures"] += len(unexplained)
-        if not unexplained: say(f"[PASS] split-view check: all {len(uuids)} Rekor entries under keys/anchor.pub correspond to published pulses")
+        if not unexplained: say(f"[PASS] split-view check: all {len(uuids)} Rekor entries under keys/anchor.pub correspond to published pulses" + (f" ({len(flight)} in flight)" if flight else ""))
     except Exception as e: say(f"[WARN] split-view check skipped: Rekor search failed: {e}")
 say("\n=== anchor verification tally ===")
 for k, v in T.items(): say(f"  {k:28s} {v}")
@@ -109,5 +131,5 @@ if summ:
         f.write("## verify-anchors\n\n| check | count |\n|---|---|\n" + "".join(f"| {k} | {v} |\n" for k, v in T.items()))
         f.write(f"\n**{'FAILED' if T['failures'] else 'ANCHORS VERIFIED'}** — {T['anchored']}/{T['pulses']} pulses anchored in Rekor (SET + inclusion proof verified offline against the pinned Rekor key), "
                 f"{T['commit_rekor_before_release']} commit anchors timestamped by Rekor before their drand release, OpenTimestamps complete {T['ots_complete']} / pending {T['ots_pending']}, "
-                f"split-view check {'clean' if T['unexplained_rekor_entries'] == 0 else ('FLAGGED' if T['unexplained_rekor_entries'] else 'not run')}.\n")
+                f"split-view check {'clean' if T['unexplained_rekor_entries'] == 0 else ('FLAGGED' if T['unexplained_rekor_entries'] else 'not run')}, {T['commit_rekor_retroactive']} retroactive commit anchors (≤ 0041).\n")
 sys.exit(1 if T["failures"] else 0)
