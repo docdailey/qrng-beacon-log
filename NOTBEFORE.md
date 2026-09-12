@@ -1,6 +1,6 @@
 # NotBefore — specification
 
-**Status:** draft 0.3, 2026-09-12 — 0.2 plus the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
+**Status:** draft 0.4, 2026-09-12 — 0.3 plus the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
 **Implements over:** `qrng-beacon-log` protocol v0.5 (live log)  
 **Normative language:** MUST / MUST NOT / SHOULD / MAY
 
@@ -279,6 +279,29 @@ Input: ordered list, pulse \(N\), purpose \(P\), fraction \(f \in (0,1)\).
 Shuffle as §7.3. First \(\lfloor f \cdot k \rfloor\) items = set A, rest = set B.  
 Do not re-draw.
 
+### 7.6 Sample — exactly \(K\)
+`sample N --purpose P --k K file`: shuffle as §7.3, take the first \(K\) (\(0 \le K \le k\)). "Pick 12 charts"; `split`
+with an odd fraction is the wrong tool for an exact count.
+
+### 7.7 Assign — balanced arms
+`assign N --purpose P --arms m file`: shuffle as §7.3; shuffled position \(i\) (0-based) → arm \(i \bmod m\) (0-based).
+Arm sizes differ by at most one. Output: `record<TAB>arm`, in shuffled order.
+
+### 7.8 Id — pseudonyms
+`id N --purpose P --from file [--len 16]`: each line → `hex(SHA256("notbefore/id/v1" || S || line))[:len]`, in input
+order, one per line, **without** the line. A pseudonym is not a secret: anyone who holds the name list and the (public)
+\(S\) recomputes it. It blinds readers who lack the names; it does not encrypt them. Do not put raw names in the output.
+
+### 7.9 Range — uniform integer
+`range N --purpose P --lo a --hi b`: uniform in \([a,b]\) by rejection sampling: for counter \(c = 0,1,\dots\),
+\(r_c\) = first 8 bytes of `SHA256("notbefore/range/v1" || S || c_be8)` as uint64 BE; with `span = b−a+1` and
+`limit = ⌊2⁶⁴/span⌋·span`, the first \(r_c <\) `limit` gives \(a + (r_c \bmod\) `span`\()\). Unbiased; deterministic.
+
+### 7.10 Bytes — a public byte stream
+`bytes N --purpose P --n n`: first \(n\) bytes of counter-mode SHA-256, `SHA256("notbefore/bytes/v1" || S || c_be8)`
+for \(c = 0,1,\dots\). Suitable to seed a local CSPRNG for a reproducible simulation. **Public if \(P\) is public** —
+never use it as key material.
+
 ### 7.5 Transcript (MUST keep)
 
 ```json
@@ -297,6 +320,8 @@ Do not re-draw.
 
 This file is the engineering artifact. Screenshots of hex are not.
 
+The shipped CLI writes this skeleton plus: `pulse_hash_commit`, `drand_round`, `derive_domain`, `operation` and its parameter (`frac` | `k` | `arms` | `lo`,`hi` | `n` | `hexlen`), `input_file`, `input_sha256`, `record_count`, `output_sha256` (or `A`/`B` with `count`+`sha256` for `split`), `log_ref`, `cli_version`, `spec`, `verified_utc`, and a `checks` summary. Field-by-field meaning and what must be stable on a re-run: `cli/USAGE.md`.
+
 ---
 
 ## 8. CLI (normative behavior)
@@ -304,20 +329,31 @@ This file is the engineering artifact. Screenshots of hex are not.
 **Status: implemented** — package `notbefore` 0.2.0 in `cli/` of the log repository (**`pip install notbefore`** — released to PyPI 2026-09-12 13:41 UTC via Trusted Publishing, with Sigstore attestations). The verifier, keys, drand group key, Rekor key, freetsa CA and expected host configuration are **vendored** in the package and pinned to a named log commit (`notbefore --version`); the log is read as data. §14 is its acceptance suite and runs in CI (`.github/workflows/cli.yml`). Requires `git` and `openssl` on PATH.
 
 ```text
-notbefore verify  <seq>
-notbefore value   <seq>
-notbefore seed    <seq> --purpose <P>
-notbefore shuffle <seq> --purpose <P> <file>
-notbefore split   <seq> --purpose <P> --frac 0.8 <file>
+notbefore verify   <seq>                                   # exit 0/1; transcript on stderr
+notbefore value    <seq>                                   # V hex on stdout, only if verify passes
+notbefore seed     <seq> --purpose <P>                     # S hex
+notbefore shuffle  <seq> --purpose <P> <file>              # shuffled lines on stdout
+notbefore split    <seq> --purpose <P> --frac 0.8 <file>   # <file>.A / <file>.B  (--out-a/--out-b)
+notbefore sample   <seq> --purpose <P> --k 12 <file>       # first 12 of the shuffle
+notbefore assign   <seq> --purpose <P> --arms 2 <file>     # record<TAB>arm, arms 0..m-1
+notbefore id       <seq> --purpose <P> --from <file>       # pseudonym per line (--len 16)
+notbefore range    <seq> --purpose <P> --lo 1 --hi 6       # one uniform integer
+notbefore bytes    <seq> --purpose <P> --n 32              # hex bytes (public)
+notbefore explain  <seq>                                   # methods-section paragraph: commit/TSA/round/release/V/eligibility
+notbefore checkpoint                                       # the log's signed head, verified; site cross-check; cached-head consistency
+notbefore pin                                              # write notbefore.lock (log sha, CLI, verifier); --lock makes re-runs bit-stable
+notbefore diff-transcript a.json b.json                    # what changed: input, pulse, purpose, versions
 ```
+Every derive command writes a transcript (§7.5) unless `--transcript none`; `--transcript -` prints it. Global flags:
+`-q` (only FAIL/WARN on stderr), `--json`, `--offline`, `--no-anchors`, `--repo URL`, `--log-dir DIR`, `--log-ref SHA`,
+`--lock notbefore.lock`, `--checkpoint-url`. Consumer walkthrough with real files: `cli/USAGE.md`.
 
-- `verify` prints PASS/FAIL lines to **stderr**, exit 0/1. Every payload (`value`, `seed`, shuffled lines) is **stdout only**, so `V=$(notbefore value N)` is the bare hex. `-q` suppresses PASS/INFO lines; failures still print and exit 1.
+- `verify` prints PASS/FAIL lines to **stderr**, exit 0/1; since 0.4.0 it also proves the pair's inclusion in the log's signed checkpoint (`notbefore.net/log`), cross-checks the checkpoint served by `https://notbefore.net/checkpoint`, and refuses if the head is not an append-only extension of the head this machine saw before. Every payload (`value`, `seed`, shuffled lines) is **stdout only**, so `V=$(notbefore value N)` is the bare hex. `-q` suppresses PASS/INFO lines; failures still print and exit 1.
 - `value` prints \(V\) hex only if verify would pass; else exit 1, no stdout hex.
 - `seed` prints \(S\) hex under the same rule.
 - Implementation MAY wrap the published `verify.py` rather than reimplement BLS.
 
-Default log URL: `https://github.com/docdailey/qrng-beacon-log`.  
-`--repo` and `--pin` override.
+Default log: a cached clone of `https://github.com/docdailey/qrng-beacon-log` at `origin/main`. `--repo`, `--log-dir`, `--log-ref` (or a `notbefore.lock`) override. Keys are never taken from the log: the verifier, all keys and the checkpoint identity are vendored in the package.
 
 ---
 
@@ -370,7 +406,8 @@ Do not implement this until isolation can hold a vector of \(E\) and refuse the 
 
 | Item | Version |
 |---|---|
-| This spec | `notbefore/spec/0.3` |
+| This spec | `notbefore/spec/0.4` |
+| Id / range / bytes domains | `notbefore/id/v1`, `notbefore/range/v1`, `notbefore/bytes/v1` |
 | Derive domain | `notbefore/derive/v1` |
 | Shuffle domain | `notbefore/shuffle/v1` |
 | Live log protocol | `0.5` (`schema.py`) |
@@ -426,6 +463,8 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 ---
 
 ## 16. Changelog
+
+**0.4 (2026-09-12).** Derived functions on the same \(S\): `sample` (§7.6), `assign` (§7.7), `id` (§7.8), `range` (§7.9), `bytes` (§7.10) with their domains; tool commands `explain`, `pin`/`--lock`, `diff-transcript`, `checkpoint` (§8). \(V\), \(S\), shuffle and split unchanged. Status line and §8 no longer name a stale package version or a `--pin` flag that the CLI never had.
 
 **0.3 (2026-09-12).** Protocol v0.5.1 adds the `skip` pulse (§4.3a): a refused commit becomes a signed, timestamped chain event instead of a silent gap. Eligibility (§6) excludes it explicitly. `notbefore` 0.3.0 vendors the verifier that accepts a commit after a skip; 0.2.0 rejects the first commit after any skipped hour. \(V\), \(S\), shuffle and split are unchanged (same domains).
 

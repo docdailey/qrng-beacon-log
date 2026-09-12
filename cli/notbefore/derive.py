@@ -36,6 +36,46 @@ def split(records, key: bytes, frac: float):
     s = shuffle(records, key); k = int(frac * len(s))          # floor(f * k); do not re-draw
     return s[:k], s[k:]
 
+# ---- one more deterministic step on S (spec 0.4). Every function is a pure function of (S, inputs); nothing is secret.
+D_ID, D_RANGE, D_BYTES = b"notbefore/id/v1", b"notbefore/range/v1", b"notbefore/bytes/v1"
+
+def sample(records, key: bytes, k: int):
+    """shuffle, take the first k. `exactly 12` — split with an odd frac is the wrong tool."""
+    if not (0 <= k <= len(records)): raise ValueError(f"k must be between 0 and {len(records)}")
+    return shuffle(records, key)[:k]
+
+def assign(records, key: bytes, arms: int):
+    """shuffle; shuffled position i -> arm i mod arms (0-based). Balanced arms without a size cut. Returns [(record, arm)] in shuffled order."""
+    if arms < 1: raise ValueError("arms must be >= 1")
+    return [(x, i % arms) for i, x in enumerate(shuffle(records, key))]
+
+def pseudonym(record: str, key: bytes, hexlen: int = 16) -> str:
+    """SHA256(notbefore/id/v1 || S || record) truncated to hexlen hex chars. A PSEUDONYM, not a secret: anyone holding the
+    name list and the public S can recompute it. It blinds readers who lack the names; it does not encrypt them."""
+    if not (8 <= hexlen <= 64): raise ValueError("hexlen must be 8..64")
+    return hashlib.sha256(D_ID + key + record.encode("utf-8")).hexdigest()[:hexlen]
+
+def stream(key: bytes, domain: bytes, n: int) -> bytes:
+    """Counter-mode SHA-256: SHA256(domain || S || counter_be8) for counter = 0, 1, ... concatenated; first n bytes."""
+    out, c = b"", 0
+    while len(out) < n: out += hashlib.sha256(domain + key + c.to_bytes(8, "big")).digest(); c += 1
+    return out[:n]
+
+def rand_bytes(key: bytes, n: int) -> bytes:
+    if not (1 <= n <= 1 << 20): raise ValueError("n must be 1..1048576")
+    return stream(key, D_BYTES, n)
+
+def rand_range(key: bytes, lo: int, hi: int) -> int:
+    """Uniform integer in [lo, hi] by rejection sampling over 64-bit chunks of counter-mode SHA-256 (domain notbefore/range/v1).
+    chunk = SHA256(D_RANGE || S || counter_be8)[:8] as uint64 BE; accept if chunk < floor(2^64 / span) * span."""
+    if lo > hi: raise ValueError("lo must be <= hi")
+    span = hi - lo + 1
+    if span == 1: return lo
+    limit = ((1 << 64) // span) * span; c = 0
+    while True:
+        r = int.from_bytes(hashlib.sha256(D_RANGE + key + c.to_bytes(8, "big")).digest()[:8], "big"); c += 1
+        if r < limit: return lo + (r % span)
+
 def sha256_hex(b: bytes) -> str: return hashlib.sha256(b).hexdigest()
 
 def transcript(check, purpose: str, derived: bytes, extra=None):

@@ -58,7 +58,18 @@ notbefore verify 49</pre>
   <p class="note">The verifier is pinned and vendored, reads the log from git as data,
   and emits a reproducible JSON transcript. It does not require trusting this site.</p>
 
-  <h2>Published data</h2>
+  <h2>Use it</h2>
+<p>Pre-register the pulse and a purpose string before the hour exists, wait, then derive. A reviewer runs the same
+command and gets byte-identical output; the transcript JSON is the artifact to keep.</p>
+<pre>notbefore split  45 --purpose cohort-allocation-2026-09 --frac 0.8 cohort.txt   # cohort.txt.A / .B
+notbefore sample 45 --purpose chart-audit-2026-09 --k 12 cohort.txt
+notbefore assign 45 --purpose pilot-arms-2026-09 --arms 2 cohort.txt
+notbefore id     45 --purpose blind-ids-2026-09 --from cohort.txt
+notbefore explain 45          # a methods-section paragraph</pre>
+<p>Walkthrough, transcript schema and flags: <a href="cli/USAGE.md">cli/USAGE.md</a>. Contract: <a href="NOTBEFORE.md">NOTBEFORE.md</a>
+(draft 0.4). The hour has no value if its reveal failed — take the next eligible hour, never an earlier one.</p>
+
+<h2>Published data</h2>
   <ul>
     <li><code>/chain/pulse-NNNN.json</code> — every pulse record, signed.
         e.g. <a href="/chain/pulse-0001.json">pulse-0001</a>;

@@ -1,7 +1,7 @@
 # notbefore
 
 Consumer CLI for the public **qrng-beacon-log** — an hourly, commit-then-reveal, host-attested randomness log
-anchored to drand quicknet, RFC 3161 timestamps, Rekor and OpenTimestamps. Spec: `NOTBEFORE.md` (draft 0.2) in
+anchored to drand quicknet, RFC 3161 timestamps, Rekor and OpenTimestamps. Spec: `NOTBEFORE.md` (draft 0.4) in
 <https://github.com/docdailey/qrng-beacon-log>.
 
 **What it proves:** the 32-byte attested value \(V\) of hour \(N\) was **fixed before** drand round \(R\) and
@@ -9,13 +9,22 @@ anchored to drand quicknet, RFC 3161 timestamps, Rekor and OpenTimestamps. Spec:
 unique. This is not a certification of anything; see `CLAIMS.md` in the log repository.
 
 ```bash
-pip install notbefore            # PyPI, 0.2.0; needs git and openssl on PATH; add [anchors] for OpenTimestamps proofs
-notbefore verify 41              # commit 40 + reveal 41: signatures (pinned keys), drand BLS offline, RFC 3161, Rekor anchors
-notbefore value 41               # V, only if verify passes
-notbefore seed 41 --purpose clinic-qi-roster-2026-09-12       # S = SHA256("notbefore/derive/v1" || V || purpose)
-notbefore shuffle 41 --purpose split:iris-csv:v3 rows.txt      # deterministic shuffle of the lines of rows.txt
-notbefore split 41 --purpose split:iris-csv:v3 --frac 0.8 rows.txt
+pip install notbefore            # PyPI; needs git and openssl on PATH; add [anchors] for OpenTimestamps proofs
+notbefore verify 45              # commit 44 + reveal 45: signatures (pinned keys), drand BLS offline, RFC 3161, Rekor anchors, checkpoint inclusion
+notbefore value 45               # V, only if verify passes (stdout only)
+notbefore seed 45 --purpose cohort-allocation-2026-09              # S = SHA256("notbefore/derive/v1" || V || purpose)
+notbefore split 45 --purpose cohort-allocation-2026-09 --frac 0.8 cohort.txt    # cohort.txt.A / cohort.txt.B
+notbefore sample 45 --purpose chart-audit-2026-09 --k 12 cohort.txt             # exactly 12
+notbefore assign 45 --purpose pilot-arms-2026-09 --arms 2 cohort.txt            # record<TAB>arm, balanced
+notbefore id 45 --purpose blind-ids-2026-09 --from cohort.txt                   # pseudonyms, no names in the output
+notbefore range 45 --purpose start-page --lo 1 --hi 240                         # one uniform integer
+notbefore bytes 45 --purpose sim-seed --n 32                                    # public bytes to seed a simulation
+notbefore explain 45             # a methods-section paragraph
+notbefore pin                    # notbefore.lock: re-runs verify at exactly this log commit
+notbefore diff-transcript a.json b.json
+notbefore checkpoint             # the log's signed head; site cross-check; cached-head consistency
 ```
+**Walkthrough with real files and the exact transcript: [`USAGE.md`](USAGE.md).**
 
 **Streams, for scripting.** Payloads go to **stdout only**; the verification transcript goes to **stderr**. So
 `V=$(notbefore value 45)` is the 64-hex value and nothing else, and `notbefore shuffle … > out.txt` is clean. `-q`

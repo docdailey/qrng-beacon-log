@@ -73,8 +73,9 @@ class LogSource:
     # ---- anchors branch
     def anchors_available(self):
         if not self.is_git: return os.path.isdir(os.path.join(self.dir, "anchors"))
-        return _git("rev-parse", "--verify", "--quiet", "origin/anchors", cwd=self.dir, check=False).returncode == 0 \
-            or os.path.isdir(os.path.join(self.dir, "anchors"))
+        have = lambda: _git("rev-parse", "--verify", "--quiet", "origin/anchors", cwd=self.dir, check=False).returncode == 0
+        if not have() and not self.offline: _git("fetch", "-q", "origin", "anchors", cwd=self.dir, check=False)   # a plain clone may not have the branch yet
+        return have() or os.path.isdir(os.path.join(self.dir, "anchors"))
 
     def anchor(self, seq):
         """(record dict, statement bytes) for a pulse from origin/anchors (or an anchors/ worktree), or (None, None)."""

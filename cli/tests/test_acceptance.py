@@ -40,7 +40,7 @@ def test_09_mutated_V_fails():
     d = _mutated_copy(m); rc, out, err = nb("verify", "23", log=d); assert rc == 1 and "NOT VERIFIED" in err
 def test_10_transcript_has_log_git_sha(tmp_path):
     t = tmp_path / "t.json"; rc, out, err = nb("seed", "23", "--purpose", "demo:roster", "--transcript", str(t)); assert rc == 0
-    j = json.load(open(t)); assert j["log_git_sha"] and j["seq"] == 23 and j["commit_seq"] == 22 and j["derived_seed"] == out.strip() and j["spec"] == "notbefore/spec/0.3"
+    j = json.load(open(t)); assert j["log_git_sha"] and j["seq"] == 23 and j["commit_seq"] == 22 and j["derived_seed"] == out.strip() and j["spec"] == __import__("notbefore").SPEC
 def test_11_shuffle_and_split_are_deterministic(tmp_path):
     f = tmp_path / "r.txt"; f.write_text("\n".join(f"rec{i}" for i in range(20)) + "\n")
     a = nb("shuffle", "23", "--purpose", "demo:roster", str(f), "--transcript", "none"); b = nb("shuffle", "23", "--purpose", "demo:roster", str(f), "--transcript", "none")
@@ -67,7 +67,7 @@ def test_13_commit_after_a_skip_is_accepted_by_the_vendored_verifier():
     assert r.returncode == 0
 def test_14_spec_version_is_0_3():
     import notbefore
-    rc, out, err = nb("--version"); assert "notbefore/spec/0.3" in out and notbefore.__version__ in out
+    rc, out, err = nb("--version"); assert notbefore.SPEC in out and notbefore.__version__ in out
 def test_15_client_side_split_view_detector(tmp_path, monkeypatch):
     """TLOG.md §8: with a (temporary) checkpoint identity, `verify` proves inclusion against the log's checkpoint and
     refuses when the served head is not an append-only extension of the head this machine saw before."""
@@ -134,3 +134,31 @@ def test_18_live_checkpoint_verifies_with_the_vendored_identity():
     rc, out, err = nb("--offline", "checkpoint"); assert rc == 0, err
     assert out.startswith("notbefore.net/log\n") and "[PASS] checkpoint signature by notbefore.net/log" in err and "[PASS] root at size" in err, err
     rc, out, err = nb("--offline", "verify", "23"); assert rc == 0 and "is included in the checkpointed tree (leaf 22" in err, err
+def test_19_sample_assign_id_range_bytes(tmp_path):
+    f = tmp_path / "r.txt"; f.write_text("\n".join(f"rec{i}" for i in range(20)) + "\n"); P = ["--purpose", "demo:roster", "--transcript", "none"]
+    sh = nb("shuffle", "23", *P, str(f))[1].split()
+    rc, out, err = nb("sample", "23", *P, "--k", "12", str(f)); assert rc == 0 and out.split() == sh[:12]
+    rc, out, err = nb("assign", "23", *P, "--arms", "3", str(f)); rows = [l.split("\t") for l in out.strip().split("\n")]
+    assert rc == 0 and [r[0] for r in rows] == sh and [int(r[1]) for r in rows] == [i % 3 for i in range(20)]
+    rc, out, err = nb("id", "23", *P, "--from", str(f)); ids = out.split(); assert rc == 0 and len(ids) == 20 and all(len(i) == 16 for i in ids) and len(set(ids)) == 20 and "rec0" not in out
+    rc, out, err = nb("range", "23", *P, "--lo", "1", "--hi", "6"); assert rc == 0 and 1 <= int(out) <= 6
+    rc2, out2, _ = nb("range", "23", *P, "--lo", "1", "--hi", "6"); assert out2 == out
+    rc, out, err = nb("bytes", "23", *P, "--n", "32"); assert rc == 0 and len(out.strip()) == 64
+    rc, out, err = nb("sample", "23", *P, "--k", "21", str(f)); assert rc == 2 and out == ""
+def test_20_explain_paragraph():
+    rc, out, err = nb("explain", "23"); assert rc == 0 and "pulse 23 (commit 22)" in out and "RFC 3161" in out and "drand quicknet round" in out and "could not have been known before the round" in out
+def test_21_pin_and_lock(tmp_path):
+    lock = tmp_path / "notbefore.lock"; rc, out, err = nb("pin", "--out", str(lock)); assert rc == 0 and len(out.strip()) == 40
+    j = json.load(open(lock)); assert j["log_git_sha"] == out.strip() and j["cli_version"] and j["verifier_git_sha"]
+    rc, out, err = nb("--lock", str(lock), "value", "23"); assert rc == 0 and len(out.strip()) == 64 and "pinned by" in err
+def test_22_diff_transcript(tmp_path):
+    f = tmp_path / "r.txt"; f.write_text("\n".join(f"rec{i}" for i in range(10)) + "\n"); g = tmp_path / "s.txt"; g.write_text("\n".join(f"rec{i}" for i in range(11)) + "\n")
+    a, b, c = tmp_path / "a.json", tmp_path / "b.json", tmp_path / "c.json"
+    nb("sample", "23", "--purpose", "demo:roster", "--k", "3", str(f), "--transcript", str(a)); nb("sample", "23", "--purpose", "demo:roster", "--k", "3", str(f), "--transcript", str(b)); nb("sample", "23", "--purpose", "demo:roster", "--k", "3", str(g), "--transcript", str(c))
+    rc, out, err = nb("diff-transcript", str(a), str(b)); assert rc == 0 and "IDENTICAL" in out
+    rc, out, err = nb("diff-transcript", str(a), str(c)); assert rc == 1 and "INPUT FILE differs" in out
+    d, e = tmp_path / "d.json", tmp_path / "e.json"
+    nb("split", "23", "--purpose", "demo:roster", "--frac", "0.7", str(f), "--out-a", str(tmp_path / "x.A"), "--out-b", str(tmp_path / "x.B"), "--transcript", str(d))
+    nb("split", "23", "--purpose", "demo:roster", "--frac", "0.7", str(f), "--out-a", str(tmp_path / "y.A"), "--out-b", str(tmp_path / "y.B"), "--transcript", str(e))
+    rc, out, err = nb("diff-transcript", str(d), str(e)); assert rc == 0 and "IDENTICAL" in out, out      # different output file names, same allocation
+
