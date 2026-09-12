@@ -23,8 +23,16 @@ a collector session whose `collection_stats.start_time` is **2025-08-15T09:00:41
 whereas the clean blocks belong to earlier sessions (e.g. 2025-08-09T16:40:03Z). No collector logs exist for August
 (the `logs/` directory covers only 2025-07-16). Working conclusion: the collector started on 2025-08-15 hashed
 something other than the bytes it wrote (mutated or interleaved buffer), intermittently and load-dependently
-(0.5 % → 38 %). Collector source is being located to confirm. Whether the *bytes* are still genuine Quantis output is
-being tested statistically; if they are, the blocks are re-hashable into a corrected manifest rather than discarded.
+(0.5 % → 38 %). Collector source is being located to confirm. **The bytes themselves are intact.** A 10 MB slice of a
+mismatching block from the worst day (2025-08-25) is statistically indistinguishable from a matching block from
+2025-08-10: Shannon 7.999983 vs 7.999983 bits/byte, χ² p = 0.79 vs 0.73, serial correlation +4e-4 vs +2.5e-4, SP 800-22
+subset all pass on both, 90B MCV 7.962 vs 7.962. So this is a **broken provenance record, not corrupted data** — but
+note that passing randomness tests cannot by itself prove the bytes came from the Quantis; only the sidecar could have,
+and for these blocks it does not.
+**Salvage, honestly tiered:** the corrected manifest will carry two classes of leaf — **(A) capture-verified**: bytes
+match the capture-time sidecar (provenance chain intact from 2025); **(B) re-hashed-only**: bytes hashed on
+2026-09-12, no capture-time corroboration. Class B blocks are usable as random data with provenance dated 2026-09-12,
+and are **excluded** from any claim that rests on capture-time provenance.
 **What the root means now:** `c88c4320…` commits to the **manifest**, and the manifest is wrong for at least these
 blocks. **Do not rely on it for any block that has not been individually re-hashed.** The sample verification of
 3/3 published on 2026-09-11 was true and was a sample; it did not license the word "verified" for the archive, and
