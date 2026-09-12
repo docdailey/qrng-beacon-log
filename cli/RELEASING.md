@@ -84,8 +84,13 @@ also uploads Sigstore attestations for the wheel and sdist (PEP 740), so the pac
 - **A wrong release** → `yank` it on PyPI (never delete), publish the fix as the next PATCH, add an `ERRATA.md` entry
   naming the bad version and what it would have accepted or produced.
 
-## First release, for the record
+## Releases, for the record
 
 `notbefore 0.2.0` — tag `cli-v0.2.0` on `db5c480`, verifier vendored at `19fed1b`, workflow run 34697049079,
 published 2026-09-12 13:41 UTC; confirmed by a fresh-venv install verifying pair 0042/0043 and reproducing
 `seed 43 --purpose demo:roster` = `ff2e6dff…86a7`.
+
+`notbefore 0.7.1` — tag `cli-v0.7.1` on `ee2578f`, verifier vendored at `615cf14`, workflow run 34720242608,
+published 2026-09-12 21:36 UTC; ERR-014 (pinned RFC 3161 trust roots). Confirmed by a fresh-venv install with the
+host certificate store hidden (`SSL_CERT_FILE=/dev/null`) verifying pair 0058/0059 and reproducing the USAGE.md
+split of pulse 45 byte-for-byte (A/B sha256 unchanged from the 0.4.0 run). 0.3.0–0.7.0 same day: see git tags.

@@ -1,7 +1,8 @@
 # Using `notbefore` — the tool, not the theorem
 
 `notbefore` turns one hour of the public beacon into a reproducible allocation. Everything below was run against
-the live log on 2026-09-12 with `notbefore` 0.4.0 (spec 0.4); the outputs are real and anyone can regenerate them.
+the live log on 2026-09-12 with `notbefore` 0.7.1 (spec 0.5); the outputs are real and anyone can regenerate them
+(the allocation below was first produced with 0.4.0 and is byte-identical under 0.7.1 — only the provenance fields moved).
 
 ## The workflow
 
@@ -30,15 +31,19 @@ $ notbefore split 45 --purpose cohort-allocation-2026-09 --frac 0.8 cohort.txt
 [PASS] reveal 0045: vendored verify.py (pinned keys, chained to 0044, C = SHA256(D_commit||E), V recomputed, timing contract, drand refetched)
 [PASS] drand round BLS-verified offline under the pinned quicknet group key (py_ecc)
 [PASS] commit 0044: 2 RFC 3161 token(s) verify (need ≥ 2: freetsa + DigiCert)
-[PASS] pulse 0044: Rekor anchor logIndex 2808375615 @ 2026-09-12T14:02:49Z — … verified offline against pinned keys, re-fetched live
-[PASS] pulse 0045: Rekor anchor logIndex 2808396511 @ 2026-09-12T14:08:26Z — … verified offline against pinned keys, re-fetched live
+[PASS] pulse 0044: Rekor anchor logIndex 2808375615 @ 2026-09-12T14:02:49Z — statement, signature, SET, inclusion proof + checkpoint verified offline against pinned keys, re-fetched live; OTS complete
+[PASS] pulse 0045: Rekor anchor logIndex 2808396511 @ 2026-09-12T14:08:26Z — statement, signature, SET, inclusion proof + checkpoint verified offline against pinned keys, re-fetched live; OTS complete
 [PASS] commit 0044: Rekor time precedes the drand release by 158 s (third independent clock on the commit)
 [PASS] checkpoint signature by notbefore.net/log (vendored key id 8b627e7f)
-[PASS] root at size 49 recomputes from the pulses actually read (a18b8fce51312df2…)
+[PASS] checkpoint origin line is 'notbefore.net/log'
+[PASS] checkpoint size 59 <= 59 pulses read from the log
+[PASS] root at size 59 recomputes from the pulses actually read (dea6be18729de039…)
 [PASS] pulse 0044 is included in the checkpointed tree (leaf 43, RFC 6962 inclusion proof)
 [PASS] pulse 0045 is included in the checkpointed tree (leaf 44, RFC 6962 inclusion proof)
-[PASS] site https://notbefore.net/checkpoint serves the same checkpoint as git (size 49)
-VERIFIED — NotBefore 45 (commit 44), log 77931e25abea
+[PASS] checkpoint cosigned by witness notbefore.net/witness/ryzen at 2026-09-12T21:06:50Z (same sponsor as the log — a second system, not an independent party)
+[PASS] site https://notbefore.net/checkpoint serves the same checkpoint as git (size 59)
+[INFO] first checkpoint seen on this machine for notbefore.net/log; caching it as the reference head
+VERIFIED — NotBefore 45 (commit 44), log ee2578f67bf3
 notbefore: transcript written: notbefore-45-cohort-allocation-2026-09.json
 notbefore: A: 16 -> cohort.txt.A   B: 4 -> cohort.txt.B
 ```
@@ -64,16 +69,17 @@ file** — so the input order is part of the allocation, and `input_sha256` in t
  "A": {"count": 16, "file": "cohort.txt.A", "sha256": "96dc070b053a613ee13640dae513f50d6882178da37550d76796d0bf1d6e1ca4"},
  "B": {"count": 4,  "file": "cohort.txt.B", "sha256": "40d2c91638d56ccfc85fbeb4a1be4496f9fa9b7af4fdcf0f15ebda9dfdd85664"},
  "attested_value": "437b03cfa18eb918aa29233648e6895745fdf48733d50c326cb41a0c68f31953",
- "checks": {"ok": true, "bls_offline": true, "tsa_tokens_verified": 2, "anchors": "ok/ok", "tlog": "ok", "lines": ["[PASS] ...", "..."]},
- "cli_version": "0.4.0",
+ "checks": {"ok": true, "bls_offline": true, "tsa_tokens_verified": 2, "anchors": "ok/ok", "tlog": "ok",
+            "cosignatures": ["notbefore.net/witness/ryzen"], "independent_cosignatures": [], "lines": ["[PASS] ...", "..."]},
+ "cli_version": "0.7.1",
  "commit_seq": 44,
  "derive_domain": "notbefore/derive/v1",
  "derived_seed": "a35ef1ee133158e244d899890fb3ae940e165da0188a0c7fd6d21fa7f88d5ee7",
  "drand_round": 32139521,
- "frac": 0.8,
+ "frac": "0.8",
  "input_file": "cohort.txt",
  "input_sha256": "acf13f2fd96b62c8b3b47a3b55855fb3a3f84de702e1fe9edbe4b26c75532903",
- "log_git_sha": "77931e25abea6c8c72072dc12917c7d41198ee2b",
+ "log_git_sha": "ee2578f67bf3ec675d06fe14aef62c53e7f2d046",
  "log_ref": "origin/main",
  "operation": "split",
  "pulse_hash_commit": "01f874250a1b3bb7a9030ecbecbc45a10b60d04ec4ac434fb3ae4a64bd53a940",
@@ -81,9 +87,9 @@ file** — so the input order is part of the allocation, and `input_sha256` in t
  "purpose": "cohort-allocation-2026-09",
  "record_count": 20,
  "seq": 45,
- "spec": "notbefore/spec/0.4",
- "verified_utc": "2026-09-12T16:37:24Z",
- "verifier_git_sha": "caf52bd84d162bcf6c152b2a77ea6fa25c6d7017"
+ "spec": "notbefore/spec/0.5",
+ "verified_utc": "2026-09-12T21:37:13Z",
+ "verifier_git_sha": "615cf14fb03eae120798fd9d1a0cfe87fb93e1fc"
 }
 ```
 
@@ -92,7 +98,7 @@ file** — so the input order is part of the allocation, and `input_sha256` in t
 | `seq`, `commit_seq`, `pulse_hash_*`, `drand_round`, `attested_value` | the pair, and V | identical (the log is append-only; a checkpoint proves it) |
 | `purpose`, `derive_domain`, `derived_seed` | S = SHA256(domain ‖ V ‖ purpose) | identical for the same purpose string (NFC, no trailing newline) |
 | `input_file`, `input_sha256`, `record_count` | the bytes you fed in | **must be the same bytes** — order included |
-| `operation`, `frac` / `k` / `arms` / `lo`,`hi` / `n` | the derived function and its parameter | identical |
+| `operation`, `frac` / `k` / `arms` / `lo`,`hi` / `n` | the derived function and its parameter | identical (`frac` is the exact decimal string you typed, since 0.7.0 — never a float) |
 | `output_sha256`, `A`, `B` (`count`, `sha256`) | what came out | identical; file *names* may differ |
 | `log_git_sha`, `log_ref`, `cli_version`, `spec`, `verifier_git_sha` | what verified it | may differ across time; `notbefore pin` freezes them |
 | `checks` | the verification summary | informational |
