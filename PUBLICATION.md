@@ -32,6 +32,15 @@ anchored into the Bitcoin block chain — a timestamping protocol, not a trading
 it is one command per pulse (`ots stamp pulse.json`); it is **not installed and not decided** —
 it needs Bill's call given the project's stance on anything crypto-adjacent.
 
+## Independent timestamps — RFC 3161 (added 2026-09-12)
+
+Each commit pulse is stamped at mint time by **two public Time-Stamping Authorities** (freetsa.org and
+DigiCert) using `openssl ts` — a standards-track notary protocol, not a blockchain, so it sidesteps the
+OpenTimestamps question. The token is a third party's signed statement that the pulse's SHA-256 existed
+at time T; `tsa.py verify` checks the digest and the TSA's certificate chain. Two operators mean no
+single party, including us, can move T. This replaces GitHub's committer date as the primary evidence
+that a commitment predates its round. Tokens for pulses 0010/0011 are **retroactive** and labelled.
+
 ## What publication does NOT do
 
 - It does not make drand honest — that rests on the League of Entropy's threshold of independent

@@ -22,6 +22,23 @@ Why this repository exists: a commitment proves what it claims only if it was **
 the round it names. This repo's git history — and every clone of it — is that publication record.
 Trust assumptions are spelled out in `PUBLICATION.md`. Claims discipline: `CLAIMS.md`.
 
+## Independent timestamps (RFC 3161)
+
+Each commit pulse carries tokens from two public Time-Stamping Authorities (freetsa.org, DigiCert),
+proving with a third party's clock that the commitment existed before its round. Verify:
+```bash
+python3 tsa.py verify chain/pulse-0010.json      # checks digest + TSA certificate chain
+```
+Tokens on pulses 0010/0011 are retroactive (taken 2026-09-12 00:24 UTC, labelled in `*.tsa.json`);
+from the next commit onward tokens are taken at mint time, before the target round exists.
+
+## What this is, and is not
+
+An attested-log prototype and a timing thesis. The world already has drand; what it does not have
+is operators who put their own source under commit-reveal, publish before the round, measure the
+clock like an instrument, and write down what they may not say. It is verifiable by anyone and
+**not yet something to use as a number** — see `CADENCE.md` for what would change that.
+
 ## Archive commitment ("entropy of record")
 
 `merkle/manifest.json` commits to the 4.50 TB Quantis capture archive (42,935 blocks, 2025-07-18 →

@@ -114,3 +114,13 @@ measurement anyone can re-derive.
 4. **SHA-256 is preimage resistant.**
 
 None of these is "trust us about the random value". That was the point.
+
+
+## Where this stands (Bill, 2026-09-12)
+
+The value is the **operator discipline**, not the bytes: a source under commit-reveal, published before
+the round, a clock measured as an instrument, and a written list of forbidden sentences. drand already
+provides randomness; almost nobody provides *that*. It is worth keeping and not yet worth using as a
+number. What changes that is not more pulses — it is an independent timestamp on each commit (now
+RFC 3161, two TSAs), a stated cadence, and a second party who will attest a reveal we failed to publish.
+See `CADENCE.md`.
