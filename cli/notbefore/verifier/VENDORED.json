@@ -1,0 +1,31 @@
+{
+ "files": {
+  "bls_drand.py": "b909dd175b1f1c2dff0e78b77d83f2446afca73222a9946e35c2233732228ed9",
+  "ci/KNOWN_NONCOMPLIANT.json": "403268695cbbb93f5e4f757cdb3568056b40fbb31a14d0a0a1cb8b4ec953abd6",
+  "ci/anchor_lib.py": "7b65da28c3ff750808df2bc6e76ee7c8cb7273308cead542da0766c42f2edc71",
+  "drand_anchor.py": "8c1d16bd8376218697626e5614644713f52f83b31aeb836cd7dd302b500eac85",
+  "hosts/EXPECTED.json": "4fa57dfff93b7227db41fbd5c9001c1687e9ffb9f5e568b84ac8029be92c6e35",
+  "hosts/attest_host.py": "036cc9ca5e978fe9b3fb749a0ab7627fe1b18991ccfb05bbdeb3d1d4eec99a6a",
+  "hosts/attest_lib.py": "02ffc2a881d15daba1c1e1dda512d7f5efcf2adb9917a3748a7521954eea506f",
+  "hosts/entropy_host.py": "d2eaa923b7ac817f63b04a171abc667b0d56229c90b3e832ac787940710cd254",
+  "hosts/gnss_probe.py": "e5ccf3e8e400b69be669113f6fb1ce2439225e6635054150b64fcd65f0d12cdb",
+  "hosts/stamp_probe.py": "785763bd7d75cf792732387a7c439a78545ebe8414309ce738d3417c2d16fe48",
+  "keys/KEYS.json": "9de75424793bcb2b00b42efc271465fa1a6656194507b1dd3ffdb7e28eef9b3f",
+  "keys/anchor.pub": "5afc8aef90f65ae47aae97790aca4181c92b4cb37d23c7ab936c3a2b07de7b24",
+  "keys/drand-quicknet.json": "11ff6ba94bac65555551f3e097f4a498d5859cbf8a269127d569dedeaa1b8bf7",
+  "keys/entropy_signer.pub": "bbd318423b18b0a107382edf4f6f7be4f4a6186be6a0f73b17051e9f6f9713ab",
+  "keys/rekor.pub": "dce5ef715502ec9f3cdfd11f8cc384b31a6141023d3e7595e9908a81cb6241bd",
+  "keys/time_attester.f9t.RETIRED.pub": "fd6077eb26b8603c8ef8f445edfa3d5d13fa8d5298dcd7f3df20bafb9bd0565d",
+  "keys/time_attester.pub": "20b72663dddc2ce0ff73f9af4a4ad70761fe0af8c009a9bce520724d9c4ef424",
+  "keys/time_witness.pub": "2af608da26b0140ba3b2327357ebfd2a72167e983895aed1113a8ce19acc8267",
+  "schema.py": "d9f4bb521bb40020230ab14506c03b192467c7a6ddc07f5877d0cd56d178f8f1",
+  "tsa-certs/freetsa-ca.pem": "2151b61137ffa86bf664691ba67e7da0b19f98c758e3d228d5d8ebf27e044438",
+  "tsa-certs/freetsa-tsa.crt": "8bfb0305bb64e2571ca507552ef3245cb1c2fee8728e0ff8689225081ea13467",
+  "tsa.py": "dccdd56c6e087ee86e30c6d9130c2c9aef10eac10e6c24c2c39f492f44ed565a",
+  "verify.py": "898a3b343225b8ad5f42065c3f8d1690476edde5659bae2acc00d81c70200605"
+ },
+ "git_sha": "19fed1b1d291db54469fec682960ee544598da61",
+ "log_repo": "https://github.com/docdailey/qrng-beacon-log",
+ "note": "Verifier, keys and expected-config pinned at this commit. The CLI executes ONLY these files; the log is read as data.",
+ "vendored_utc": "2026-09-12T13:26:52Z"
+}

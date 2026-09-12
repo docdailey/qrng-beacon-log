@@ -1,0 +1,78 @@
+{
+  "note": "Key history. A pulse's signature key must be listed for its role with the pulse seq inside [valid_from_seq, valid_to_seq]. Retired keys stay listed so old pulses remain verifiable; they are never valid for new pulses.",
+  "keys": [
+    {
+      "role": "entropy_signer",
+      "host": "protectli",
+      "key_id": "1fc857c9f439ab9a",
+      "public_key_b64": "a2ANhyUVHQGpi1mQRKG+L7siT0ptYH9/MpLQ/UunILA=",
+      "valid_from_seq": 1,
+      "valid_to_seq": null,
+      "status": "active"
+    },
+    {
+      "role": "time_attester",
+      "host": "f9t",
+      "key_id": "4687aa55eff780e4",
+      "public_key_b64": "XTXEocHhGqqxtpEHFaZRDjzTVayAP4aAS76BEg7avQ4=",
+      "valid_from_seq": 1,
+      "valid_to_seq": 2,
+      "status": "retired"
+    },
+    {
+      "role": "time_attester",
+      "host": "p550",
+      "key_id": "6dae96e8faa9678a",
+      "public_key_b64": "XAsLFvZJFrZvYnqg7+t9AN8qgppLCfMa+iOQJc0f8U8=",
+      "valid_from_seq": 3,
+      "valid_to_seq": null,
+      "status": "active"
+    },
+    {
+      "role": "time_witness",
+      "host": "k3",
+      "key_id": "817a5238d784c4b4",
+      "public_key_b64": "Y7uoa5a7ctiX+kN3P9SEbRbRKX49fF1thOUSqj+PmT0=",
+      "valid_from_seq": 4,
+      "valid_to_seq": null,
+      "status": "active"
+    },
+    {
+      "role": "gnss_attester",
+      "host": "f9t",
+      "key_id": "5cde8565cdfaf793",
+      "public_key_b64": "FyqogtSEKkiatSjq4QByn7gpkmmf7VF98Nh769ITM5c=",
+      "valid_from_seq": 18,
+      "valid_to_seq": null,
+      "status": "active",
+      "note": "v0.5: signs the GNSS anchor statement on the receiver host"
+    },
+    {
+      "role": "aggregator",
+      "host": "think",
+      "key_id": "18f105dbcc140768",
+      "public_key_b64": "oj1mho4AyCyafHFZg/yHeh7hdlceJ/mdGkeAPWCsC+A=",
+      "valid_from_seq": 18,
+      "valid_to_seq": null,
+      "status": "active",
+      "note": "v0.5: signs the assembled pulse digest only; host facts are attested by host signatures inside core.statements"
+    }
+  ],
+  "anchors": {
+    "note": "Publication-anchor keys (not pulse signers). anchor_signer signs the canonical anchor statement of every published pulse into Rekor (ci/anchor_lib.py); rekor_log is the pinned public key of the Rekor transparency log used to verify signed entry timestamps and checkpoints offline.",
+    "anchor_signer": {
+      "file": "keys/anchor.pub",
+      "alg": "ECDSA P-256 / SHA-256",
+      "key_id_sha256_spki": "0ba35c3f423663b7",
+      "valid_from_seq": 1,
+      "status": "active",
+      "holder": "GitHub Actions secret ANCHOR_KEY (operator-issued 2026-09-12)"
+    },
+    "rekor_log": {
+      "file": "keys/rekor.pub",
+      "server": "https://rekor.sigstore.dev",
+      "log_id": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+      "pinned_utc": "2026-09-12"
+    }
+  }
+}

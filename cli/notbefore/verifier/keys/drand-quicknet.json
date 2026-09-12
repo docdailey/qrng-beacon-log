@@ -1,0 +1,18 @@
+{
+  "network": "drand League of Entropy \u2014 quicknet",
+  "beacon_id": "quicknet",
+  "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+  "public_key": "83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a",
+  "scheme": "bls-unchained-g1-rfc9380",
+  "genesis_time": 1692803367,
+  "period_s": 3,
+  "group_hash": "f477d5c89f21a17c863a7f937c6a6d15859414d2be09cd448d4279af331c5d3e",
+  "pinned_utc": "2026-09-12",
+  "cross_checked_against": [
+    "https://api.drand.sh",
+    "https://api2.drand.sh",
+    "https://api3.drand.sh"
+  ],
+  "verification": "e(sig, g2) == e(H(m), pk); m = SHA256(round as uint64 BE); H = RFC 9380 hash-to-G1, DST BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_",
+  "note": "If the League of Entropy ever rotates this key (a new chain hash), pulses before the rotation stay verifiable under THIS pin; add the new chain as a new pin, never overwrite."
+}

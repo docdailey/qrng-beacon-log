@@ -1,0 +1,38 @@
+name: notbefore-cli
+# Build the consumer CLI, run the NOTBEFORE.md §14 acceptance suite against this checkout, and publish to PyPI on a
+# `cli-v*` tag (PyPI Trusted Publishing: pending publisher = owner docdailey, repo qrng-beacon-log, workflow cli.yml,
+# environment pypi). A missing publisher makes the publish job fail loudly; it never touches the log.
+on:
+  push:
+    branches: [main]
+    paths: ["cli/**", ".github/workflows/cli.yml"]
+    tags: ["cli-v*"]
+  pull_request:
+    paths: ["cli/**"]
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python -m pip install --upgrade pip build && python -m build cli/ --outdir dist/
+      - run: python -m pip install "$(ls dist/*.whl)[anchors,test]"
+      - name: Vendored verifier matches this checkout
+        run: cd cli && python vendor.py && git diff --exit-code --stat -- notbefore/verifier/ ':!notbefore/verifier/VENDORED.json' && echo "vendored files identical to repo root"
+      - name: Acceptance suite (NOTBEFORE.md §14) against this checkout of the log
+        run: NOTBEFORE_LOG_DIR="$GITHUB_WORKSPACE" python -m pytest -q cli/tests
+      - uses: actions/upload-artifact@v4
+        with: { name: dist, path: dist/ }
+  publish:
+    if: startsWith(github.ref, 'refs/tags/cli-v')
+    needs: test
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions: { id-token: write }
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist/ }
+      - uses: pypa/gh-action-pypi-publish@release/v1
