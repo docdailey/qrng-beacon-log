@@ -36,6 +36,26 @@
       "valid_from_seq": 4,
       "valid_to_seq": null,
       "status": "active"
+    },
+    {
+      "role": "gnss_attester",
+      "host": "f9t",
+      "key_id": "5cde8565cdfaf793",
+      "public_key_b64": "FyqogtSEKkiatSjq4QByn7gpkmmf7VF98Nh769ITM5c=",
+      "valid_from_seq": 18,
+      "valid_to_seq": null,
+      "status": "active",
+      "note": "v0.5: signs the GNSS anchor statement on the receiver host"
+    },
+    {
+      "role": "aggregator",
+      "host": "think",
+      "key_id": "18f105dbcc140768",
+      "public_key_b64": "oj1mho4AyCyafHFZg/yHeh7hdlceJ/mdGkeAPWCsC+A=",
+      "valid_from_seq": 18,
+      "valid_to_seq": null,
+      "status": "active",
+      "note": "v0.5: signs the assembled pulse digest only; host facts are attested by host signatures inside core.statements"
     }
   ]
 }
