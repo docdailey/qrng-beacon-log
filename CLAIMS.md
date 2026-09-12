@@ -1,0 +1,141 @@
+# CLAIMS.md — binding on all copy, both agents
+
+## We MAY say
+- "Quantum entropy source: **ID Quantique Quantis USB**" — with a link to the vendor's own spec.
+- Vendor certifications, quoted **as the vendor's, with a source URL**, never as ours.
+- "Timestamp traceable to a **GPS-disciplined stratum-1 reference**", with the uncertainty stated.
+- "Hash-chained, signed, and **independently verifiable** — here is the verifier."
+- Measured facts we produced: throughput, test-suite results, capture windows.
+
+## We MAY NOT say — ever
+- **certified · accredited · validated** applied to *our* service.
+- **NIST / FIPS 140 / SP 800-90B validation / Common Criteria / AIS-31** of our service.
+  (The NIST *test suites* are public; running them is not validation. Say "we ran SP 800-22",
+  never "we are SP 800-22 certified".)
+- **ISO 17025**, "calibration", or "NIST-traceable" for anything but time — and for time, only
+  "traceable to a GPS-disciplined stratum-1 reference", with uncertainty.
+- Anything implying fitness for **gambling or lottery**. No licensed gaming operators as
+  customers — that is GLI-19 / GLI-11 plus jurisdictional licensing, a different universe.
+- Any offer to **generate keys** for a customer. We never hold anyone's key material.
+- "Unpredictable" applied to **archive** bytes without the commitment construction. We have held
+  them; absent a published Merkle root they are cherry-pickable and must be described that way.
+
+## Required disclosures
+- Archive blocks ship labeled with capture date range, at-rest location, and single-use status.
+- Every byte served is recorded in a served-bytes ledger and **never served twice**.
+
+## Added 2026-09-11 after Gate 1 — corpus labelling (binding)
+
+- `/Volumes/Expansion/quantum_cache/raw/**` is **Quantis output**. May be described as quantum.
+- `/Volumes/Expansion/dev_random_raw/**` is **Linux `/dev/random`**, a CSPRNG control corpus.
+  It may **never** be described as quantum, sold as quantum, or blended into a quantum SKU.
+  Its only legitimate uses are as the control arm of a comparison and as clearly-labelled control data.
+- Archive integrity may be stated as: *"each file carries a capture-time SHA-256 sidecar; sampled
+  verification matches."* It may **not** be stated as proof of unpredictability at any past instant —
+  the hashes are self-generated and were never externally anchored.
+- Never quote 43,421 (sidecar count) as the file count. 43,010 files are on disk; 411 sidecars are orphans.
+- Quote the device's **sustained 500 KB/s**, never the 20 MB/s ring-buffer burst.
+
+
+## Added 2026-09-11 — time claims (binding)
+
+**Authoritative timer = the Intel i210 PHC (`/dev/ptp0`) on p550.** f9t is the GNSS receiver host in
+the discipline chain and may be named as such. f9t is **not** the beacon's clock; pulses 0001–0002
+were stamped from it and are superseded.
+
+### We MAY say
+- "Timestamped from an Intel i210 hardware PHC disciplined to a u-blox ZED-F9T GNSS PPS by `ts2phc`."
+- The **measured** discipline figures, with their sampling window stated — e.g. "8.3 ns RMS over a
+  45 s window, servo locked (`s2`)". Always quote the window; a number without one is marketing.
+- "TAI−UTC read from the kernel at stamp time" (it is, via `adjtimex`).
+- "chrony reports stratum 1, RefID IPHC, root dispersion ~2.2 µs."
+
+### We MAY NOT say
+- **Any nanosecond figure as the accuracy of a timestamp.** The PHC tracks GNSS to ~8 ns; a
+  userspace read of it costs **27–47 µs**, and that is the honest bound on a pulse stamp. Quoting
+  "nanosecond-accurate timestamps" would be false.
+- **"Accurate to UTC" / "NIST-traceable time" / "calibrated".** Absolute accuracy is uncalibrated —
+  antenna cable delay, PPS coax length, i210 SDP0 input latency, and the receiver's own UTC error
+  are all unmeasured by us. We claim *precision* and a *traceable discipline chain*.
+- A hardcoded leap-second offset. TAI−UTC must be read at stamp time.
+- Any time claim while the ts2phc servo is not in state `s2`, or when the sampling window shows
+  peaks outside the quoted RMS. The pulse carries the raw numbers; let them speak.
+
+
+## Added 2026-09-11 — two time bases (binding)
+
+- **p550 / i210 remains the authoritative time base.** k3 / Milk-V is an **independent witness**, not
+  the authority. Its chain starts at a different receiver (LEA-6T via the P550-BMC), so calling it
+  "the clock" would silently change which reference a pulse is on.
+- k3 is **faster to read, not more accurate**: 2–3× lower read cost, but 41 ns discipline vs p550's
+  8 ns. Never describe k3 as the better clock — it is the better stamper.
+- The published `primary_minus_witness_ns` is **not** an offset between the two time bases. Both
+  stamps are fetched over SSH and the delta is dominated by acquisition skew. Never quote it as a
+  clock comparison; the pulse states this and carries the skew bound beside it.
+- **Do not call k3 an "independent reference".** Its grandmaster (the P550-BMC PHC) is continuously
+  measured by the very i210 that carries the primary time base, at ~25 ns RMS. k3 is a **monitored
+  peer inside one mesh** — which is a *stronger* trust claim than independence-without-verification,
+  and must be described that way rather than overstated as independence.
+- The two chains are additionally **not independent against a GNSS-common failure** (both start at
+  GPS). Say so whenever "independent" appears in any form.
+- **"~2 ns" belongs to the ZED-F9T and means qErr standard deviation** (2.255 ns, 21 days, 357,982
+  samples, zero excursions >50 ns). It is jitter/granularity, **never** accuracy versus UTC(k).
+  "Accurate to 2 ns" is a false claim.
+- When quoting the LEA-6T, quote **both** numbers or neither: core sd 6.02 ns **and** 3 excursions
+  past 1 µs in 468,631 samples over 21 days. Quoting only the core hides the tail; quoting only the
+  raw 2.3 µs sd misrepresents three outliers as typical.
+
+
+## Added 2026-09-11 — GNSS telemetry claims (binding)
+
+- The **timehat DB** (nas1 `192.168.69.133:3309`, schema `timehat`) is the evidence base:
+  `qerr_stream` and `rawx_stream`, receiver `src='f9t'`. Quote row counts and windows, never
+  adjectives.
+- **"~2.26 ns" is the ZED-F9T sawtooth sd** (n=358,232; last 15 min 99.7–100 % coverage). It is
+  quantisation jitter. It is **not** the system's accuracy and **not** the stamp uncertainty.
+- ❌ **Never call this a "2 ns system".** The delivered i210 discipline is 8.3 ns RMS; removing the
+  sawtooth in quadrature leaves ~8.0 ns, so the receiver is not the dominant error term. Quote the
+  8.3 ns when describing the clock and the microsecond read cost when describing a stamp.
+- **The sawtooth is logged, not applied.** Never imply the i210 is sawtooth-corrected. If that
+  changes, re-measure before changing a word of copy.
+- RAWX `leapS` is **GPS−UTC (18)**. TAI−UTC = leapS + 19 = 37. Publishing leapS as "TAI−UTC" would
+  be wrong by 19 seconds.
+- Satellite count and constellation mix are an **integrity indicator, not proof**. "Harder to spoof"
+  is fair; "spoof-proof" is not.
+- Never publish raw RAWX frames in a pulse — a digest only. The f9t frame store is 394 MiB and grows.
+
+
+## Added 2026-09-11 after reading the lab notebook (binding)
+
+- ✅ **The 69 ns antenna cable delay is MEASURED** (notebook 213/215), not assumed. Our earlier
+  "unverified by us" wording was wrong; it belongs in calibrated terms.
+- ❌ **Do not repeat the quadrature argument.** The sawtooth is strongly autocorrelated (lag-1
+  +0.839) and cannot be averaged away by any servo. Correcting it measurably took a receiver from
+  6.13 to 1.68 ns sd. Sign: corrected = raw + qErr.
+- ⚠️ **Never publish a timestamp without the epoch guard.** A link bounce wipes the i210 integer
+  second while every servo metric still reads healthy (notebook 220). `make_pulse.py` fails closed
+  on `epoch_ok=False` or chrony no longer selecting IPHC. A pulse minted without that check is not
+  trustworthy regardless of how good its other numbers look.
+- ⚠️ **Absolute accuracy is capped by L1-only operation.** The F9T sees 0 signals on L2 today, so
+  absolute UTC/TAI carries an uncorrected ionospheric term. Dual-band L1/L2 (TW3972) is a
+  **roadmap** item. Never present dual-band or "real UTC/TAI" as a current property.
+- The i210 monitor never steers, but the loop closes through the BMC `ptptgt` trim. Describe it as
+  "measure and trim", not as either "read-only" alone or "steering slave".
+
+
+## Added 2026-09-11 — external anchor (binding)
+
+- ✅ **We MAY now say**: "the attested value could not have been computed before <UTC time>, because
+  it is a hash over drand quicknet round <N>, which did not exist until then — re-fetch it yourself
+  from api.drand.sh." This is checkable by anyone and does not require trusting us.
+- ❌ **We MAY NOT say** the value was "unpredictable", "unbiased" or "provably fair". Mixing drand
+  bounds **precomputation**, not **selection**: a single publisher can still mint several candidates
+  after the round releases and publish a preferred one. Until commit-then-reveal ships, say
+  "could not have been computed before T", never "could not have been chosen".
+- Quote the **assembly window** (`gnss_anchor_minus_drand_release_s`) whenever the anchor is cited;
+  the bound's tightness is a timing claim, and the number is published for exactly that reason.
+- Never claim we verify drand's **BLS threshold signature**. We verify `randomness ==
+  sha256(signature)` offline and re-fetch the round from the operators. Full BLS verification needs
+  a drand client and the chain public key — say so.
+- `make_pulse.py` fails closed if drand is unreachable or if `randomness != sha256(signature)`.
+  A pulse without an external anchor is a pre-v0.3 artifact and must not be sold as anchored.

@@ -1,0 +1,19 @@
+{
+  "scheme": "merkle-sha256/v1",
+  "leaf": "SHA256(0x00||filename||0x00||sha256_hex)",
+  "node": "SHA256(0x01||left||right), odd node promoted",
+  "leaf_order": "sorted by filename",
+  "root": "c88c4320dff421400744abb36e65ecfc6f185b1a0e9ead5ddb0e10920b7a2738",
+  "leaves": 42935,
+  "depth": 16,
+  "total_bytes": 4501833711616,
+  "orphan_sidecars": 429,
+  "bad_sidecars": 57,
+  "built_at_unix": 1789171037,
+  "source": {
+    "metadata_dir": "/Volumes/Expansion/quantum_cache/metadata/2025",
+    "raw_dir": "/Volumes/Expansion/quantum_cache/raw",
+    "host": "macstu"
+  },
+  "caveat": "Commits to the capture-time sidecar manifest. Sample-verified 3/3 on 2026-09-11; full re-hash verification job status in fullverify.status"
+}

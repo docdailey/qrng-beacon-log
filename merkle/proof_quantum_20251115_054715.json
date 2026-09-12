@@ -1,0 +1,60 @@
+{
+  "scheme": "merkle-sha256/v1",
+  "root": "c88c4320dff421400744abb36e65ecfc6f185b1a0e9ead5ddb0e10920b7a2738",
+  "leaves": 42935,
+  "index": 42934,
+  "filename": "quantum_20251115_054715.bin",
+  "sha256": "a7e8ebb0ef7faa60d8121d641f3d80eb90b4bc49065fe6664168429ffb893c28",
+  "size_bytes": 104857600,
+  "relpath": "2025/11/15/quantum_20251115_054715.bin",
+  "path": [
+    null,
+    {
+      "side": "left",
+      "hash": "3dff5a9555c361fcebe12749a6bf7a9e8906bc8166e7d65a4c637f0a99192b5c"
+    },
+    {
+      "side": "left",
+      "hash": "51d1a91bddbb8dc185557cd0cbfc6b6a514580d5e02239d35ba286d3b8531698"
+    },
+    null,
+    {
+      "side": "left",
+      "hash": "e95e3445d794aeb2b4bf7521dbb95b634910edf43afd7da014019f611418616e"
+    },
+    {
+      "side": "left",
+      "hash": "3bb49d3e35c56d48c93fc0c083f59cfe3d84727b07404377f5090a1cf4e56a1a"
+    },
+    null,
+    {
+      "side": "left",
+      "hash": "5bff57988b4a8d9652e1f5886f7d18c38d32065f60011956308827c55773ed5d"
+    },
+    {
+      "side": "left",
+      "hash": "521b1cdbc1cf81c511ff4e1acd1cc03568814eacf89ba2103255d1da9e503c95"
+    },
+    {
+      "side": "left",
+      "hash": "b6de89adf2e1cd86a6c1396e3ce6f7bda9c76906fd8feaf45455fdb8ba1f7f02"
+    },
+    {
+      "side": "left",
+      "hash": "f78333cb787f580f43fce69c1bae31779d3621a6a4f5da272ba2359990038977"
+    },
+    null,
+    null,
+    {
+      "side": "left",
+      "hash": "29d299dbd4836be3709b93c7bf4c6618df754af658d7772096612c81cea2cbe0"
+    },
+    null,
+    {
+      "side": "left",
+      "hash": "9044cdacbfdb5c58c9714716806a2b924baf46be7acfe016cf1dc607388d02d8"
+    }
+  ],
+  "verify": "python3 merkle_proof.py verify <this file>",
+  "what_this_proves": "This block (filename + sha256) is one of the 42935 leaves committed under root c88c4320dff421400744abb36e65ecfc6f185b1a0e9ead5ddb0e10920b7a2738. Hash the block yourself and compare to sha256 to bind the bytes to the commitment."
+}
