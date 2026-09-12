@@ -53,6 +53,8 @@ def fail(seq, reason, extra=None):
 def main():
     log("cycle start")
     run("git", "pull", "-q", "--ff-only", "origin", "main")
+    try: log("abort-unpublished: " + run("python3", "pulse.py", "abort-unpublished").strip()[:160])
+    except Exception as e: log(f"abort-unpublished failed: {e}"); sys.exit(1)
     # ---- COMMIT ----
     try:
         out = json.loads(run("python3", "pulse.py", "commit", "--lead", str(LEAD)))

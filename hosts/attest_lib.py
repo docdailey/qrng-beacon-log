@@ -67,6 +67,20 @@ def tool_binding(*paths):
     """Version-bind the code that produced a statement: name + sha256 of each script."""
     return [{"name": os.path.basename(p), "sha256": file_sha256(p)} for p in paths]
 
+def execution_context():
+    """Signed self-report of HOW this statement was produced. Self-reported, but signed with a key only the confined
+    user holds, so a statement claiming user=beacon via the forced command is consistent evidence of confinement."""
+    import pwd, getpass
+    ctx = {"user": pwd.getpwuid(os.getuid()).pw_name, "uid": os.getuid(),
+           "via_forced_command": bool(os.environ.get("SSH_ORIGINAL_COMMAND")),
+           "ssh_original_command": os.environ.get("SSH_ORIGINAL_COMMAND", "")[:120]}
+    bc = "/usr/local/bin/beacon-cmd"
+    if os.path.exists(bc): ctx["beacon_cmd_sha256"] = file_sha256(bc)
+    try: ctx["host_config_sha256"] = file_sha256("/etc/beacon/host.json")
+    except Exception: pass
+    return ctx
+
 def base_statement(role, host, seq, phase, binding, chain_hash, tools):
     return {"v": "0.5", "role": role, "host": host, "seq": int(seq), "phase": phase,
-            "binding": binding, "chain_hash": chain_hash, "issued_unix_ns": now_ns_str(), "tools": tools}
+            "binding": binding, "chain_hash": chain_hash, "issued_unix_ns": now_ns_str(), "tools": tools,
+            "execution": execution_context()}

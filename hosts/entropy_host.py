@@ -89,7 +89,7 @@ def cmd_abandon(seq, commit_pulse_hash, reason):  # abandon-prepare; binds to th
     st = A.base_statement(ROLE, HOST, seq, "failure", commit_pulse_hash, sec["chain_hash"], TOOLS)
     st.update({"commit_seq": int(seq), "commit_pulse_hash": commit_pulse_hash, "entropy_commitment": sec["commitment"],
                "target_round": sec["target_round"], "reason": reason,
-               "custody": "E retired unrevealed; this host will never disclose it"})
+               "custody": "E retired unrevealed; it is overwritten and removed when this abandonment is finalized"})
     print(json.dumps(A.sign_statement(ROLE, st)))
 
 def cmd_finalize(seq, resolving_pulse_hash):
@@ -98,10 +98,16 @@ def cmd_finalize(seq, resolving_pulse_hash):
     if not sp: die(f"nothing to finalize for seq {seq}")
     if st in ("revealed", "abandoned"): print(json.dumps({"seq": int(seq), "state": st, "already": True})); return
     final = sp.replace(".revealing", ".revealed").replace(".abandoning", ".abandoned")
-    sec = json.load(open(sp)); sec["resolved_by_pulse_hash"] = resolving_pulse_hash; sec["finalized_unix"] = int(time.time())
-    if st == "revealing": pass                                  # E may remain on disk; it is public now
-    json.dump(sec, open(sp, "w")); os.replace(sp, final)
-    print(json.dumps({"seq": int(seq), "state": os.path.basename(final).split(".")[-1], "resolved_by": resolving_pulse_hash}))
+    sec = json.load(open(sp))
+    # E is ERASED at finalize in both cases: for a reveal it is now public in the pulse; for an abandonment the custody
+    # claim ("this host will never disclose it") is honoured by destruction, not by policy.
+    size = os.path.getsize(sp)
+    with open(sp, "r+b") as f: f.write(b"\0" * size); f.flush(); os.fsync(f.fileno())
+    record = {"seq": int(seq), "state": st.replace("ing", "ed"), "commitment": sec["commitment"], "target_round": sec["target_round"],
+              "chain_hash": sec["chain_hash"], "resolved_by_pulse_hash": resolving_pulse_hash, "finalized_unix": int(time.time()),
+              "entropy": "erased at finalize"}
+    json.dump(record, open(sp, "w")); os.replace(sp, final)
+    print(json.dumps({"seq": int(seq), "state": record["state"], "resolved_by": resolving_pulse_hash, "entropy": "erased"}))
 
 def glob_pending():
     return sorted(f for f in os.listdir(PEND) if f.endswith((".secret", ".revealing", ".abandoning")))

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""CI: verify the ENTIRE published chain and SHOW what was verified. Green must mean fully verified.
+"""CI: verify the ENTIRE published chain and SHOW what was verified.
+Green means: every pulse verified, EXCEPT those declared in ci/KNOWN_NONCOMPLIANT.json, which must fail exactly
+as their erratum documents (a declared pulse that passes is itself a failure). The tally names the count.
 
 Per pulse: verify.py (strict for v0.5, legacy otherwise) with --prev and --pin; RFC 3161 tokens.
 Across the chain: the v0.5 state machine (commit -> reveal|failure -> commit), TSA contract for every
@@ -91,6 +93,6 @@ summ = os.environ.get("GITHUB_STEP_SUMMARY")
 if summ:
     with open(summ, "a") as f:
         f.write("## verify-chain\n\n| check | count |\n|---|---|\n" + "".join(f"| {k} | {v} |\n" for k, v in T.items()))
-        f.write(f"\n**{'FAILED' if T['failures'] else 'ALL VERIFIED'}** — {T['pulses']} pulses ({T['v05_pulses']} v0.5), {T['host_statements']} host-signed statements, "
+        f.write(f"\n**{'FAILED' if T['failures'] else ('VERIFIED with %d declared historical exception(s)' % T['known_noncompliant'] if T['known_noncompliant'] else 'ALL VERIFIED')}** — {T['pulses']} pulses ({T['v05_pulses']} v0.5), {T['host_statements']} host-signed statements, "
                 f"{T['bls_verified']} drand rounds BLS-verified, {T['tsa_tokens']} RFC 3161 tokens (min commit margin {T['tsa_min_margin_s']} s), refetch={'on' if REFETCH else 'off'}.\n")
 sys.exit(1 if T["failures"] else 0)

@@ -38,3 +38,20 @@ sacrificial `seq 997` therefore blocked the real `seq 20` until an operator rese
 Rule: **never exercise a production host's forced command with a sequence above the live chain.** Use `seq 0` only
 before the chain exists on that host, or a separate test host configuration. Resetting the state file is an operator
 action and should be recorded here when it happens (it happened once: protectli, 2026-09-12 02:49 UTC, 997 → 19).
+
+
+## Hardening after independent verification (2026-09-12, checkpoint c7daba7)
+
+- `setup_host.sh` now creates `beacon` with `/bin/sh`. OpenSSH runs forced commands through the login shell; `nologin`
+  broke `beacon-cmd` on first deployment and the live hosts had been fixed by hand. Confinement is the
+  `restrict,command=` key, not the shell.
+- **Commit is recoverable.** If anything fails after the entropy host has generated `E` but before the pulse is durably
+  written, the aggregator immediately abandons and finalizes that seq (`unpublished:<reason>`); `pulse.py
+  abort-unpublished` does the same idempotently for any secret whose seq never entered the chain, and the cycle runs it
+  before every commit.
+- **`E` is erased at finalize**, for abandonments and reveals alike: the secret file is overwritten with zeros, then
+  replaced by a record without `E`. The custody claim now reads "overwritten and removed", which is what happens.
+- Every host statement carries a signed `execution` self-report: OS user, uid, whether it ran via the forced command,
+  the `SSH_ORIGINAL_COMMAND` it saw, and the SHA-256 of `/usr/local/bin/beacon-cmd` and `/etc/beacon/host.json`. Self-
+  reported — but signed with a key only the confined user holds — so it is consistent, checkable evidence of the
+  confinement that pulse data alone previously could not show.

@@ -6,7 +6,10 @@ set -e
 KIND=$1; shift
 FROM_HOME=${FROM_HOME:-/home/willy}; [ -d "$FROM_HOME/beacon" ] || FROM_HOME=/root
 AGG_PUB=${AGG_PUB:?think public key required in AGG_PUB}
-id beacon >/dev/null 2>&1 || useradd -r -m -d /home/beacon -s /usr/sbin/nologin beacon 2>/dev/null || useradd -r -m -d /home/beacon -s /bin/false beacon
+# The shell MUST be a real (minimal) shell: OpenSSH runs forced commands through the login shell, so nologin/false
+# breaks beacon-cmd. Confinement comes from restrict,command="..." in authorized_keys, not from the shell.
+id beacon >/dev/null 2>&1 || useradd -r -m -d /home/beacon -s /bin/sh beacon
+usermod -s /bin/sh beacon
 install -d -m 700 -o beacon -g beacon /home/beacon /home/beacon/beacon /home/beacon/.ssh /etc/beacon
 # move keys, pending secrets and scripts from the interactive user to beacon (keys do not change)
 for f in "$FROM_HOME"/beacon/*.key "$FROM_HOME"/beacon/*.pub "$FROM_HOME"/beacon/*.py; do [ -e "$f" ] && install -m 600 -o beacon -g beacon "$f" /home/beacon/beacon/; done

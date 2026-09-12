@@ -138,22 +138,39 @@ def cmd_commit(lead):
     if release - time.time() < S.PUBLISH_MARGIN_S + 60: die("target round is not far enough away to honour the publication margin")
     raw = ssh("protectli", f"commit {seq} {target} {S.CHAIN_HASH}")
     ent_signed = json.loads(raw); commitment = ent_signed["statement"]["entropy_commitment"]
-    ent = check_statement("entropy", ent_signed, seq, "commit", commitment)
-    if ent["statement"]["target_round"] != target: die("entropy host bound a different target round")
-    sts = {"entropy": ent, **collect(seq, "commit", commitment, S.REQUIRED["commit"])}
-    anchor_s = D(sts["gnss"]["statement"]["measurement"]["anchor"]["utc_unix_s"])
-    if anchor_s >= release: die("GNSS anchor is not before the target release")
+    # From here on the entropy host HOLDS a secret for this seq. Any failure before the pulse is durably written must
+    # retire that secret, or the next commit is blocked (independent verifier, finding 2).
+    def rollback(why):
+        try:
+            ssh("protectli", f"abandon-prepare {seq} {'0'*64} unpublished:{why}")
+            ssh("protectli", f"finalize {seq} {'0'*64}")
+        except Exception as e:
+            sys.stderr.write(f"rollback of unpublished seq {seq} failed ({e}); run `pulse.py abort-unpublished`\n")
+    try:
+        ent = check_statement("entropy", ent_signed, seq, "commit", commitment)
+        if ent["statement"]["target_round"] != target: raise RuntimeError("entropy host bound a different target round")
+        sts = {"entropy": ent, **collect(seq, "commit", commitment, S.REQUIRED["commit"])}
+        anchor_s = D(sts["gnss"]["statement"]["measurement"]["anchor"]["utc_unix_s"])
+        if anchor_s >= release: raise RuntimeError("GNSS anchor is not before the target release")
+    except SystemExit:
+        rollback("aggregator-refused"); raise
+    except Exception as e:
+        rollback(type(e).__name__); die(f"commit aborted before anything was written: {e}")
     core = {"v": S.VERSION, "type": "commit", "seq": seq, "prev_hash": prev_hash, "chain_hash": S.CHAIN_HASH,
             "statements": sts, "drand_at_commit": now,
             "derived": {"entropy_commitment": commitment, "target_round": target, "target_release_unix_s": release,
                         "target_release_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(release)),
                         "anchor_utc_unix_s": str(anchor_s), "anchor_before_release_s": str(D(release) - anchor_s), "lead_rounds": lead},
             "tooling": tooling(sts), "aggregator_host": "think"}
-    path, ph, st = seal(core)
+    try:
+        path, ph, st = seal(core)
+    except SystemExit:
+        rollback("seal-refused"); raise
+    except Exception as e:
+        rollback("seal-error"); die(f"seal failed, nothing written: {e}")
     if path is None:
-        ssh("protectli", f"abandon-prepare {seq} {'0'*64} tsa-tokens-insufficient")
-        ssh("protectli", f"finalize {seq} {'0'*64}")   # nothing was published; retire E immediately
-        die(f"only {len(st['tokens'])} TSA token(s); nothing was written; E abandoned on the entropy host")
+        rollback("tsa-tokens-insufficient")
+        die(f"only {len(st['tokens'])} TSA token(s); nothing was written; E abandoned and erased on the entropy host")
     print(json.dumps({"minted": path, "type": "commit", "seq": seq, "pulse_hash": ph, "target_round": target,
                       "target_release_utc": core["derived"]["target_release_utc"], "tsa_tokens": [(t["tsa"], t["time"]) for t in json.load(open(path + ".tsa.json"))["tokens"]],
                       "reveal_after_s": round(release - time.time(), 1)}, indent=2))
@@ -219,6 +236,20 @@ def cmd_finalize():
             die("resolving pulse is not yet published; refusing to finalize (E stays recoverable)")
     print(ssh("protectli", f"finalize {cseq} {ph}"))
 
+def cmd_abort_unpublished():
+    """Idempotent: retire any secret the entropy host holds for a seq that never entered the published chain.
+    A secret whose seq equals the chain head commit is a live pending commit and is left alone."""
+    require_synced()
+    seq, _, hp = head()
+    pend = json.loads(ssh("protectli", "pending"))
+    done = []
+    for f in pend:
+        s_ = int(f.split(".")[0]); st = f.split(".")[1]
+        if s_ > seq or (s_ == seq and ptype(hp) != "commit"):
+            ssh("protectli", f"abandon-prepare {s_} {'0'*64} unpublished:abort-unpublished")
+            ssh("protectli", f"finalize {s_} {'0'*64}"); done.append(f)
+    print(json.dumps({"head_seq": seq, "head_type": ptype(hp), "entropy_host_pending_before": pend, "aborted": done}))
+
 def cmd_status():
     seq, h, p = head(); print(f"head: seq {seq}  type {ptype(p)}  hash {h[:16]}")
     try: print("entropy host pending:", ssh("protectli", "pending"))
@@ -230,4 +261,5 @@ if __name__ == "__main__":
     elif cmd == "reveal": cmd_reveal()
     elif cmd == "fail": cmd_fail(" ".join(a[1:]) or "unspecified")
     elif cmd == "finalize": cmd_finalize()
+    elif cmd == "abort-unpublished": cmd_abort_unpublished()
     else: cmd_status()
