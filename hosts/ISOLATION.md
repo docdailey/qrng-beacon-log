@@ -49,9 +49,26 @@ action and should be recorded here when it happens (it happened once: protectli,
   written, the aggregator immediately abandons and finalizes that seq (`unpublished:<reason>`); `pulse.py
   abort-unpublished` does the same idempotently for any secret whose seq never entered the chain, and the cycle runs it
   before every commit.
-- **`E` is erased at finalize**, for abandonments and reveals alike: the secret file is overwritten with zeros, then
-  replaced by a record without `E`. The custody claim now reads "overwritten and removed", which is what happens.
+- **`E` is removed at finalize**, for abandonments and reveals alike: the secret file is overwritten with zeros and
+  fsynced, then replaced by a record without `E`. This is a **best-effort logical overwrite** — on SSDs and journaled
+  filesystems it is not guaranteed physical destruction, and the custody claim says so.
 - Every host statement carries a signed `execution` self-report: OS user, uid, whether it ran via the forced command,
   the `SSH_ORIGINAL_COMMAND` it saw, and the SHA-256 of `/usr/local/bin/beacon-cmd` and `/etc/beacon/host.json`. Self-
   reported — but signed with a key only the confined user holds — so it is consistent, checkable evidence of the
   confinement that pulse data alone previously could not show.
+
+
+## Review #4 (2026-09-12): recovery, durability, enforcement
+
+- **Recovery is derived from the published chain.** `pulse.py recover` runs first in every cycle: aborts secrets whose
+  seq never entered the chain; finalizes a leftover `.revealing`/`.abandoning` whose resolving pulse is already
+  published; and, if the head is an unresolved commit (a previous cycle died), the cycle **resumes** it — reveal within
+  the window, signed failure after — instead of attempting a new commit and stalling.
+- **The held secret is crash-durable** before the signed commitment leaves the entropy host: full write to a temp file,
+  `fsync`, atomic rename, directory `fsync`, read-back check.
+- **Rollback covers the SSH call itself**: a timeout or malformed reply after the host may have created a secret
+  triggers the same idempotent abandonment; `recover` retries anything that slips through.
+- **Execution self-reports are enforced from seq 26** (`schema.ENFORCE_EXECUTION_FROM_SEQ`), by the aggregator at mint
+  and by the verifier: `user == beacon`, `via_forced_command`, `beacon_cmd_sha256` among the published values, and
+  `host_config_sha256` equal to the per-host value in `hosts/EXPECTED.json`. Pulses 0020–0025 are isolated but predate the
+  field or its enforcement and are not retroactively required to carry it.

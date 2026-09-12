@@ -15,3 +15,19 @@ REQUIRED = {"commit": ("entropy", "gnss", "time", "witness"),
 AGGREGATOR = ("aggregator", "think")
 PUBLISH_MARGIN_S, REVEAL_DEADLINE_S, MIN_TSA_TOKENS = 120, 600, 2
 HEX64 = 64
+
+# Execution self-report enforcement (review #4): from this seq onward every host statement must carry an `execution`
+# block showing it ran as the confined user via the forced command with the published beacon-cmd and host config.
+ENFORCE_EXECUTION_FROM_SEQ = 26
+def execution_ok(ex, host, expected_path):
+    import json
+    if not isinstance(ex, dict): return False, "missing execution block"
+    try: exp = json.load(open(expected_path))
+    except Exception as e: return False, f"cannot read expected hashes: {e}"
+    h = exp.get("hosts", {}).get(host)
+    if not h: return False, f"no expected configuration published for host {host}"
+    if ex.get("user") != "beacon": return False, f"user is {ex.get('user')!r}, expected 'beacon'"
+    if ex.get("via_forced_command") is not True: return False, "not executed via the forced command"
+    if ex.get("beacon_cmd_sha256") not in exp.get("beacon_cmd_sha256", []): return False, "beacon-cmd hash not among published values"
+    if ex.get("host_config_sha256") != h.get("host_config_sha256"): return False, "host config hash differs from published value"
+    return True, "user=beacon, forced command, beacon-cmd and host config match published hashes"

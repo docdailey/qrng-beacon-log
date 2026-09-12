@@ -1,0 +1,21 @@
+{
+  "note": "Expected per-host configuration for execution self-report enforcement (schema.execution_ok). beacon_cmd_sha256 is a list to allow rotation; host_config_sha256 is the SHA-256 of /etc/beacon/host.json on that host. Update deliberately, in the same commit as the change that alters them.",
+  "beacon_cmd_sha256": [
+    "c6e1cb712b6dd550e2763fce90212327b917e1ac54d820fc15b8dc4c8ef25a4e"
+  ],
+  "hosts": {
+    "p550": {
+      "host_config_sha256": "3ade498a97440cc76b532ea149146cfea8666cf6747757a9069d74bf751d99a0"
+    },
+    "k3": {
+      "host_config_sha256": "d27cb841acf624c11f8c92e947ba8abb00dc16a7dae942f276cfd971a72fa6d5"
+    },
+    "protectli": {
+      "host_config_sha256": "674865fc5d98b30d4d6d85bc1a81d0edda0896503c451c0a5847be16ce8fe1b0"
+    },
+    "f9t": {
+      "host_config_sha256": "ccf95f4e73636c4afdff7a0760c895455e64b2dcb022cbcb7df5ff002507ea13"
+    }
+  },
+  "recorded_utc": "2026-09-12"
+}

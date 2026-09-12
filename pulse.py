@@ -71,6 +71,9 @@ def check_statement(name, signed, seq, phase, binding):
     if sig.get("alg") != "ed25519" or hashlib.sha256(base64.b64decode(sig["public_key_b64"])).hexdigest()[:16] != sig["key_id"]: die(f"{name}: bad key_id")
     if not key_allowed(role, sig["public_key_b64"], seq): die(f"{name}: signing key not in KEYS.json for role {role} at seq {seq}")
     Ed25519PublicKey.from_public_bytes(base64.b64decode(sig["public_key_b64"])).verify(base64.b64decode(sig["sig_b64"]), A.canon(st))
+    if seq >= S.ENFORCE_EXECUTION_FROM_SEQ:
+        ok, why = S.execution_ok(st.get("execution"), host, os.path.join(HERE, "hosts", "EXPECTED.json"))
+        if not ok: die(f"{name}: execution self-report rejected: {why}")
     return signed
 
 def collect(seq, phase, binding, names):
@@ -136,17 +139,19 @@ def cmd_commit(lead):
     now = drand_verified()
     target = now["round"] + lead; release = S.release_time(target)
     if release - time.time() < S.PUBLISH_MARGIN_S + 60: die("target round is not far enough away to honour the publication margin")
-    raw = ssh("protectli", f"commit {seq} {target} {S.CHAIN_HASH}")
-    ent_signed = json.loads(raw); commitment = ent_signed["statement"]["entropy_commitment"]
-    # From here on the entropy host HOLDS a secret for this seq. Any failure before the pulse is durably written must
-    # retire that secret, or the next commit is blocked (independent verifier, finding 2).
+    # The SSH outcome itself is uncertain (timeout after the host created its secret, malformed reply): treat the
+    # entropy host as POSSIBLY holding a secret from the moment we ask, and roll back on any exception from here on.
     def rollback(why):
+        """Idempotent. Harmless if the host never created a secret for this seq."""
         try:
-            ssh("protectli", f"abandon-prepare {seq} {'0'*64} unpublished:{why}")
-            ssh("protectli", f"finalize {seq} {'0'*64}")
+            if f"{seq:04d}.secret" in json.loads(ssh("protectli", "pending")) or f"{seq:04d}.abandoning" in json.loads(ssh("protectli", "pending")):
+                ssh("protectli", f"abandon-prepare {seq} {'0'*64} unpublished:{why}")
+                ssh("protectli", f"finalize {seq} {'0'*64}")
         except Exception as e:
-            sys.stderr.write(f"rollback of unpublished seq {seq} failed ({e}); run `pulse.py abort-unpublished`\n")
+            sys.stderr.write(f"rollback of unpublished seq {seq} incomplete ({e}); `pulse.py recover` will retry\n")
     try:
+        raw = ssh("protectli", f"commit {seq} {target} {S.CHAIN_HASH}")
+        ent_signed = json.loads(raw); commitment = ent_signed["statement"]["entropy_commitment"]
         ent = check_statement("entropy", ent_signed, seq, "commit", commitment)
         if ent["statement"]["target_round"] != target: raise RuntimeError("entropy host bound a different target round")
         sts = {"entropy": ent, **collect(seq, "commit", commitment, S.REQUIRED["commit"])}
@@ -236,6 +241,28 @@ def cmd_finalize():
             die("resolving pulse is not yet published; refusing to finalize (E stays recoverable)")
     print(ssh("protectli", f"finalize {cseq} {ph}"))
 
+def cmd_recover():
+    """Derive the right action from the PUBLISHED chain and the entropy host's held state, before any new commit.
+    Idempotent; safe to run every cycle. Prints what it did; exits 3 if the head commit must be resolved by the caller."""
+    require_synced()
+    seq, ph, hp = head(); pend = json.loads(ssh("protectli", "pending")); actions = []
+    for f in pend:
+        s_, st = int(f.split(".")[0]), f.split(".")[1]
+        if s_ > seq or (s_ == seq and ptype(hp) != "commit"):
+            ssh("protectli", f"abandon-prepare {s_} {'0'*64} unpublished:recover"); ssh("protectli", f"finalize {s_} {'0'*64}")
+            actions.append(f"aborted unpublished {f}"); continue
+        if st in ("revealing", "abandoning") and s_ < seq:
+            # its resolving pulse should be s_+1 in the published chain; finalize against that hash
+            fs = [x for x in pulse_files() if os.path.basename(x) == f"pulse-{s_+1:04d}.json"]
+            if fs:
+                rp = json.load(open(fs[0]))
+                if rp["core"].get("type") in ("reveal", "failure") and rp["core"]["derived"]["commit_seq"] == s_:
+                    ssh("protectli", f"finalize {s_} {rp['pulse_hash']}"); actions.append(f"finalized {f} against {rp['pulse_hash'][:12]}"); continue
+            actions.append(f"UNRESOLVED leftover {f} (no published resolver) - needs operator attention")
+    print(json.dumps({"head_seq": seq, "head_type": ptype(hp), "pending_before": pend, "actions": actions,
+                      "head_commit_unresolved": ptype(hp) == "commit"}))
+    if ptype(hp) == "commit": sys.exit(3)          # caller must resume: reveal (if in window) or fail
+
 def cmd_abort_unpublished():
     """Idempotent: retire any secret the entropy host holds for a seq that never entered the published chain.
     A secret whose seq equals the chain head commit is a live pending commit and is left alone."""
@@ -262,4 +289,5 @@ if __name__ == "__main__":
     elif cmd == "fail": cmd_fail(" ".join(a[1:]) or "unspecified")
     elif cmd == "finalize": cmd_finalize()
     elif cmd == "abort-unpublished": cmd_abort_unpublished()
+    elif cmd == "recover": cmd_recover()
     else: cmd_status()

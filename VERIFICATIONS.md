@@ -31,7 +31,10 @@ yet; only pre-round TSA existence of the exact bytes); the live hosts' forced-co
 alone (now partially addressed by the signed `execution` self-report); capture-time provenance for ERR-006 blocks;
 live GitHub/drand refetch (blocked in that environment; BLS verified offline).
 
-**Follow-up, same verifier, checkpoint `81d8a93`:** all four findings closed. The signed `execution` self-report
+**Follow-up, same verifier, checkpoint `81d8a93`:** all four findings closed **at source level** (a third reviewer
+correctly noted that no published pulse yet carried the hardened code). **First published cycle carrying the hardened
+code: 0024/0025** (04:00:26–04:06:58 UTC, unattended, `Result=success`; all four statements carry the `execution`
+self-report; `E` removed at finalize). Enforcement of the self-report begins at seq 26. The signed `execution` self-report
 "materially strengthens evidence, while correctly remaining short of hardware/remote attestation." Remaining open
 boundaries, in the verifier's words: (1) independent pre-round watcher identity/publication; (2) the ERR-006
 recomputed-byte manifest; (3) verification of the first unattended hardened cycle. Assessment: "moved from credible
@@ -69,3 +72,23 @@ REQUIRE_BLS=1 REFETCH=1 python3 ci/verify_chain.py
 python3 tsa.py verify chain/pulse-0022.json
 python3 verify.py chain/pulse-0023.json --prev chain/pulse-0022.json --pin keys --refetch
 ```
+
+## 2026-09-12 — third reviewer (ChatGPT, via Bill), checkpoint `1d62321`, offline against the local mirror
+
+**Verdict:** conditional accept; "the chain through pulse 0023 verifies, but I would not yet record 'all four findings
+closed'." Offline: 23 pulses, 22 links, 24 host statements, 15 BLS, 16 RFC 3161 tokens, 223 s minimum margin, two
+correctly declared ERR-007 exceptions. Ratings: Security B, Correctness C+, Performance A, Maintainability B.
+
+| item | reviewer's assessment | response (same day) |
+|---|---|---|
+| fresh-install shell | pass | — |
+| CI wording | pass | — |
+| remove `E` at finalize | pass at source level; "best-effort logical overwrite, not guaranteed physical destruction" | wording adopted everywhere |
+| commit recovery | partial — restart with a published unresolved commit stalls; a failed finalize leaves a below-head `.revealing`/`.abandoning` that `abort-unpublished` ignores | `pulse.py recover` derives the action from the published chain (abort above head, finalize leftovers against their published resolver, **resume** an unresolved head commit); the cycle runs it first and resumes instead of re-committing |
+| held entropy not crash-durable | unchecked single write, no fsync | temp file, full write, `fsync`, atomic rename, directory `fsync`, read-back check — before the statement is returned |
+| rollback begins too late | SSH call and parsing outside the protected block | rollback now covers the SSH call; tolerant of a host that never created the secret; `recover` retries |
+| execution evidence fail-open | not required by producer or verifier; no published expected hashes | enforced from **seq 26** by aggregator and verifier against `hosts/EXPECTED.json` (per-host `host.json` hash, published `beacon-cmd` hash list) |
+| VERIFICATIONS wording | "closed" overstated | corrected above |
+
+Reviewer could not refresh GitHub in its environment; assessment strictly against the clean local mirror. No repository
+changes made by the reviewer.

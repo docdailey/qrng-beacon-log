@@ -237,6 +237,11 @@ def strict_main():
             Ed25519PublicKey.from_public_bytes(base64.b64decode(sig["public_key_b64"])).verify(base64.b64decode(sig["sig_b64"]), A.canon(st)); r = True
         except Exception: r = False
         chk(r, f"{name}: {host}'s signature verifies over canon(statement) — the host attested this itself")
+        if core["seq"] >= S.ENFORCE_EXECUTION_FROM_SEQ:
+            ok_e, why_e = S.execution_ok(st.get("execution"), host, os.path.join(os.path.dirname(os.path.abspath(__file__)), "hosts", "EXPECTED.json"))
+            chk(ok_e, f"{name}: execution self-report — {why_e}")
+        elif st.get("execution"):
+            print(f"[INFO] {name}: execution self-report present (enforced from seq {S.ENFORCE_EXECUTION_FROM_SEQ})")
         if pin:
             ok, desc = pin_check(pin, role, sig["public_key_b64"], core["seq"])
             if ok is None: print(f"[WARN] {desc}")

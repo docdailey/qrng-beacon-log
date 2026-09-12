@@ -15,7 +15,7 @@ REQ_BLS = os.environ.get("REQUIRE_BLS", "1") == "1"; REFETCH = os.environ.get("R
 V05_FROM = 18
 KNOWN = json.load(open(os.path.join(ROOT, "ci", "KNOWN_NONCOMPLIANT.json"))).get("pulses", {})
 pulses = sorted(f for f in glob.glob(f"{ROOT}/chain/pulse-*.json") if re.search(r"pulse-\d{4}\.json$", f))
-T = dict(pulses=0, known_noncompliant=0, unexpected_pass_of_listed=0, v05_pulses=0, signatures=0, host_statements=0, chain_links=0, commit_pulses=0, reveal_pulses=0, failure_pulses=0,
+T = dict(pulses=0, known_noncompliant=0, unexpected_pass_of_listed=0, v05_pulses=0, execution_enforced=0, signatures=0, host_statements=0, chain_links=0, commit_pulses=0, reveal_pulses=0, failure_pulses=0,
          commit_reveal_pairs=0, bls_verified=0, bls_skipped=0, drand_refetched=0, tsa_tokens=0, tsa_min_margin_s=None,
          err004_warnings=0, tooling_drift_warnings=0, state_machine_violations=0, failures=0)
 lines = []
@@ -32,6 +32,7 @@ for p in pulses:
     T["pulses"] += 1; T["v05_pulses"] += v05
     T["signatures"] += len(re.findall(r"\[PASS\] \w+ signature by", out)) + out.count("[PASS] aggregator signature")
     T["host_statements"] += out.count("signature verifies over canon(statement)")
+    T["execution_enforced"] += out.count("[PASS] ") and len(re.findall(r"\[PASS\] \w+: execution self-report", out))
     T["chain_links"] += out.count("[PASS] chains to previous pulse")
     T["bls_verified"] += out.count("[full BLS, offline]") if "[PASS] drand round" in out else 0
     T["bls_skipped"] += out.count("[WARN] BLS verification skipped")

@@ -46,10 +46,24 @@ def cmd_commit(seq, target_round, chain_hash):
                "target_round": int(target_round), "device": device_info(), "correction": "none",
                "custody": "E generated and held on this host; released only by this host's reveal"})
     signed = A.sign_statement(ROLE, st)
-    fd = os.open(sp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    os.write(fd, json.dumps({"seq": int(seq), "E": E.hex(), "commitment": commitment,
-                             "target_round": int(target_round), "chain_hash": chain_hash,
-                             "statement_sig": signed["signature"]["sig_b64"]}).encode()); os.close(fd)
+    # The secret MUST be durable before the signed commitment leaves this host: a crash after returning the
+    # statement but before E is on stable storage would publish a commitment nobody can ever resolve.
+    payload = json.dumps({"seq": int(seq), "E": E.hex(), "commitment": commitment, "target_round": int(target_round),
+                          "chain_hash": chain_hash, "statement_sig": signed["signature"]["sig_b64"]}).encode()
+    tmp = sp + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        n = 0
+        while n < len(payload):
+            n += os.write(fd, payload[n:])
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    os.replace(tmp, sp)
+    dfd = os.open(PEND, os.O_RDONLY)
+    try: os.fsync(dfd)
+    finally: os.close(dfd)
+    if open(sp, "rb").read() != payload: die("secret readback mismatch; refusing to return a commitment")
     print(json.dumps(signed))
 
 def _find(seq, states):
@@ -89,7 +103,7 @@ def cmd_abandon(seq, commit_pulse_hash, reason):  # abandon-prepare; binds to th
     st = A.base_statement(ROLE, HOST, seq, "failure", commit_pulse_hash, sec["chain_hash"], TOOLS)
     st.update({"commit_seq": int(seq), "commit_pulse_hash": commit_pulse_hash, "entropy_commitment": sec["commitment"],
                "target_round": sec["target_round"], "reason": reason,
-               "custody": "E retired unrevealed; it is overwritten and removed when this abandonment is finalized"})
+               "custody": "E retired unrevealed; best-effort overwritten and removed when this abandonment is finalized"})
     print(json.dumps(A.sign_statement(ROLE, st)))
 
 def cmd_finalize(seq, resolving_pulse_hash):
@@ -99,13 +113,14 @@ def cmd_finalize(seq, resolving_pulse_hash):
     if st in ("revealed", "abandoned"): print(json.dumps({"seq": int(seq), "state": st, "already": True})); return
     final = sp.replace(".revealing", ".revealed").replace(".abandoning", ".abandoned")
     sec = json.load(open(sp))
-    # E is ERASED at finalize in both cases: for a reveal it is now public in the pulse; for an abandonment the custody
-    # claim ("this host will never disclose it") is honoured by destruction, not by policy.
+    # E is removed at finalize in both cases: for a reveal it is now public in the pulse; for an abandonment the custody
+    # claim is honoured by a best-effort LOGICAL overwrite (zeros + fsync) and replacement of the record. On SSDs and
+    # journaled filesystems this is not guaranteed physical destruction; it is not claimed to be.
     size = os.path.getsize(sp)
     with open(sp, "r+b") as f: f.write(b"\0" * size); f.flush(); os.fsync(f.fileno())
     record = {"seq": int(seq), "state": st.replace("ing", "ed"), "commitment": sec["commitment"], "target_round": sec["target_round"],
               "chain_hash": sec["chain_hash"], "resolved_by_pulse_hash": resolving_pulse_hash, "finalized_unix": int(time.time()),
-              "entropy": "erased at finalize"}
+              "entropy": "removed at finalize (best-effort logical overwrite; not guaranteed physical destruction)"}
     json.dump(record, open(sp, "w")); os.replace(sp, final)
     print(json.dumps({"seq": int(seq), "state": record["state"], "resolved_by": resolving_pulse_hash, "entropy": "erased"}))
 

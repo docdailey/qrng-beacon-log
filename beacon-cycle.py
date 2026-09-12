@@ -53,22 +53,30 @@ def fail(seq, reason, extra=None):
 def main():
     log("cycle start")
     run("git", "pull", "-q", "--ff-only", "origin", "main")
-    try: log("abort-unpublished: " + run("python3", "pulse.py", "abort-unpublished").strip()[:160])
-    except Exception as e: log(f"abort-unpublished failed: {e}"); sys.exit(1)
-    # ---- COMMIT ----
-    try:
-        out = json.loads(run("python3", "pulse.py", "commit", "--lead", str(LEAD)))
-    except Exception as e:
-        log(f"commit refused: {e}"); sys.exit(1)      # nothing minted -> nothing to mark
-    seq, target, release = out["seq"], out["target_round"], None
-    cpath = os.path.join(REPO, "chain", f"pulse-{seq:04d}.json")
-    release = json.load(open(cpath))["core"]["derived"]["target_release_unix_s"]
-    log(f"committed seq {seq} -> round {target}, release in {release-time.time():.0f}s, tsa={out.get('tsa_tokens')}")
-    pushed = publish(f"COMMIT pulse {seq} -> drand round {target}")
-    margin = release - pushed
-    log(f"commit pushed {margin:.0f}s before release")
-    if margin < PUBLISH_MARGIN_S:
-        fail(seq, "commit-published-late", {"margin_s": round(margin, 1), "required_s": PUBLISH_MARGIN_S})
+    # ---- RECOVER: derive state from the published chain before doing anything new ----
+    r = subprocess.run(["python3", "pulse.py", "recover"], cwd=REPO, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    log("recover: " + (r.stdout.strip() or r.stderr.strip())[:200])
+    if r.returncode == 3:
+        # an unresolved commit is at the head (a previous cycle died): RESUME it instead of committing again
+        hp = json.load(open(sorted(glob.glob(os.path.join(REPO, "chain", "pulse-????.json")))[-1]))
+        seq, target = hp["core"]["seq"], hp["core"]["derived"]["target_round"]; release = hp["core"]["derived"]["target_release_unix_s"]
+        log(f"resuming unresolved commit seq {seq} (round {target}, release {release})")
+    elif r.returncode != 0:
+        log("recover failed; not minting"); sys.exit(1)
+    else:
+        # ---- COMMIT ----
+        try:
+            out = json.loads(run("python3", "pulse.py", "commit", "--lead", str(LEAD)))
+        except Exception as e:
+            log(f"commit refused: {e}"); sys.exit(1)      # nothing minted -> nothing to mark
+        seq, target = out["seq"], out["target_round"]
+        release = json.load(open(os.path.join(REPO, "chain", f"pulse-{seq:04d}.json")))["core"]["derived"]["target_release_unix_s"]
+        log(f"committed seq {seq} -> round {target}, release in {release-time.time():.0f}s, tsa={out.get('tsa_tokens')}")
+        pushed = publish(f"COMMIT pulse {seq} -> drand round {target}")
+        margin = release - pushed
+        log(f"commit pushed {margin:.0f}s before release")
+        if margin < PUBLISH_MARGIN_S:
+            fail(seq, "commit-published-late", {"margin_s": round(margin, 1), "required_s": PUBLISH_MARGIN_S})
     # ---- WAIT for the round, judged by drand itself ----
     while True:
         try:
