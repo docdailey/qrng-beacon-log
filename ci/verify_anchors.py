@@ -145,7 +145,9 @@ if REFETCH:
                     say(f"[WAIT] Rekor entry logIndex {e['logIndex']} ({when}) under the anchor key matches nothing published yet ({(time.time()-e['integratedTime'])/60:.0f} min old; alarm if still unexplained after {GRACE_S//60} min)"); flight.append(u); continue
             if h in expected_hash:
                 s_ = expected_hash[h]; age = in_flight.get(s_)   # seq (int) for pulses, 'checkpoint NNNNNN' for checkpoints
-                if age is not None and age > GRACE_S:
+                if age is None:                                   # the object already has an anchor record: this is a second signature over the same statement
+                    say(f"[INFO] Rekor entry logIndex {e['logIndex']} ({when}) is a duplicate anchor of {s_ if isinstance(s_, str) else 'pulse %04d' % s_} (same statement, different ECDSA signature)"); T["rekor_duplicate_entries"] = T.get("rekor_duplicate_entries", 0) + 1; continue
+                if age > GRACE_S:
                     say(f"[FAIL] Rekor entry logIndex {e['logIndex']} ({when}) IS {s_ if isinstance(s_, str) else 'pulse %04d' % s_}'s anchor, but its record has been missing from the anchors branch for {age/60:.0f} min"); unexplained.append(u)
                 else:
                     say(f"[WAIT] Rekor entry logIndex {e['logIndex']} ({when}) is {s_ if isinstance(s_, str) else 'pulse %04d' % s_}'s anchor; its record is not on the anchors branch yet (in flight)"); flight.append(u)

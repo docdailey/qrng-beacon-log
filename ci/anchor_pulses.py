@@ -38,7 +38,9 @@ for pf in L.pulse_files(os.path.join(ROOT, "chain")):
     else:
         try:
             sig = L.sign(priv, statement)
-            uuid, entry, how = L.rekor_upload(statement, sig, pub_pem)
+            uuid, entry = L.rekor_find_ours(statement, pub_pem); how = "existing"
+            if uuid is None: uuid, entry, how = L.rekor_upload(statement, sig, pub_pem)
+            else: sig = L.entry_sig(entry)                       # keep the signature Rekor already holds
             T["rekor_" + how] += 1
             rec = {"anchor": L.ANCHOR_VERSION, "seq": seq, "type": st["type"], "pulse_hash": st["pulse_hash"],
                    "statement_sha256": L.sha256(statement), "signature_b64": base64.b64encode(sig).decode(),
@@ -79,7 +81,10 @@ for cf in L.checkpoint_files(ROOT):
         if open(stmt_path, "rb").read() != statement: say(f"[FAIL] checkpoint {size:06d}: published statement differs from the file — a checkpoint changed after anchoring"); T["errors"] += 1
         continue
     try:
-        sig = L.sign(priv, statement); uuid, entry, how = L.rekor_upload(statement, sig, pub_pem); T["rekor_" + how] += 1
+        sig = L.sign(priv, statement); uuid, entry = L.rekor_find_ours(statement, pub_pem); how = "existing"
+        if uuid is None: uuid, entry, how = L.rekor_upload(statement, sig, pub_pem)
+        else: sig = L.entry_sig(entry)
+        T["rekor_" + how] += 1
         rec = {"anchor": L.ANCHOR_VERSION, "type": "checkpoint", "tree_size": size, "origin": st["origin"], "root_b64": st["root_b64"],
                "statement_sha256": L.sha256(statement), "signature_b64": base64.b64encode(sig).decode(), "anchor_key_id": kid, "anchor_key_file": "keys/anchor.pub",
                "rekor": {"server": L.REKOR, "uuid": uuid, "logIndex": entry["logIndex"], "integratedTime": entry["integratedTime"],
@@ -91,12 +96,16 @@ for cf in L.checkpoint_files(ROOT):
     except Exception as e: say(f"[FAIL] checkpoint {size:06d}: {type(e).__name__}: {e}"); T["errors"] += 1
 
 # INDEX.tsv — one line per anchored pulse, for humans and for grep
-rows = []
+rows, crows = [], []
 for f in sorted(os.listdir(A)):
-    if f.endswith(".anchor.json"):
-        r = json.load(open(os.path.join(A, f)))
-        rows.append("\t".join(str(x) for x in (r["seq"], r["type"], r["pulse_hash"], r["statement_sha256"], r["rekor"]["uuid"], r["rekor"]["logIndex"], r["rekor"]["integratedTime"], r["ots"].get("status"), r["ots"].get("bitcoin_block_height") or "")))
+    if not f.endswith(".anchor.json"): continue
+    r = json.load(open(os.path.join(A, f)))
+    if r.get("type") == "checkpoint":      # checkpoint records have tree_size/root, no seq/pulse_hash/ots
+        crows.append("\t".join(str(x) for x in (r["tree_size"], r["origin"], r["root_b64"], r["statement_sha256"], r["rekor"]["uuid"], r["rekor"]["logIndex"], r["rekor"]["integratedTime"])))
+    else:
+        rows.append("\t".join(str(x) for x in (r["seq"], r["type"], r["pulse_hash"], r["statement_sha256"], r["rekor"]["uuid"], r["rekor"]["logIndex"], r["rekor"]["integratedTime"], (r.get("ots") or {}).get("status"), (r.get("ots") or {}).get("bitcoin_block_height") or "")))
 open(os.path.join(A, "INDEX.tsv"), "w").write("seq\ttype\tpulse_hash\tstatement_sha256\trekor_uuid\trekor_logIndex\trekor_integratedTime\tots_status\tbitcoin_block\n" + "\n".join(rows) + "\n")
+open(os.path.join(A, "CHECKPOINTS.tsv"), "w").write("tree_size\torigin\troot_b64\tstatement_sha256\trekor_uuid\trekor_logIndex\trekor_integratedTime\n" + "\n".join(crows) + "\n")
 say("\n=== anchor tally ===")
 for k, v in T.items(): say(f"  {k:16s} {v}")
 summ = os.environ.get("GITHUB_STEP_SUMMARY")

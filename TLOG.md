@@ -136,8 +136,7 @@ It is also the signature key name (§5).
 
 **Decided 2026-09-12: the domain is `notbefore.net` (Bill holds it; site in progress).** Origin line: **`notbefore.net/log`**
 — recorded in `keys/CHECKPOINT.json` with the checkpoint public key (`keys/checkpoint.pub`, Ed25519, origin-bound
-key ID `8b627e7f`; private key `~/beacon/checkpoint.key` on think, distinct from the aggregator key). The identity
-file carries `enabled: false` until the exact string is confirmed; the first signed checkpoint fixes it forever.
+key ID `8b627e7f`; private key `~/beacon/checkpoint.key` on think, distinct from the aggregator key). The identity was enabled on Bill's "go" (2026-09-12) and the first checkpoint (size 49) fixed it forever.
 Do **not** use a `github.com/...` path: the origin outlives any particular hosting choice.
 
 ### 4.2 Extension lines
@@ -354,10 +353,10 @@ of TAI … metrologically traceable" would have been a CLAIMS violation on first
 | RFC 6962 tree, inclusion path, consistency proof, RFC 9162 verifiers | `tlog.py`, self-tested against CT vectors |
 | checkpoint body, signed note, Ed25519 key-ID derivation, note verification | `tlog.py checkpoint / sign / verify` |
 | CI: self-test on every push; recompute the live root; verify `checkpoint` when present | `ci/verify_chain.py` |
-| aggregator writes `checkpoint` + `checkpoints/NNNNNN` in the pulse's commit (`tlog.py publish-checkpoint`, append-only self-check, rollback refusal) | implemented, dry-run tested; **enabled the moment the origin string is confirmed** |
+| aggregator writes `checkpoint` + `checkpoints/NNNNNN` in the pulse's commit (`tlog.py publish-checkpoint`, append-only self-check, rollback refusal) | **LIVE.** Bill: "go" 2026-09-12; identity enabled `fe8af36`; **first checkpoint `checkpoints/000049` signed on think 16:21:44 UTC** — size 49, root `a18b8fce51312df2784f8ce483cdddb8db658a78de7e7b2277c1dddbca9c1547`, key ID `8b627e7f`; Rekor logIndex 2809520757 (16:22:04 UTC); `https://notbefore.net/checkpoint` served byte-identical within two minutes |
 | Rekor-anchoring of each checkpoint (`anchors/checkpoint-NNNNNN.*`, expected by the split-view check) | implemented |
 | CI: checkpoint required once enabled, size == pulses, consistent with the previous one | implemented |
-| `notbefore checkpoint`; `verify` proves the pair's inclusion and checks consistency with the head this machine last saw | implemented; ships as 0.4.0 with the first checkpoint |
+| `notbefore checkpoint`; `verify` proves the pair's inclusion and checks consistency with the head this machine last saw | **0.4.0** (2026-09-12): identity vendored and enabled; inclusion, site cross-check and cached-head consistency active on every `verify` |
 | witness submission (`tlog-witness`) | after the above; needs operators to configure the log (outreach is HELD) |
 | `notbefore.net` serving the repository root statically (Workers Static Assets, `wrangler.jsonc`; `/checkpoint` and `/checkpoints/*` text/plain, CORS-open) | **live 2026-09-12** (Bill); `/checkpoint` answers 404 until the first checkpoint is committed |
 | client cross-check: `https://notbefore.net/checkpoint` must be the git head or an append-only relative of it | implemented (`notbefore` ≥ 0.3.1, `--checkpoint-url`) |

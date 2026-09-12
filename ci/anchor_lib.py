@@ -83,6 +83,19 @@ def rekor_upload(statement, sig, anchor_pub_pem):
         raise
     uuid = next(iter(resp)); return uuid, resp[uuid], "created"
 
+def rekor_find_ours(statement, anchor_pub_pem):
+    """An entry already in Rekor for this exact statement under OUR key (ECDSA signatures differ per upload, so
+    Rekor cannot dedupe for us). Returns (uuid, entry) or (None, None). Makes anchoring idempotent across crashed runs."""
+    try: uuids = rekor_search_by_hash(sha256(statement)) or []
+    except Exception: return None, None
+    want = load_pub(anchor_pub_pem)
+    for u in uuids:
+        try:
+            e = rekor_get(u); h, k = entry_hash_and_key(e)
+            if k is not None and key_id(load_pub(k)) == key_id(want): return u, e
+        except Exception: continue
+    return None, None
+
 def rekor_get(uuid):
     st, resp = _req(f"/api/v1/log/entries/{uuid}"); return resp[uuid]
 

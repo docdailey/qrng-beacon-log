@@ -128,3 +128,9 @@ def test_17_site_cross_check(tmp_path, monkeypatch):
     forked = list(leaves); forked[3], forked[4] = forked[4], forked[3]
     site.write_text(note(n, forked)); R = C.CheckResult(23); TC.check(NL.LogSource(log_dir=str(log)), (23,), R, refetch=True, site_url=site.as_uri()); assert not R.ok and any("SPLIT VIEW between publication surfaces" in l for l in R.lines), R.lines
 
+def test_18_live_checkpoint_verifies_with_the_vendored_identity():
+    """The repository's published checkpoint (notbefore.net/log) verifies under the vendored key, and a verify proves inclusion against it."""
+    if not os.path.exists(os.path.join(LOG, "checkpoint")): pytest.skip("no checkpoint published in this checkout")
+    rc, out, err = nb("--offline", "checkpoint"); assert rc == 0, err
+    assert out.startswith("notbefore.net/log\n") and "[PASS] checkpoint signature by notbefore.net/log" in err and "[PASS] root at size" in err, err
+    rc, out, err = nb("--offline", "verify", "23"); assert rc == 0 and "is included in the checkpointed tree (leaf 22" in err, err
