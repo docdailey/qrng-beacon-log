@@ -66,11 +66,10 @@ def main():
     for idx in range(len(have), size):
         open(os.path.join(D, "entries", f"{idx:08d}.json"), "wb").write(leaves[idx]); changed = True
     # witness cosignatures on the log-signed note (the log's own signature line stays first)
-    cos = ""
-    try:
-        cos = T.gather_cosignatures(note, leaves[:size], HERE, log=log) if size > 0 else ""
-    except Exception as e: log(f"witness cosignature round failed: {e}")
-    full = note + (cos or "")
+    full, cosigned_by = note, []
+    if size > 0:
+        try: full, cosigned_by = T.gather_cosignatures(note, leaves[:size], HERE, log=log)      # -> (note + verified cosignature lines, [witness names])
+        except Exception as e: log(f"witness cosignature round failed: {e}")
     cp = os.path.join(D, "checkpoints", f"{size:08d}")
     if not os.path.exists(cp) or (prev or "") != full:
         open(cp, "w").write(full); open(prev_p, "w").write(full); changed = True
