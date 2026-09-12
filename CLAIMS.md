@@ -230,3 +230,13 @@ were stamped from it and are superseded.
   certification of anything.
 - ✅ Pulses 0001–0041: "anchored retroactively, 2026-09-12 12:47 UTC". ❌ Never present their Rekor times as
   commit times.
+
+## Added 2026-09-12 — the name (binding)
+
+- ✅ **NotBefore** is the name of the *product contract*: the consumer-facing seed (`attested_value` \(V\)) and the
+  labeled derive layer (`NOTBEFORE.md`). It is one log, not a second beacon. The claim in the name is exactly the
+  claim we can prove: "fixed before round \(R\), not selected after".
+- ❌ Never "NotBefore-certified", "NotBefore-grade", or any phrasing that makes the name sound like a standard or an
+  accreditation. ❌ Never "PulseTrain" (rejected 2026-09-12: crowded name space, an existing hardware product).
+- ✅ Say the CLI is specified, not shipped, until it ships.
+
