@@ -40,7 +40,7 @@ def test_09_mutated_V_fails():
     d = _mutated_copy(m); rc, out, err = nb("verify", "23", log=d); assert rc == 1 and "NOT VERIFIED" in err
 def test_10_transcript_has_log_git_sha(tmp_path):
     t = tmp_path / "t.json"; rc, out, err = nb("seed", "23", "--purpose", "demo:roster", "--transcript", str(t)); assert rc == 0
-    j = json.load(open(t)); assert j["log_git_sha"] and j["seq"] == 23 and j["commit_seq"] == 22 and j["derived_seed"] == out.strip() and j["spec"] == "notbefore/spec/0.2"
+    j = json.load(open(t)); assert j["log_git_sha"] and j["seq"] == 23 and j["commit_seq"] == 22 and j["derived_seed"] == out.strip() and j["spec"] == "notbefore/spec/0.3"
 def test_11_shuffle_and_split_are_deterministic(tmp_path):
     f = tmp_path / "r.txt"; f.write_text("\n".join(f"rec{i}" for i in range(20)) + "\n")
     a = nb("shuffle", "23", "--purpose", "demo:roster", str(f), "--transcript", "none"); b = nb("shuffle", "23", "--purpose", "demo:roster", str(f), "--transcript", "none")
@@ -52,3 +52,18 @@ def test_12_worked_check_matches_spec_formula():
     import hashlib
     rc, V, _ = nb("value", "23"); rc2, S, _ = nb("seed", "23", "--purpose", "demo:roster", "--transcript", "none")
     assert S.strip() == hashlib.sha256(b"notbefore/derive/v1" + bytes.fromhex(V.strip()) + b"demo:roster").hexdigest()
+def test_13_commit_after_a_skip_is_accepted_by_the_vendored_verifier():
+    """Protocol v0.5.1: a synthetic skip whose pulse_hash equals commit 0022's prev_hash stands in as its predecessor.
+    The vendored verifier must accept the state transition skip -> commit (0.2.0 rejected it)."""
+    import notbefore.check as C
+    com = json.load(open(os.path.join(LOG, "chain", "pulse-0022.json")))
+    fake = {"core": {"v": "0.5", "type": "skip", "seq": 21, "prev_hash": "0" * 64, "chain_hash": com["core"]["chain_hash"], "statements": {},
+                     "derived": {"reason": "synthetic", "refused_by": "unknown", "attempted_unix_s": 0}, "tooling": {}, "aggregator_host": "think"},
+            "pulse_hash": com["core"]["prev_hash"], "signatures": {"aggregator": {}}}
+    d = tempfile.mkdtemp(prefix="nb-skip-"); fp = os.path.join(d, "pulse-0021.json"); json.dump(fake, open(fp, "w"))
+    cp = os.path.join(d, "pulse-0022.json"); shutil.copy2(os.path.join(LOG, "chain", "pulse-0022.json"), cp)
+    r = subprocess.run([sys.executable, os.path.join(C.VENDOR, "verify.py"), cp, "--pin", C.KEYS, "--prev", fp, "--no-bls"], capture_output=True, text=True)
+    assert "[PASS] state machine: commit follows a reveal, failure, skip or legacy pulse" in r.stdout and "[PASS] chains to previous pulse" in r.stdout, r.stdout[-800:]
+    assert r.returncode == 0
+def test_14_spec_version_is_0_3():
+    rc, out, err = nb("--version"); assert "notbefore/spec/0.3" in out and "0.3.0" in out
