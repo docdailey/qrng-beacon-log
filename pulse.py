@@ -324,8 +324,10 @@ def cmd_preflight():
         rows.append(ok); print(f"[{'OK  ' if ok else ('FAIL' if ok is False else 'WARN')}] {name:<13} {detail}", flush=True)
     # 1. checkout == published head, no unresolved commit
     rc, _, _ = git("fetch", "-q", "origin", "main")
-    synced = rc == 0 and git("rev-parse", "HEAD")[1] == git("rev-parse", "origin/main")[1]
-    row("git", synced, "checkout equals origin/main" if synced else "checkout is NOT the published head (pull first; cannot fetch = no GitHub)")
+    head_, om = git("rev-parse", "HEAD")[1], git("rev-parse", "origin/main")[1]
+    behind = rc == 0 and head_ != om and git("merge-base", "--is-ancestor", "HEAD", "origin/main")[0] == 0
+    synced = rc == 0 and (head_ == om or behind)          # merely behind is fine: the cycle fast-forwards (ERR-010); diverged is not
+    row("git", synced, "checkout equals origin/main" if head_ == om else ("behind origin/main by docs/site commits; the cycle will fast-forward" if behind else ("cannot fetch origin (no GitHub?)" if rc else "checkout has commits origin lacks (DIVERGED) — reconcile before minting")))
     seq, ph, hp = head(); nxt = seq + 1
     row("chain head", ptype(hp) != "commit", f"seq {seq} type {ptype(hp)}" + ("" if ptype(hp) != "commit" else " — UNRESOLVED COMMIT: let the cycle (recover) resolve it before anything else"))
     # 2. drand reachable and BLS-verifying
