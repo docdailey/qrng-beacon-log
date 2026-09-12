@@ -17,23 +17,19 @@ A token taken later only proves the file existed before the token time; such tok
 import subprocess, sys, os, json, hashlib, re, urllib.request, time
 
 TSAS = {
-    "freetsa":  {"url": "https://freetsa.org/tsr",
-                 "ca":  "https://freetsa.org/files/cacert.pem", "tsa_cert": "https://freetsa.org/files/tsa.crt"},
-    "digicert": {"url": "http://timestamp.digicert.com", "ca": None, "tsa_cert": None},   # chain in system roots
+    "freetsa":  {"url": "https://freetsa.org/tsr"},          # trust anchors: keys/tsa/PINS.json (pinned, never fetched)
+    "digicert": {"url": "http://timestamp.digicert.com"},
 }
 HERE = os.path.dirname(os.path.abspath(__file__))
-CACHE = os.path.join(HERE, "tsa-certs"); os.makedirs(CACHE, exist_ok=True)
-SYS_CA = next((c for c in ("/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/cert.pem",
-                           "/opt/homebrew/etc/openssl@3/cert.pem", "/etc/pki/tls/certs/ca-bundle.crt") if os.path.exists(c)), "/etc/ssl/cert.pem")
+# Pinned trust anchors (keys/tsa/PINS.json). The verifier trusts these files and nothing else: no system store, no
+# download. Missing pin => that TSA's token FAILS. See ERR-014.
+PIN_DIR = os.path.join(HERE, "keys", "tsa")
+def _pins():
+    p = os.path.join(PIN_DIR, "PINS.json")
+    return json.load(open(p))["tsas"] if os.path.exists(p) else {}
 
 def sh(*a, **k):
     return subprocess.run(a, capture_output=True, text=True, **k)
-
-def _fetch(url, name):
-    p = os.path.join(CACHE, name)
-    if not os.path.exists(p):
-        urllib.request.urlretrieve(url, p)
-    return p
 
 def stamp(pulse_path, label=None):
     q = pulse_path + ".tsq"
@@ -68,11 +64,13 @@ def verify(pulse_path):
         if not os.path.exists(tsr): continue
         txt = sh("openssl", "ts", "-reply", "-in", tsr, "-text").stdout
         t = (re.search(r"Time stamp:\s*(.+)", txt) or [None, "?"])[1].strip() if "Time stamp" in txt else "?"
-        args = ["openssl", "ts", "-verify", "-data", pulse_path, "-in", tsr]
-        if cfg["ca"]:
-            args += ["-CAfile", _fetch(cfg["ca"], f"{name}-ca.pem"), "-untrusted", _fetch(cfg["tsa_cert"], f"{name}-tsa.crt")]
-        else:
-            args += ["-CAfile", SYS_CA]
+        pin = _pins().get(name); root = pin and os.path.join(PIN_DIR, pin["root"]); inter = [os.path.join(PIN_DIR, i) for i in (pin or {}).get("intermediates", [])]
+        if not pin or not os.path.exists(root) or not all(os.path.exists(i) for i in inter):
+            results.append({"tsa": name, "time": t, "digest_and_chain_verified": False, "detail": "pinned trust root for this TSA is missing from keys/tsa (fail closed; ERR-014)"}); ok_all = False; continue
+        # `openssl ts` builds its store from -CAfile/-CApath/-CAstore ONLY (apps/ts.c never loads the default paths), so
+        # -CAfile <pinned root> alone is strict: tested — offering the wrong root fails even when the right one sits in /etc/ssl.
+        args = ["openssl", "ts", "-verify", "-data", pulse_path, "-in", tsr, "-CAfile", root]
+        for i in inter: args += ["-untrusted", i]
         v = sh(*args)
         full = "Verification: OK" in (v.stdout + v.stderr)
         results.append({"tsa": name, "time": t, "digest_and_chain_verified": full,

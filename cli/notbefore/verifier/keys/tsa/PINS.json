@@ -1,0 +1,48 @@
+{
+  "note": "RFC 3161 trust anchors the verifier trusts, and ONLY these. tsa.py verifies each TSA's tokens against its pinned root (pinned intermediates offered as untrusted helpers); it never consults the system certificate store and never downloads a certificate. A rotated TSA chain therefore fails loudly until a release pins the new one (ERR-014).",
+  "pinned_utc": "2026-09-12T21:22:44Z",
+  "tsas": {
+    "freetsa": {
+      "root": "freetsa-root.pem",
+      "intermediates": [
+        "freetsa-tsa.pem"
+      ]
+    },
+    "digicert": {
+      "root": "digicert-root-g4.pem",
+      "intermediates": [
+        "digicert-timestamping-ca-2025.pem"
+      ]
+    }
+  },
+  "files": {
+    "freetsa-root.pem": {
+      "role": "root",
+      "subject": "O=Free TSA, OU=Root CA, CN=www.freetsa.org, emailAddress=busilezas@gmail.com, L=Wuerzburg, ST=Bayern, C=DE",
+      "not_after": "Mar  7 01:52:13 2041 GMT",
+      "sha256_fingerprint": "A6:37:9E:7C:EC:C0:5F:AA:3C:BF:07:60:13:D7:45:E3:27:BB:BA:A3:8C:0B:9A:F2:24:69:D4:70:1D:18:AA:BC",
+      "source": "https://freetsa.org/files/cacert.pem (byte-identical to the copy vendored 2026-09-11; also the issuer embedded in every freetsa token we hold)"
+    },
+    "freetsa-tsa.pem": {
+      "role": "intermediate/signer",
+      "subject": "O=Free TSA, OU=TSA, description=This certificate digitally signs documents and time stamp requests made using the freetsa.org online services, CN=www.freetsa.org, emailAddress=busilezas@mailbox.org, L=Wuerzburg, C=DE, ST=Bayern",
+      "not_after": "Feb  2 19:44:22 2040 GMT",
+      "sha256_fingerprint": "32:E8:41:A9:5C:C1:16:41:01:FF:DE:41:29:8E:F2:FC:75:C1:C4:37:2E:F0:95:E8:8A:6B:BD:47:DF:B1:91:FC",
+      "source": "embedded in freetsa tokens; https://freetsa.org/files/tsa.crt"
+    },
+    "digicert-root-g4.pem": {
+      "role": "root",
+      "subject": "C=US, O=DigiCert Inc, OU=www.digicert.com, CN=DigiCert Trusted Root G4",
+      "not_after": "Jan 15 12:00:00 2038 GMT",
+      "sha256_fingerprint": "55:2F:7B:DC:F1:A7:AF:9E:6C:E6:72:01:7F:4F:12:AB:F7:72:40:C7:8E:76:1A:C2:03:D1:D9:D2:0A:C8:99:88",
+      "source": "https://cacerts.digicert.com/DigiCertTrustedRootG4.crt; fingerprint cross-checked against the macOS system root store"
+    },
+    "digicert-timestamping-ca-2025.pem": {
+      "role": "intermediate",
+      "subject": "C=US, O=DigiCert, Inc., CN=DigiCert Trusted G4 TimeStamping RSA4096 SHA256 2025 CA1",
+      "not_after": "Jan 14 23:59:59 2038 GMT",
+      "sha256_fingerprint": "CA:0B:15:54:EC:D9:01:EA:19:DC:AD:87:49:E9:F2:64:8C:8D:6D:FC:EA:1A:DD:9D:2C:21:09:41:5B:B8:2C:CD",
+      "source": "embedded in DigiCert tokens (e.g. chain/pulse-0058.json.digicert.tsr); issued by DigiCert Trusted Root G4"
+    }
+  }
+}
