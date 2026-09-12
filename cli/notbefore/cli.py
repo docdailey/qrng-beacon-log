@@ -176,11 +176,16 @@ def _execute(a, src):
         bound = st["contract_sha256"] == csha and st["key_id"] == c["signer"]["key_id"] and st["public_key_b64"] == c["signer"]["public_key_b64"] and st["decision_id"] == c["decision_id"]
         if not (sok and bound): _err(f"refusing: decision statement does not verify for this contract ({why if not sok else 'statement names a different contract, key or decision_id'})"); return 1
         lines.append(f"[PASS] contract signed by key {st['key_id']} for decision_id {st['decision_id']!r} (Ed25519 statement verifies)")
-    elif not a.allow_unregistered: _err("refusing: legacy unsigned contract/1 (no signer, no decision-log entry); pass --allow-unregistered to run it labelled as such"); return 1
-    else: lines.append("[WARN] legacy unsigned contract/1: no signer identity and no decision-log entry; labelled in the transcript")
+    legacy = c["spec"] != C.CONTRACT_SPEC
     toks, bad = C.verify_timestamps(a.contract)
     lines += [f"[PASS] contract timestamped: {n} {ts}" for n, ts, _ in toks]
     pre_ok, pre_why, _ = C.timestamp_verdict(toks, bad, None)          # presence/validity only; the time gate comes after selection
+    if legacy:
+        # contract/1 (0.6.0–0.7.x): unsigned and outside any decision-log namespace. Fully timestamped, it is exactly what those
+        # releases promised, so it runs with a WARN (refused under --require-log); with tokens missing it needs --allow-unregistered.
+        if a.require_log: _err("refusing (--require-log): legacy unsigned contract/1 has no signer and no decision-log entry"); return 1
+        if not pre_ok and not a.allow_unregistered: _err(f"refusing: legacy unsigned contract/1 and {pre_why}; pass --allow-unregistered to run it labelled as such"); return 1
+        lines.append("[WARN] legacy unsigned contract/1: no signer identity and no decision-log entry (timestamps bound WHEN it existed, not that it was the only one); labelled in the transcript")
     if not pre_ok:
         if bad or not a.allow_unregistered: _err(f"refusing: {pre_why}" + ("" if bad else " (pass --allow-unregistered for a labelled dry run)")); return 1
         lines.append(f"[WARN] {pre_why} — running because --allow-unregistered; the transcript records that no third party vouches for when this decision existed")

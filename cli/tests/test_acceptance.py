@@ -290,8 +290,12 @@ def test_29_identity_and_signed_contracts(tmp_path, monkeypatch):
     # legacy unsigned contract/1: refused unless labelled
     c1 = tmp_path / "c1.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:legacy", "--sample", "2", "--out", str(c1), "--no-timestamp", "--unsigned", str(f), cwd=str(tmp_path)); assert rc == 0
     assert json.load(open(c1))["spec"] == "notbefore/contract/1"
-    rc, o, e = nb("execute", str(c1), "--input", str(f), "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "legacy unsigned" in e
+    rc, o, e = nb("execute", str(c1), "--input", str(f), "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "legacy unsigned" in e      # no tokens at all -> refused
     rc, o, e = nb("execute", str(c1), "--input", str(f), "--transcript", "none", "--no-anchors", "--allow-unregistered", cwd=str(tmp_path)); assert rc == 0 and "legacy unsigned" in e
+    rc, o, e = nb("execute", str(c1), "--input", str(f), "--transcript", "none", "--no-anchors", "--allow-unregistered", "--require-log", cwd=str(tmp_path)); assert rc == 1 and "require-log" in e
+    # a legacy contract WITH both tokens (what 0.6.0–0.7.x produced) runs by default, labelled — its tokens are still gated on the round
+    c0 = tmp_path / "c0.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:legacy2", "--sample", "2", "--out", str(c0), "--unsigned", str(f), cwd=str(tmp_path)); assert rc == 0, e
+    rc, o, e = nb("execute", str(c0), "--input", str(f), "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "legacy unsigned" not in (e.split("[WARN]")[0]) and "not strictly before" in e, e   # ran past the legacy gate; refused only because today's tokens postdate the 03:05Z round
 def test_30_decision_log_receipts_verify_only_against_vendored_trust(tmp_path, monkeypatch):
     """The client trusts nothing the log says until the note verifies under the vendored key and the proof reaches its
     root. Synthetic log with a throwaway key: a good receipt passes; wrong-key note, wrong index, tampered leaf, or a
