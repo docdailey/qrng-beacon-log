@@ -15,7 +15,9 @@ Running on **think** (192.168.71.34) as a systemd **user** timer (`qrng-beacon.t
 `Persistent=true`, Linger on). Repo checkout `think:~/qrng-beacon`, pushing over a repo-scoped GitHub deploy
 key (`think-beacon-cycle`, write access to this one repository only). First automated pair: **pulse 0012
 (commit, pushed 269 s before round 32123484, two at-commit TSA tokens) → pulse 0013 (reveal, pushed 28 s
-after release)**. Only think mints; `pulse.py` refuses on any host whose checkout is not the published head.
+after release)**. **First UNATTENDED fire: 01:00:26 UTC 2026-09-12** (systemd `Result=success`, no human involved) → pulse 0014
+(commit, pushed 273 s before round 32123921, two at-commit TSA tokens 01:00:55Z) → pulse 0015 (reveal, pushed
+31 s after release). Only think mints; `pulse.py` refuses on any host whose checkout is not the published head.
 
 | parameter | value | enforced by |
 |---|---|---|
