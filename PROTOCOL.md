@@ -74,9 +74,16 @@ latency is reported under `orchestration` and is a freshness limit, not part of 
    `attested_value` recomputes; `commit.anchor < round release ≤ reveal.anchor`.
 4. `--refetch`: fetch `https://api.drand.sh/<chain>/public/<round>` and compare randomness + signature.
 5. RFC 3161: `openssl ts -verify -data <pulse> -in <tsr> -CAfile …` for each token (`tsa.py verify`).
-
-**Not performed:** BLS threshold verification of the drand signature. Do it with the official drand
-client and the chain's public key from `/<chain>/info` if you need it.
+6. **BLS (automatic when `py_ecc` is installed; `--no-bls` skips):** verify the drand signature under the
+   **pinned** League of Entropy quicknet group key `keys/drand-quicknet.json`:
+   `e(σ, g₂) == e(H(m), pk)` on BLS12-381, σ ∈ G1 (48 B), pk ∈ G2 (96 B), `m = SHA256(round as uint64 BE)`,
+   `H` = RFC 9380 hash-to-G1 with DST `BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_`, plus curve and
+   prime-order-subgroup checks on both points. The pin was cross-checked across three independent LoE
+   relays on 2026-09-12 and is never overwritten (a key rotation is a new chain hash and a new pin).
+   This removes the HTTP relay, DNS and TLS from the trust base of the reveal: a fabricated or relabelled
+   round cannot pass, whatever `api.drand.sh` serves. Remaining assumptions: the pin is genuine, and
+   ≥ threshold of the League's operators are honest. Reference implementation: `bls_drand.py`
+   (pure Python, ~1 s per round).
 
 ## 8. What a valid reveal proves, and what it assumes
 

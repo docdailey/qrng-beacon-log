@@ -10,6 +10,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install cryptography
-      - name: Verify every pulse, link, pair, TSA token and the Merkle root (with live drand re-fetch)
+      - run: pip install cryptography py_ecc
+      - name: Verify every pulse, link, pair, TSA token, drand BLS signature (pinned group key) and the Merkle root, with live drand re-fetch
         run: REFETCH=1 python3 ci/verify_chain.py

@@ -134,9 +134,11 @@ were stamped from it and are superseded.
   "could not have been computed before T", never "could not have been chosen".
 - Quote the **assembly window** (`gnss_anchor_minus_drand_release_s`) whenever the anchor is cited;
   the bound's tightness is a timing claim, and the number is published for exactly that reason.
-- Never claim we verify drand's **BLS threshold signature**. We verify `randomness ==
-  sha256(signature)` offline and re-fetch the round from the operators. Full BLS verification needs
-  a drand client and the chain public key — say so.
+- ✅ Since 2026-09-12 `verify.py` performs **full BLS verification** of each drand round under the pinned
+  League of Entropy quicknet group key when `py_ecc` is installed (CI always does). We MAY say "the
+  drand signature is verified under the pinned group key; the relay is not trusted". We may NOT say
+  "drand is verified" without the pin caveat, and never imply we verified the *threshold ceremony*
+  itself — the pin and the ≥t-honest-operators assumption remain.
 - `make_pulse.py` fails closed if drand is unreachable or if `randomness != sha256(signature)`.
   A pulse without an external anchor is a pre-v0.3 artifact and must not be sold as anchored.
 

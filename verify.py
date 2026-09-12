@@ -13,10 +13,18 @@ Checks, all offline unless --refetch:
              drand round == the committed target; randomness == sha256(signature);
              attested_value == documented mix; commit anchor < round release <= reveal anchor
   * --refetch: re-fetch the drand round from the League of Entropy and compare
+  * BLS: if `py_ecc` is installed, verify the drand signature under the PINNED League of Entropy
+         group key (keys/drand-quicknet.json) — removes the HTTP relay from the trust base.
+         Runs automatically; --no-bls skips; a WARN is printed if py_ecc is absent.
   * --prev:  prev_hash chains, and a reveal's predecessor IS its commit
 Exit 0 only if every check passed.
 """
 import json, base64, hashlib, sys, os, urllib.request, datetime
+try:
+    import bls_drand
+    BLS = bls_drand.available()
+except Exception:
+    bls_drand, BLS = None, False
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.exceptions import InvalidSignature
 
@@ -58,9 +66,20 @@ def pin_check(pin, role, key_b64, seq):
     except Exception: return None, f"no pin for {role}"
 def utc(ts): return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).isoformat()
 
+NO_BLS = False
 def verify_drand(da, refetch):
     sig, rnd = bytes.fromhex(da["signature"]), bytes.fromhex(da["randomness"])
     chk(hashlib.sha256(sig).digest() == rnd, f"drand randomness == sha256(signature) [offline] (round {da['round']}, {da.get('beacon_id')})")
+    if NO_BLS:
+        print("[SKIP] BLS verification disabled by --no-bls")
+    elif not BLS:
+        print("[WARN] BLS verification skipped: `pip install py_ecc` to verify the drand signature under the pinned group key")
+    else:
+        try:
+            ok, why = bls_drand.verify_pinned(da["round"], da["signature"], da["chain_hash"])
+        except Exception as e:
+            ok, why = False, f"BLS verification error: {type(e).__name__}: {e}"
+        chk(ok, f"drand round {da['round']} {why} [full BLS, offline]")
     if refetch:
         try:
             with urllib.request.urlopen(f"https://api.drand.sh/{da['chain_hash']}/public/{da['round']}", timeout=15) as r:
@@ -77,6 +96,7 @@ def main():
     pin = a[a.index("--pin") + 1] if "--pin" in a else None
     prev = load(a[a.index("--prev") + 1]) if "--prev" in a else None
     refetch = "--refetch" in a
+    global NO_BLS; NO_BLS = "--no-bls" in a
     print(f"pulse seq {core['seq']}  type {typ}  version {core.get('version')}")
 
     # ---- integrity + signatures (all types) ----

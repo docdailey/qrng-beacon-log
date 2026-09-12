@@ -20,9 +20,9 @@ drand round; the following `reveal` pulse discloses the entropy after that round
 
 **Verify anything here with no access to our systems — one command, from an empty directory:**
 ```bash
-pip install cryptography
+pip install cryptography py_ecc      # py_ecc enables full BLS verification of the drand rounds
 RAW=https://raw.githubusercontent.com/docdailey/qrng-beacon-log/main
-curl -sfLO $RAW/verify.py
+curl -sfLO $RAW/verify.py; curl -sfLO $RAW/bls_drand.py; mkdir -p keys; curl -sfL $RAW/keys/drand-quicknet.json -o keys/drand-quicknet.json
 python3 verify.py $RAW/chain/pulse-0011.json --prev $RAW/chain/pulse-0010.json --pin $RAW/keys --refetch
 ```
 Then confirm the commit was published before its round, using GitHub's timestamp rather than ours:
