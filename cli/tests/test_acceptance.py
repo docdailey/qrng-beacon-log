@@ -178,9 +178,9 @@ def test_24_decision_contract_plan_execute(tmp_path):
     c = json.load(open(out)); assert c["operation"] == "sample" and c["params"] == {"k": 12} and c["input"]["record_count"] == 30 and c["selection"]["after_unix_s"] == 1789182000
     assert os.path.exists(str(out) + ".tsa.json"), "TSA registration files missing"
     # execute: registered today, so every token is AFTER a 2026-09-12T03:0x pulse release -> must REFUSE (decision after the value)
-    rc, o, e = nb("execute", str(out), "--input", str(f), "--transcript", "none", cwd=str(tmp_path)); assert rc == 1 and "registered AFTER the selected pulse" in e, e
+    rc, o, e = nb("execute", str(out), "--input", str(f), "--transcript", "none", cwd=str(tmp_path)); assert rc == 1 and "not strictly before the selected round" in e, e
     # the same contract, unregistered, allowed as a dry run: deterministic selection + output
-    out2 = tmp_path / "plan2.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:audit", "--sample", "12", "--out", str(out2), "--no-register", str(f), cwd=str(tmp_path)); assert rc == 0
+    out2 = tmp_path / "plan2.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:audit", "--sample", "12", "--out", str(out2), "--no-timestamp", str(f), cwd=str(tmp_path)); assert rc == 0
     rc1, o1, e1 = nb("execute", str(out2), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "t1.json"), cwd=str(tmp_path)); assert rc1 == 0, e1
     rc2, o2, e2 = nb("execute", str(out2), "--input", str(f), "--allow-unregistered", "--transcript", "none", cwd=str(tmp_path)); assert o1 == o2 and len(o1.split()) == 12
     assert "selected by rule" in e1 and "reveal 0023" in e1, e1           # 0022 released 03:05:27Z -> first eligible reveal at/after 03:00 is 0023
@@ -188,3 +188,44 @@ def test_24_decision_contract_plan_execute(tmp_path):
     # tampering with the committed input is refused
     f.write_text("\n".join(f"chart-{i:03d}" for i in range(29)) + "\nchart-999\n")
     rc, o, e = nb("execute", str(out2), "--input", str(f), "--allow-unregistered", "--transcript", "none", cwd=str(tmp_path)); assert rc == 1 and "not the committed bytes" in e
+def test_25_timestamp_verdict_is_exhaustive():
+    """The normative gate as a pure function: both TSAs, all verifying, LATEST strictly before release."""
+    import notbefore.contract as C
+    rel = 1_000_000; A = ("freetsa", "t", 900_000); B = ("digicert", "t", 950_000)
+    assert C.timestamp_verdict([A, B], False, rel)[0]
+    assert not C.timestamp_verdict([A], False, rel)[0]                                      # one TSA only
+    assert not C.timestamp_verdict([A, B], True, rel)[0]                                    # a token failed to verify
+    assert not C.timestamp_verdict([A, ("digicert", "t", 1_000_000)], False, rel)[0]        # latest == release: not strictly before
+    assert not C.timestamp_verdict([A, ("digicert", "t", 1_000_001)], False, rel)[0]        # one before, one after -> refuse (max, not min)
+    assert not C.timestamp_verdict([A, B, ("someone.else", "t", 1)], False, rel)[0]         # unexpected identity
+    assert not C.timestamp_verdict([], False, rel)[0]
+def test_26_contract_negatives(tmp_path):
+    """Real files: one token deleted, a token corrupted, a contract byte edited, roster edited — each refused."""
+    import shutil
+    f = tmp_path / "r.txt"; f.write_text("\n".join(f"x{i}" for i in range(10)) + "\n"); c = tmp_path / "c.json"
+    rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:neg", "--sample", "3", "--out", str(c), str(f), cwd=str(tmp_path)); assert rc == 0, e
+    assert os.path.exists(str(c) + ".freetsa.tsr") and os.path.exists(str(c) + ".digicert.tsr")
+    base = [str(c), "--input", str(f), "--transcript", "none"]
+    rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and "not strictly before" in e            # registered today, round in the past
+    keep = tmp_path / "keep"; keep.mkdir(); shutil.copy2(str(c) + ".digicert.tsr", keep / "d.tsr")
+    os.remove(str(c) + ".digicert.tsr"); rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and "lacks a verifying token from digicert" in e, e   # one TSA only
+    rc, o, e = nb("execute", *base, "--allow-unregistered", cwd=str(tmp_path)); assert rc == 1 and "not strictly before" in e   # dry-run flag never overrides a late token
+    shutil.copy2(keep / "d.tsr", str(c) + ".digicert.tsr"); open(str(c) + ".digicert.tsr", "r+b").write(b"\x00\x00\x00\x00")
+    rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and "does NOT verify" in e, e              # corrupt token, even with --allow-unregistered:
+    rc, o, e = nb("execute", *base, "--allow-unregistered", cwd=str(tmp_path)); assert rc == 1 and "does NOT verify" in e
+    shutil.copy2(keep / "d.tsr", str(c) + ".digicert.tsr")
+    raw = open(c, "rb").read(); open(c, "wb").write(raw.replace(b'"k":3', b'"k":4')); rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and ("does NOT verify" in e or "canonical" in e)   # edited byte
+    open(c, "wb").write(raw)
+def test_27_rule_traverses_failures_without_a_cutoff(tmp_path):
+    """Six consecutive non-verifying candidates, then a good one: the rule must reach it (0.6.0 stopped after five)."""
+    import shutil
+    log = tmp_path / "log"; (log / "chain").mkdir(parents=True)
+    for fn in os.listdir(os.path.join(LOG, "chain")):
+        if fn.endswith(".json") or fn.endswith(".tsr"): shutil.copy2(os.path.join(LOG, "chain", fn), log / "chain" / fn)
+    for seq in (23, 25, 27, 29, 31, 33):     # corrupt the attested value of six reveals -> each fails verification
+        p = log / "chain" / f"pulse-{seq:04d}.json"; j = json.load(open(p)); v = j["core"]["derived"]["attested_value"]; j["core"]["derived"]["attested_value"] = ("00" if v[:2] != "00" else "11") + v[2:]; json.dump(j, open(p, "w"))
+    f = tmp_path / "r.txt"; f.write_text("a\nb\nc\n"); c = tmp_path / "c.json"
+    rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:trav", "--sample", "1", "--out", str(c), "--no-timestamp", str(f), cwd=str(tmp_path), log=str(log)); assert rc == 0
+    rc, o, e = nb("execute", str(c), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path), log=str(log))
+    assert rc == 0 and "reveal 0035" in e and e.count("passed over by rule") >= 6, e
+

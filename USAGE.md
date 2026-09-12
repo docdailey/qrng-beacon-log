@@ -119,27 +119,30 @@ timestamped object; `execute` then accepts no choices at all.
 ```
 $ notbefore plan --after 2026-10-01T00:00Z --purpose chart-audit-2026-q4 --sample 50 eligible.txt
 contract written: notbefore-plan-chart-audit-2026-q4.json  sha256 3f9c…
-registered: freetsa Sep 12 20:41:07 2026 GMT
-registered: digicert Sep 12 20:41:07 2026 GMT
-publish the sha256 anywhere public — then wait for the pulse and run: notbefore execute notbefore-plan-chart-audit-2026-q4.json
+timestamped: freetsa Sep 12 20:41:07 2026 GMT
+timestamped: digicert Sep 12 20:41:07 2026 GMT
+this is timestamping, not registration: publish the sha256 where it cannot be withdrawn — then wait for the pulse and run: notbefore execute notbefore-plan-chart-audit-2026-q4.json
 ```
 
 The contract is canonical JSON — selection rule (`first-eligible-reveal-released-at-or-after 2026-10-01T00:00Z`),
 purpose, operation `sample`, `k = 50`, and the SHA-256 and line count of `eligible.txt` — and the two `.tsr` files
-beside it are third-party proof of when it existed. Publish the hash (a commit, a registry, a dated email).
+beside it are third-party proof of *when* it existed. They do not force you to disclose it — publish the hash where it
+cannot be quietly withdrawn (a commit, a registry, a dated email). If a TSA was down, `plan` exits 1 and
+`notbefore timestamp <contract>` fetches the missing token later.
 
 ```
 $ notbefore execute notbefore-plan-chart-audit-2026-q4.json       # after 2026-10-01
-[PASS] contract registered: freetsa Sep 12 20:41:07 2026 GMT
-[PASS] contract registered: digicert Sep 12 20:41:07 2026 GMT
+[PASS] contract timestamped: freetsa Sep 12 20:41:07 2026 GMT
+[PASS] contract timestamped: digicert Sep 12 20:41:07 2026 GMT
 [PASS] selected by rule 'first-eligible-reveal-released-at-or-after': reveal 0489 (round released 2026-10-01T00:05:27Z >= after 2026-10-01T00:00:00Z)
-[PASS] every registration token (2026-09-12T20:41:07Z earliest) predates the round release by 1566860 s
+[PASS] both TSAs verify; latest token < round release (latest token 2026-09-12T20:41:07Z, 1566860 s before release)
 … the pair's verification lines …
 transcript written: notbefore-executed-3f9c….json
 ```
 
-`execute` refuses if the tokens are *after* the selected round (the decision could have been made knowing V), if
-the input bytes differ from the committed SHA-256, or if the contract file was edited. Failure/skip hours and
+`execute` refuses if either TSA token is missing or fails to verify, if the *latest* token is not strictly before the
+selected round (the decision could have been finalized knowing V), if the input bytes differ from the committed
+SHA-256, or if the contract file was edited. Failure/skip hours and
 non-compliant seqs are passed over by the rule, not by you. A contract without tokens runs only with
 `--allow-unregistered`, and the transcript says so.
 

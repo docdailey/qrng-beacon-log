@@ -6,6 +6,27 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-013 — `execute` gated decision contracts on the EARLIEST TSA token and ignored token failures; `plan` exited 0 with fewer than two tokens (2026-09-12)
+
+**Affected:** `notbefore` 0.6.0 (on PyPI ~20:32–20:5x UTC), the first release with decision contracts. Found by
+external code review within the hour.
+
+**What was wrong.** NOTBEFORE.md §7.11 required two TSAs and refusal "if any token time is not before the selected
+round". The code compared `min(token times)` with the release, so one early valid token plus one late (or
+corrupt) token passed; `verify_registration()` treated one token as enough and its failure flag was ignored;
+`plan` warned but succeeded with a single token; `select_pulse()` stopped after five non-verifying candidates,
+diverging from the normative "first eligible" rule; `frac` was a float inside a "canonical" JSON, which another
+JCS implementation need not serialize identically; and the prose called RFC 3161 timestamping "registration".
+
+**Fix (0.7.0).** A pure gate `timestamp_verdict()` — both expected TSA identities present and verifying, no failing
+token, no unexpected identity, **latest** token strictly before the round — used for `plan` (exit 1 if incomplete;
+idempotent `notbefore timestamp` fetches only the missing token) and `execute` (`--allow-unregistered` covers a
+*missing* token for a labelled dry run and never a failing or late one). No candidate cutoff. `frac` is a decimal
+string applied exactly. The words are now "timestamped" and "this is timestamping, not registration". Tests 25–27
+cover the gate exhaustively, the real-file negatives (deleted token, corrupted token, edited contract byte, edited
+roster, late timestamps), and traversal past six failed candidates. Contracts written by 0.6.0 remain valid; only the
+verifier was too lenient, and no 0.6.0 contract was executed against a real pulse.
+
 ## ERR-012 — copy and probe framed userspace clock-read latency as the timestamp precision bound; the beacon never uses such a read (2026-09-12)
 
 **What was wrong.** `CLAIMS.md`, `HARDWARE.md`, `NOTBEFORE.md` §9 and `TLOG.md` §14 said a pulse stamp was "good to

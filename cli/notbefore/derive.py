@@ -31,9 +31,13 @@ def shuffle(records, key: bytes):
     ranked.sort(key=lambda t: (t[0], t[1]))
     return [t[2] for t in ranked]
 
-def split(records, key: bytes, frac: float):
-    if not (0.0 < frac < 1.0): raise ValueError("frac must be in (0, 1)")
-    s = shuffle(records, key); k = int(frac * len(s))          # floor(f * k); do not re-draw
+def split(records, key: bytes, frac):
+    """A = the first floor(frac · n) of the shuffle. frac is taken as an EXACT decimal (Fraction(str(frac))), never a
+    binary float, so 0.8 × 20 is exactly 16 in every implementation."""
+    from fractions import Fraction
+    fr = Fraction(str(frac))
+    if not (0 < fr < 1): raise ValueError("frac must be in (0, 1)")
+    s = shuffle(records, key); k = int(fr * len(s))            # floor; do not re-draw
     return s[:k], s[k:]
 
 # ---- one more deterministic step on S (spec 0.4). Every function is a pure function of (S, inputs); nothing is secret.

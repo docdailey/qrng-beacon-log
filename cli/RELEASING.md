@@ -24,8 +24,9 @@ new minor version; old releases keep producing the old, still-valid values.
 
 ## Version policy
 
-`MAJOR.MINOR` of the package tracks the spec (`notbefore/spec/0.2` ↔ `0.2.x`). **PATCH** = re-vendoring or CLI fixes
-with no change to what a valid pulse or a derived value is. **MINOR** = spec change. Never reuse a version; never
+Package and spec versions are **independent** (decoupled 2026-09-12 after they drifted: 0.6.0 shipped spec 0.5).
+`notbefore --version` prints both; `SPEC` in the package is the binding statement. **PATCH** = re-vendoring or CLI
+fixes with no change to what a valid pulse or a derived value is. **MINOR** = new behaviour or a spec change. Never reuse a version; never
 delete a release (PyPI **yank** with a reason + an `ERRATA.md` entry if a release is wrong).
 
 ## The flow

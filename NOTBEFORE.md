@@ -306,20 +306,29 @@ never use it as key material.
 The log commits its entropy before the public randomizer; this closes the other side: the **consumer commits the
 decision before the NotBefore value exists**. `notbefore plan` writes a canonical JSON contract
 (`notbefore/contract/1`): a selection rule, the purpose, the operation and every parameter, and the input file's
-SHA-256 and record count. Its bytes are timestamped by two public RFC 3161 TSAs (freetsa, DigiCert) — the same kind
-of third-party evidence the log's commits carry — and its SHA-256 is for the user to publish wherever a
-preregistration lives.
+SHA-256 and record count. Its bytes are **timestamped** by two public RFC 3161 TSAs (freetsa, DigiCert) — the same
+kind of third-party evidence the log's commits carry. **This is timestamping, not registration:** it proves the
+bytes existed at T; it does not force the user to disclose them later. Publishing the SHA-256 where it cannot be
+withdrawn is the user's job until a decision log exists (`DECISION-LOG.md`).
+
+**Canonical form** is RFC 8785 JCS. A contract contains only strings, integers, objects and arrays — never a float;
+`frac` is a decimal string applied exactly (`floor(Fraction(frac) · n)`) — so any JCS implementation reproduces the
+same bytes and the same hash.
 
 **Selection rule** `first-eligible-reveal-released-at-or-after(after_utc)`: walk reveals in seq order; the first one
 whose drand round released at or after `after` **and** whose pair verifies under the pinned verifier is the pulse.
 Failure and skip hours and KNOWN-NONCOMPLIANT seqs are passed over by the rule, never by a person.
 
 **Execution** `notbefore execute contract.json` accepts no choices. It MUST: verify the contract is canonical
-(byte-identical to its hash); verify its TSA tokens; select the pulse by the rule; **refuse if any token time is not
-strictly before that pulse's round release** (the decision would have been made with knowledge of \(V\)); refuse if
-the input bytes differ from the committed SHA-256; then run the operation with the contract's parameters and write a
-transcript carrying the contract hash, the registration times and the selection. An unregistered contract runs only
-with `--allow-unregistered` and its transcript says so.
+(byte-identical to its hash); verify **both** expected TSA tokens and refuse if either is missing, if any token fails
+to verify, or if an unexpected TSA identity is present; select the pulse by the rule with **no candidate limit**;
+**refuse unless the LATEST token time is strictly before that pulse's round release** (one early token and one late
+token is a refusal — the decision could have been finalized with knowledge of \(V\)); refuse if the input bytes
+differ from the committed SHA-256; then run the operation with the contract's parameters and write a transcript
+carrying the contract hash, the timestamp times and the selection. A contract with missing tokens runs only with
+`--allow-unregistered`, labelled as such in the transcript; that flag never overrides a failing or late token.
+`plan` exits non-zero if it could not obtain both tokens; `notbefore timestamp <contract>` requests only the missing
+one, idempotently.
 
 **What it proves.** That this exact decision — rule, purpose, operation, parameters, input — existed at the TSA
 times, before the value it depends on was knowable; combined with the log's own commitment, neither party chose
@@ -435,6 +444,7 @@ Do not implement this until isolation can hold a vector of \(E\) and refuse the 
 |---|---|
 | This spec | `notbefore/spec/0.5` |
 | Decision contract | `notbefore/contract/1` |
+| Package version | **independent of the spec version** (was "MAJOR.MINOR tracks the spec" until 0.5; `notbefore --version` prints both, and `SPEC` in the package is the binding statement) |
 | Id / range / bytes domains | `notbefore/id/v1`, `notbefore/range/v1`, `notbefore/bytes/v1` |
 | Derive domain | `notbefore/derive/v1` |
 | Shuffle domain | `notbefore/shuffle/v1` |
@@ -491,6 +501,8 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 ---
 
 ## 16. Changelog
+
+**0.5.1 (2026-09-12, later).** §7.11 hardened after code review (ERR-013): both TSAs required, no failing token tolerated, gate on the LATEST token, no candidate cutoff in the rule, JCS/no-float canonical form, "timestamping" not "registration". Package and spec versions decoupled (§12). `DECISION-LOG.md` sketches the write-once decision log that would turn timestamping into registration.
 
 **0.5 (2026-09-12).** Decision contracts (§7.11): `plan` (canonical contract, two RFC 3161 tokens, published hash) and `execute` (choice-free; rule-selected pulse; registration must predate the round; committed input only). Prompted by a review pointing out that the operator's commitment was first-class while the consumer's preregistration was prose. \(V\), \(S\) and all derived functions unchanged.
 

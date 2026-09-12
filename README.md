@@ -76,6 +76,9 @@ minutes of its push, so a commit's Rekor time precedes its drand release. See `P
   by `keys/checkpoint.pub`; `python3 tlog.py verify checkpoint --origin notbefore.net/log --pub keys/checkpoint.pub --old checkpoints/<older>`
   proves the log only ever grew. Rekor-anchored and cosigned by our own witness (`notbefore.net/witness/ryzen` — same sponsor, so not
   "witnessed"); the request for independent witnesses is drafted in `WITNESS-ONBOARDING.md` (see `TLOG.md`).
+- **Decision contracts** (`notbefore plan` / `execute`, spec §7.11): the consumer commits rule, purpose, operation, parameters
+  and input hash *before* the pulse, timestamped by two TSAs; `execute` takes no choices. Timestamping, not registration —
+  the write-once decision log that would close that is designed in `DECISION-LOG.md`.
 - **No silent hours.** A cycle that runs but cannot commit publishes a signed `skip` pulse naming the refusing dependency
   (v0.5.1); only a deliberately stopped timer is silent, and that is announced in `CADENCE.md` first.
 - **Not a blockchain.** Hash-linked and append-only, yes; but one writer, no consensus, no proof-of-work. The
