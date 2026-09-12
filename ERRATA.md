@@ -15,9 +15,16 @@ do **not** match the SHA-256 recorded in their capture-time sidecar. Distributio
 **zero** mismatches in the first 15 days (2025-07-18 → 08-14), then 0.5 % (08-15) rising to **38 %** (08-25, 08-26),
 still elevated on 08-29 (the job's current position). 272 of the 823 files are 16–48 KiB **larger** than 100 MiB.
 **Tested and rejected:** the sidecar hash is **not** the hash of the first 100 MiB, nor of the first `size_bytes` bytes
-(12/12 sampled). File mtimes are consistent with the original write (filenames are local time; mtime − name ≈ the
-~200 s write duration), so the bytes were **not** modified after capture. Cause under investigation; the date
-clustering points to a change in the collection pipeline in mid-August 2025, not to media corruption.
+(12/12 sampled), **nor of any of 25 offset/length windows of the file** (drop 16–64 KiB head, drop 16–48 KiB tail,
+8/8 sampled) — the recorded hash has **no verifiable relationship to the written bytes** for these blocks. File mtimes
+are consistent with the original write (filenames are local time; mtime − name ≈ the ~200 s write duration), so the
+bytes were **not** modified after capture. **The sidecars name the culprit window:** every mismatching block belongs to
+a collector session whose `collection_stats.start_time` is **2025-08-15T09:00:41Z** — the exact onset of mismatches —
+whereas the clean blocks belong to earlier sessions (e.g. 2025-08-09T16:40:03Z). No collector logs exist for August
+(the `logs/` directory covers only 2025-07-16). Working conclusion: the collector started on 2025-08-15 hashed
+something other than the bytes it wrote (mutated or interleaved buffer), intermittently and load-dependently
+(0.5 % → 38 %). Collector source is being located to confirm. Whether the *bytes* are still genuine Quantis output is
+being tested statistically; if they are, the blocks are re-hashable into a corrected manifest rather than discarded.
 **What the root means now:** `c88c4320…` commits to the **manifest**, and the manifest is wrong for at least these
 blocks. **Do not rely on it for any block that has not been individually re-hashed.** The sample verification of
 3/3 published on 2026-09-11 was true and was a sample; it did not license the word "verified" for the archive, and
