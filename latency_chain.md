@@ -147,3 +147,48 @@ What each column's movement was:
   release, so ~2 s of the 3.4 s is outside the lab.
 - **Time to usable randomness:** 410 s → 315 s → 303 s → **63.2 s** at 0102 (the lead change). Everything below the lead
   is now ~3.2 s of which ~1.1 s is the relays; the commit was public 57.7 s before its round against a 20 s margin.
+
+## 9. Same-instant test: k3 and p550 waking on their own clocks (lab, 2026-09-13 18:12–18:15Z)
+
+Question (Bill): both hosts are on the same time, so why does k3 wait 2.5 ms for p550's datagram instead of both firing at
+the instant? Test, outside the beacon (`bench/simul_wake.py`): at a minute boundary each host wakes on its OWN clock
+(`clock_nanosleep` to T−1.5 ms, spin to T, the beacon's own method), sends its wake stamp to the other at once, and stamps
+the other's datagram in the kernel (`SO_TIMESTAMPNS`) and in userspace. Clock state at the time: p550's system clock
+2 ns from the i210 PHC (F9T-locked); k3's 7 ns from its PHC, which was 37 ns from the P550-BMC grandmaster.
+
+| run (UTC) | p550 process | k3 woke | p550 woke | p550 PPS edge stamp (pps1) | k3→p550 one way | p550→k3 one way |
+|---|---|---|---|---|---|---|
+| 18:12:00 | normal priority | **+5.8 µs** | +6,827 µs | +269 µs | 388 µs | 240 µs |
+| 18:14:00 | normal priority | **+7.0 µs** | +360 µs | +277 µs | 415 µs | 417 µs |
+| 18:15:00 | `chrt -f 50` (SCHED_FIFO) | **+7.1 µs** | **+7.8 µs** | **+25.8 µs** | 362 µs | 325 µs |
+
+One-way = the peer's send stamp to the receiver's kernel stamp, both software; serializing and the first `sendto` cost
+80–105 µs on either host and are inside these numbers.
+
+What it shows:
+
+- **k3 on its own clock is 6–7 µs late, three of three.** Starting the cycle at k3's own instant instead of on the
+  datagram would move the start from ~2.5 ms (8 ms once) to ~7 µs. k3's PTP-disciplined clock is the tighter thing in the
+  room; the datagram is 2.5 ms behind it.
+- **p550 on its own clock is not usable at normal priority** (6.8 ms, then 360 µs late) **and is 7.8 µs late at
+  SCHED_FIFO 50.** p550 runs PREEMPT_RT; a normal-priority task's `clock_nanosleep` expiry goes through the timer softirq
+  thread, which the FIFO-50 IRQ threads (all five igb vectors sit on CPU0 at FIFO 50) hold off around the second. The
+  cadence service does not sleep on the clock, it waits on the PPS event, which is why the live trigger wakes 15–19 µs
+  after the edge regardless.
+- **The pps1 edge stamp itself moved from ~+275 µs to +26 µs when a FIFO process was busy at the boundary.** The
+  "bimodal, unexplained" edge stamp in §5 is therefore interrupt service latency on p550 (idle exit and IRQ-thread
+  scheduling), not the PPS. The F9T edge is at the true second; the i210 latches it in hardware for ts2phc; only the
+  software stamp is late. Two follow-up runs test whether disabling the 60 µs `cpu-retentive` idle state alone
+  (`/dev/cpu_dma_latency` = 0) does the same, or whether it takes the priority.
+- **The clocks agree to the resolution of software stamps.** In the 18:14 run the two one-way delays were 415 and
+  417 µs: a clock offset d would make them differ by 2d, so |d| ≲ a few µs, consistent with the PHC readings (k3
+  16 ns → −101 ns from its PHC across the runs; p550 ~1.7 µs, inside its 8 µs PHC read bracket).
+- **Userspace on p550 saw k3's packet 6.2 ms after its kernel did** in the first run, the same stall that delayed the
+  wake: the whole process was off-CPU, not just the sleeping thread.
+
+Design option this opens (not built; Bill's call): k3 starts at its own instant (~7 µs) and binds p550's signed hardware
+record as it arrives ~2.5 ms later, so the datagram attests the instant instead of causing the start. The pulse would then
+name k3's PTP-disciplined clock as the start and p550's i210 event as the independent witness of the same second. What is
+lost: today the start is *caused* by a hardware event on another host; with this change it is caused by k3's clock and
+*confirmed* by that event. Separately, and independent of that decision, the cadence service should run at SCHED_FIFO
+(systemd `CPUSchedulingPolicy=fifo`): that alone moves p550's edge stamp, and everything after it, ~250 µs earlier.
