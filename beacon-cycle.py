@@ -148,6 +148,10 @@ def self_trigger(t0):
     remaining = (deadline - time.clock_gettime_ns(time.CLOCK_REALTIME)) / 1e9
     if remaining > 0 and not ev.is_set(): ev.wait(remaining)
     wake = time.clock_gettime_ns(time.CLOCK_REALTIME)
+    if ev.is_set() and getattr(ev, "record", None):                          # the listener handed the datagram over; persist and log it here
+        d = os.path.join(REPO, "trigger"); os.makedirs(d, mode=0o700, exist_ok=True); tmp = os.path.join(d, ".pending.tmp")
+        json.dump(ev.record, open(tmp, "w")); os.replace(tmp, os.path.join(d, "pending.json")); st_ = ev.statement
+        log(f"udp trigger from {ev.record['from']} for {t0}: p550 {(st_.get('hw_event') or {}).get('source', 'clock')} trigger, p550 woke {st_['wake']['late_ns'] / 1000:.1f} us after the instant, received {(ev.rx_ns - t0 * 10**9) / 1e6:.1f} ms after")
     if ev.is_set():
         hw = (ev.statement or {}).get("hw_event")
         src = {"start_source": "hw-datagram" if hw else "datagram-clock-fallback", "datagram_rx_unix_ns": str(ev.rx_ns),
@@ -186,6 +190,12 @@ def udp_listener(t0, until):
         Ed25519PublicKey.from_public_bytes(base64.b64decode(sig["public_key_b64"])).verify(base64.b64decode(sig["sig_b64"]), A.canon(st)); return True, "ok"
     SO_BUSY_POLL, SO_TIMESTAMPNS, SCM_TIMESTAMPNS = 46, 35, 35
     def run_():
+        # The FIRST Ed25519 verification in a process costs ~6 ms on k3 (the library's lazy initialization; the second
+        # 0.45 ms): pay it here, before the instant, not on the datagram (staging runs 4-11 started 6-8 ms after receipt)
+        try:
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+            _k = Ed25519PrivateKey.generate(); _k.public_key().verify(_k.sign(b"warm"), b"warm"); json.loads(json.dumps({"warm": [1, 2, 3]})); A.canon({"warm": 1})
+        except Exception: pass
         # Blocking receive with a kernel deadline (SO_RCVTIMEO) - Python's timeout mode is a non-blocking socket behind
         # select() and did not benefit from polling in timing.md's tests; the blocking form did (282 -> 142 us). Busy-poll
         # 200 us per wake; the kernel's own RX stamp comes back as ancillary data so host delivery delay is visible.
@@ -208,10 +218,13 @@ def udp_listener(t0, until):
             try: signed = json.loads(data); good, why = ok(signed)
             except Exception as e: good, why = False, f"{type(e).__name__}"
             if not good: log(f"udp trigger from {addr[0]} rejected: {why}"); continue
-            st = signed["statement"]
-            if TRIGGER_ARRIVED is not None: TRIGGER_ARRIVED.rx_ns = rx; TRIGGER_ARRIVED.kernel_rx_ns = krx; TRIGGER_ARRIVED.statement = st; TRIGGER_ARRIVED.set()   # start first, write after
+            st = signed["statement"]; rec = {"received_unix_ns": str(rx), "kernel_rx_unix_ns": None if krx is None else str(krx), "from": addr[0], "delivery": "udp", "bytes": len(data), "trigger": signed}
+            if TRIGGER_ARRIVED is not None:
+                # hand everything to the main thread and STOP: Python work here after set() holds the interpreter lock and
+                # the woken main thread waits out the switch interval (6 ms observed in staging run 9)
+                TRIGGER_ARRIVED.rx_ns = rx; TRIGGER_ARRIVED.kernel_rx_ns = krx; TRIGGER_ARRIVED.statement = st; TRIGGER_ARRIVED.record = rec; TRIGGER_ARRIVED.set(); return
             d = os.path.join(REPO, "trigger"); os.makedirs(d, mode=0o700, exist_ok=True); tmp = os.path.join(d, ".pending.tmp")
-            json.dump({"received_unix_ns": str(rx), "kernel_rx_unix_ns": None if krx is None else str(krx), "from": addr[0], "delivery": "udp", "bytes": len(data), "trigger": signed}, open(tmp, "w")); os.replace(tmp, os.path.join(d, "pending.json"))
+            json.dump(rec, open(tmp, "w")); os.replace(tmp, os.path.join(d, "pending.json"))
             log(f"udp trigger from {addr[0]} for {t0}: p550 {st.get('hw_event', {}).get('source', 'clock')} trigger, p550 woke {st['wake']['late_ns'] / 1000:.1f} us after the instant, received {(rx - t0 * 10**9) / 1e6:.1f} ms after"); return
         log("no udp trigger arrived from the time host (the pulse will carry the aggregator's own wake record only)")
     threading.Thread(target=run_, daemon=True).start()
@@ -375,7 +388,8 @@ def precise_main(t0, commit_only=False):
         log("an unresolved commit is at the head; resuming it now instead of waiting for the instant")
         if claim_hour(hour_of(t0)): reveal_phase(*resume)
         return
-    import threading; globals()["TRIGGER_ARRIVED"] = threading.Event(); TRIGGER_ARRIVED.rx_ns = None; TRIGGER_ARRIVED.kernel_rx_ns = None; TRIGGER_ARRIVED.statement = None
+    import threading; sys.setswitchinterval(0.0005)                          # 0.5 ms instead of 5: a thread holding the lock cannot delay the wake by more
+    globals()["TRIGGER_ARRIVED"] = threading.Event(); TRIGGER_ARRIVED.rx_ns = None; TRIGGER_ARRIVED.kernel_rx_ns = None; TRIGGER_ARRIVED.statement = None; TRIGGER_ARRIVED.record = None
     warm_connections(); udp_listener(t0, until=t0 + 240)
     # the last look at origin/main happens BEFORE the tick (10 s), so pulse.py can skip its own fetch on the timed path
     assume = []
