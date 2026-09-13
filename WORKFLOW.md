@@ -43,6 +43,8 @@ The input file is committed by SHA-256 and never leaves your machine unless you 
 2. `notbefore verify <seq>` — the same pair against the live log, drand and Rekor, so a bundle cannot describe a
    pulse the world never saw.
 3. `notbefore execute <contract> --input <the file with the committed SHA-256>` — the same output, or a refusal.
+   `execute` fails closed: no confirmed decision-log registration, no output. A transcript that says `DEGRADED` was
+   produced with `--allow-unregistered` and should be treated as a dry run, not a preregistered result.
 4. Read the receipt's decision id and key id against the registry / protocol / audit order they hold.
 
 ## What this does and does not establish
@@ -52,6 +54,8 @@ receipt time fixed by anchored checkpoints), that it was the authoritative prere
 namespace), that the value was not yet knowable (a future drand round; the beacon's own entropy committed before it),
 how the result was computed (deterministic derivation, transcript), and that none of it was silently rewritten
 (checkpoints, witnesses, repository mirror, Rekor). Not established: that two decision ids or two keys are not the same
-experiment — that is what the registry-bound `decision_id` convention is for. Claims discipline: `CLAIMS.md`.
+experiment — that is what the registry-bound `decision_id` convention is for — and, for now, that the beacon operator
+could not withhold a reveal after seeing its value (visible, but a bias lever; the fix is a protocol decision,
+`FALLBACK.md`). Claims discipline: `CLAIMS.md`.
 
 *Spec: `NOTBEFORE.md` (0.6, §7.11–7.12). Log: `DECISION-LOG.md`. Details and every command: `USAGE.md`.*

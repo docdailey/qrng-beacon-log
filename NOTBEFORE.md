@@ -1,6 +1,6 @@
 # NotBefore — specification
 
-**Status:** draft 0.6, 2026-09-12 — 0.5 plus **signed contracts and the write-once decision log** (§7.12: a consumer identity, `contract/2`, and a second transparency log in which the first statement per decision wins); 0.5 added decision contracts (§7.11: the consumer's commitment, timestamped before the pulse); 0.4 added the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
+**Status:** draft 0.7, 2026-09-13 — 0.6 with **execution failing closed on the decision log** (§7.12: an unconfirmed registration is a refusal, not a warning); 0.6 added signed contracts and the write-once decision log (§7.12: a consumer identity, `contract/2`, and a second transparency log in which the first statement per decision wins); 0.5 added decision contracts (§7.11: the consumer's commitment, timestamped before the pulse); 0.4 added the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
 **Implements over:** `qrng-beacon-log` protocol v0.5 (live log)  
 **Normative language:** MUST / MUST NOT / SHOULD / MAY
 
@@ -368,8 +368,15 @@ inclusion proof reaches the note's root. A receipt that fails is an error.
 `decision_id` (refuse otherwise); look the namespace up (live, or the `decisions/` mirror when `--offline`); **refuse
 if the first entry for the namespace is a different contract** (superseded) or if the authoritative entry was received
 at or after the round release; record `decision_log {status, index, seq_in_namespace, size, root_b64, received_unix}` in
-the transcript. `unregistered` / `unreachable` / `disabled` are WARN by default and refusals with `--require-log`.
-Legacy `contract/1` files still execute only with `--allow-unregistered`, labelled `contract_spec` and
+the transcript. **Since 0.7 execution FAILS CLOSED:** `unregistered`, `unreachable`, `disabled` and `mirror-absent`
+are refusals — the log, not the consumer, says which contract was the preregistration, and a property that matters
+must not depend on a reviewer noticing a warning. `--allow-unregistered` is the single, explicit escape hatch for a
+DEGRADED run (missing tokens, unconfirmed registration, legacy `contract/1`), labelled as such in every line of the
+transcript; it never overrides a late token, a superseded contract or a registration at/after the round. The
+verifier binds every decision-log leaf it trusts to the queried `(key_id, public_key, decision_id)` and
+`seq_in_namespace = 1` explicitly — an inclusion proof shows a leaf is in the tree, not that it belongs to the
+namespace asked about — and, offline, scans the mirrored tree for an earlier leaf in the namespace rather than
+trusting `INDEX.json`. Legacy `contract/1` files execute only with `--allow-unregistered`, labelled `contract_spec` and
 `contract_signature_verified: false`. `plan` exits non-zero if the submission fails; `notbefore register <contract>`
 retries it idempotently.
 
@@ -550,6 +557,8 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 ## 16. Changelog
 
 **0.5.1 (2026-09-12, later).** §7.11 hardened after code review (ERR-013): both TSAs required, no failing token tolerated, gate on the LATEST token, no candidate cutoff in the rule, JCS/no-float canonical form, "timestamping" not "registration". Package and spec versions decoupled (§12). `DECISION-LOG.md` sketches the write-once decision log that would turn timestamping into registration.
+
+**0.7 (2026-09-13).** Execution fails closed on the decision log for `contract/2` (§7.12); `--allow-unregistered` is the only escape hatch and labels the run DEGRADED; decision-log leaves are bound explicitly to the queried namespace, live and offline. Both from an external adversarial review. The same review's remaining finding — selective abort by the operator — is a protocol decision recorded in `FALLBACK.md`, not yet adopted. \(V\), \(S\) and all derived functions unchanged. `notbefore` 0.10.0.
 
 **0.6 (2026-09-12).** Signed contracts and the write-once decision log (§7.12): `notbefore keygen`, `contract/2` with `signer` + `decision_id`, `.sig.json` decision statements, the second log `notbefore.net/decisions` (first statement per namespace is authoritative; `execute` refuses a superseded contract or a registration at/after the round; `--require-log`; `decisions/` mirror for offline checks). Prompted by the review that timestamping proves *when* but not *which*. \(V\), \(S\) and all derived functions unchanged. `notbefore` 0.8.0.
 

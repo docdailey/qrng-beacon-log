@@ -72,8 +72,11 @@ note's root; a receipt that fails is an error, not a warning.
    checkpoint's Rekor anchor; and
 2. **this was the authoritative preregistration for that decision** — from write-once inclusion: `execute` looks the
    namespace up, requires the first entry to be *this* contract, verifies the inclusion proof and the checkpoint
-   signature, and refuses a superseded contract outright. Unregistered or unreachable is a WARN by default and a
-   refusal with `--require-log`. Offline, the mirror in the log checkout answers the same question.
+   signature, and refuses a superseded contract outright. Unregistered, unreachable or disabled is a **refusal**
+   (0.10.0; `--allow-unregistered` is the only, loudly labelled, escape hatch). Offline, the mirror in the log checkout
+   answers the same question. Every leaf the client trusts is bound explicitly to the queried `(key_id, public_key,
+   decision_id)` and `seq_in_namespace = 1`; the offline check also scans the mirrored tree for an earlier leaf in the
+   namespace instead of trusting `INDEX.json`.
 
 ## What it still cannot do
 

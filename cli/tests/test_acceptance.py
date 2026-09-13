@@ -184,7 +184,8 @@ def test_24_decision_contract_plan_execute(tmp_path):
     c = json.load(open(out)); assert c["operation"] == "sample" and c["params"] == {"k": 12} and c["input"]["record_count"] == 30 and c["selection"]["after_unix_s"] == 1789182000
     assert os.path.exists(str(out) + ".tsa.json"), "TSA registration files missing"
     # execute: registered today, so every token is AFTER a 2026-09-12T03:0x pulse release -> must REFUSE (decision after the value)
-    rc, o, e = nb("execute", str(out), "--input", str(f), "--transcript", "none", cwd=str(tmp_path)); assert rc == 1 and "not strictly before the selected round" in e, e
+    rc, o, e = nb("execute", str(out), "--input", str(f), "--transcript", "none", cwd=str(tmp_path)); assert rc == 1 and "authoritative preregistration" in e, e      # fail closed: not in the log
+    rc, o, e = nb("execute", str(out), "--input", str(f), "--transcript", "none", "--allow-unregistered", cwd=str(tmp_path)); assert rc == 1 and "not strictly before the selected round" in e, e
     # the same contract, unregistered, allowed as a dry run: deterministic selection + output
     out2 = tmp_path / "plan2.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:audit", "--sample", "12", "--out", str(out2), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0
     rc1, o1, e1 = nb("execute", str(out2), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "t1.json"), cwd=str(tmp_path)); assert rc1 == 0, e1
@@ -212,7 +213,8 @@ def test_26_contract_negatives(tmp_path):
     rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:neg", "--sample", "3", "--out", str(c), "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0, e
     assert os.path.exists(str(c) + ".freetsa.tsr") and os.path.exists(str(c) + ".digicert.tsr")
     base = [str(c), "--input", str(f), "--transcript", "none"]
-    rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and "not strictly before" in e            # registered today, round in the past
+    rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and "authoritative preregistration" in e            # fail closed: --no-log contract
+    rc, o, e = nb("execute", *base, "--allow-unregistered", cwd=str(tmp_path)); assert rc == 1 and "not strictly before" in e   # DEGRADED still gates on the round
     keep = tmp_path / "keep"; keep.mkdir(); shutil.copy2(str(c) + ".digicert.tsr", keep / "d.tsr")
     os.remove(str(c) + ".digicert.tsr"); rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and "lacks a verifying token from digicert" in e, e   # one TSA only
     rc, o, e = nb("execute", *base, "--allow-unregistered", cwd=str(tmp_path)); assert rc == 1 and "not strictly before" in e   # dry-run flag never overrides a late token
@@ -287,15 +289,23 @@ def test_29_identity_and_signed_contracts(tmp_path, monkeypatch):
     rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and "different contract, key or decision_id" in e, e
     open(sp, "w").write(good); os.remove(sp)
     rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 1 and "no " in e and ".sig.json" in e          # signed contract without its statement file
+    open(sp, "w").write(good)
     # legacy unsigned contract/1: refused unless labelled
     c1 = tmp_path / "c1.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:legacy", "--sample", "2", "--out", str(c1), "--no-timestamp", "--unsigned", str(f), cwd=str(tmp_path)); assert rc == 0
     assert json.load(open(c1))["spec"] == "notbefore/contract/1"
     rc, o, e = nb("execute", str(c1), "--input", str(f), "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "legacy unsigned" in e      # no tokens at all -> refused
     rc, o, e = nb("execute", str(c1), "--input", str(f), "--transcript", "none", "--no-anchors", "--allow-unregistered", cwd=str(tmp_path)); assert rc == 0 and "legacy unsigned" in e
-    rc, o, e = nb("execute", str(c1), "--input", str(f), "--transcript", "none", "--no-anchors", "--allow-unregistered", "--require-log", cwd=str(tmp_path)); assert rc == 1 and "require-log" in e
-    # a legacy contract WITH both tokens (what 0.6.0–0.7.x produced) runs by default, labelled — its tokens are still gated on the round
+    rc, o, e = nb("execute", str(c1), "--input", str(f), "--transcript", "none", "--no-anchors", "--allow-unregistered", "--require-log", cwd=str(tmp_path)); assert rc == 0   # --require-log is the default since 0.10.0; still accepted
+    # a legacy contract WITH both tokens (what 0.6.0–0.7.x produced): 0.10.0 fails closed — refused by default, DEGRADED with the flag (then gated on the round)
     c0 = tmp_path / "c0.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:legacy2", "--sample", "2", "--out", str(c0), "--unsigned", str(f), cwd=str(tmp_path)); assert rc == 0, e
-    rc, o, e = nb("execute", str(c0), "--input", str(f), "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "legacy unsigned" not in (e.split("[WARN]")[0]) and "not strictly before" in e, e   # ran past the legacy gate; refused only because today's tokens postdate the 03:05Z round
+    rc, o, e = nb("execute", str(c0), "--input", str(f), "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "legacy unsigned" in e and "fails closed" in e, e
+    rc, o, e = nb("execute", str(c0), "--input", str(f), "--transcript", "none", "--no-anchors", "--allow-unregistered", cwd=str(tmp_path)); assert rc == 1 and "DEGRADED" in e and "not strictly before" in e, e
+    # a SIGNED contract without tokens: the token gate speaks first (no --allow-unregistered)
+    rc, o, e = nb("execute", str(c), "--input", str(f), "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "lacks a verifying token" in e, e
+    # a SIGNED, timestamped contract that is NOT in the log: refused by default (fail closed); DEGRADED with the flag (then gated on the round)
+    c4 = tmp_path / "c4.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:nolog", "--sample", "2", "--out", str(c4), "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0, e
+    rc, o, e = nb("execute", str(c4), "--input", str(f), "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "did not confirm this contract as the authoritative preregistration" in e and "unregistered" in e, e
+    rc, o, e = nb("execute", str(c4), "--input", str(f), "--transcript", "none", "--no-anchors", "--allow-unregistered", cwd=str(tmp_path)); assert rc == 1 and "DEGRADED" in e and "not strictly before" in e, e
 def test_30_decision_log_receipts_verify_only_against_vendored_trust(tmp_path, monkeypatch):
     """The client trusts nothing the log says until the note verifies under the vendored key and the proof reaches its
     root. Synthetic log with a throwaway key: a good receipt passes; wrong-key note, wrong index, tampered leaf, or a
@@ -310,7 +320,7 @@ def test_30_decision_log_receipts_verify_only_against_vendored_trust(tmp_path, m
     monkeypatch.setattr(DL, "pub_raw", lambda: lpub)
     ck = tmp_path / "id.key"; I.generate(str(ck)); priv, pub, kid, pub_b64 = I.load(str(ck))
     def leaf(i, st, sig, k=1): return DL.canon({"spec": DL.LEAF_SPEC, "index": i, "received_utc": "2026-09-12T02:00:00Z", "seq_in_namespace": k, "statement": st, "signature_b64": sig, "tsa_sha256": {}, "contract_disclosed": False})
-    sts = [DL.statement("%064x" % (i + 1), "d:%d" % i, kid, pub_b64, "notbefore/contract/2") for i in range(5)]
+    sts = [DL.statement("%064x" % (i + 1), "d:%d" % (3 if i == 2 else i), kid, pub_b64, "notbefore/contract/2") for i in range(5)]   # leaves 2 and 3 share namespace d:3
     leaves = [leaf(i, s, DL.sign_statement(priv, s)) for i, s in enumerate(sts)]
     root = T.mth(leaves); note = T.sign_note(T.checkpoint_body(origin, 5, root), origin, logk)
     rc = lambda i: {"index": i, "size": 5, "checkpoint": note, "leaf": leaves[i].decode(), "proof": [base64.b64encode(h).decode() for h in T.inclusion_path(i, leaves)]}
@@ -325,6 +335,9 @@ def test_30_decision_log_receipts_verify_only_against_vendored_trust(tmp_path, m
         return lambda key_id, decision_id: {"size": 5, "checkpoint": note, "entries": [{"index": i, "seq_in_namespace": n + 1, "contract_sha256": sts[i]["contract_sha256"], "received_utc": "2026-09-12T02:00:00Z"} for n, i in enumerate(entries_idx)],
                                             "authoritative": ({"index": entries_idx[0], "leaf": leaves[entries_idx[0]].decode(), "proof": rc(entries_idx[0])["proof"]} if entries_idx else None)}
     monkeypatch.setattr(DL, "lookup", fake_lookup([3])); r = DL.check_authoritative(sts[3]); assert r["status"] == "authoritative" and r["index"] == 3 and r["verified"], r
+    # binding: leaf 2 (decision d:2) is genuinely in the tree, but it is not the namespace we asked about -> untrusted answer, not "superseded"
+    def cross(key_id, decision_id): return {"size": 5, "checkpoint": note, "entries": [{"index": 1, "seq_in_namespace": 1, "contract_sha256": sts[1]["contract_sha256"], "received_utc": "2026-09-12T02:00:00Z"}], "authoritative": {"index": 1, "leaf": leaves[1].decode(), "proof": rc(1)["proof"]}}
+    monkeypatch.setattr(DL, "lookup", cross); r = DL.check_authoritative(sts[3]); assert r["status"] == "unreachable" and "different namespace" in r["why"], r
     monkeypatch.setattr(DL, "lookup", fake_lookup([2, 3])); r = DL.check_authoritative(sts[3]); assert r["status"] == "superseded", r     # someone registered first under this namespace
     monkeypatch.setattr(DL, "lookup", fake_lookup([])); assert DL.check_authoritative(sts[3])["status"] == "unregistered"
     def boom(*a): raise OSError("down")
@@ -339,9 +352,9 @@ def test_31_live_decision_log_roundtrip(tmp_path, monkeypatch):
     if os.environ.get("NOTBEFORE_LIVE_LOG_TEST") != "1": pytest.skip("appends real entries to the public decision log: run with NOTBEFORE_LIVE_LOG_TEST=1 before a release")
     key = tmp_path / "id.key"; monkeypatch.setenv("NOTBEFORE_KEY", str(key)); nb("keygen")
     f = tmp_path / "r.txt"; f.write_text("a\nb\nc\nd\n"); did = "test:live:" + hashlib.sha256(os.urandom(8)).hexdigest()[:12]
-    c1 = tmp_path / "c1.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:live1", "--decision-id", did, "--sample", "1", "--out", str(c1), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0 and "AUTHORITATIVE" in e, e
+    c1 = tmp_path / "c1.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:live1", "--decision-id", did, "--sample", "1", "--out", str(c1), "--no-timestamp", str(f), cwd=str(tmp_path)); assert rc == 0 and "AUTHORITATIVE" in e, e
     r1 = json.load(open(DL.receipt_path(str(c1)))); assert r1["summary"]["seq_in_namespace"] == 1
-    c2 = tmp_path / "c2.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:live2", "--decision-id", did, "--sample", "1", "--out", str(c2), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0 and "AMENDMENT" in e, e
+    c2 = tmp_path / "c2.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:live2", "--decision-id", did, "--sample", "1", "--out", str(c2), "--no-timestamp", str(f), cwd=str(tmp_path)); assert rc == 0 and "AMENDMENT" in e, e
     rc, o, e = nb("execute", str(c2), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "not the first registered" in e, e
     rc, o, e = nb("execute", str(c1), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "AT/AFTER the round release" in e, e   # registered today, round in the past
     rc, o, e = nb("register", str(c1), cwd=str(tmp_path)); assert rc == 0 and "already present" in e                     # idempotent

@@ -184,7 +184,12 @@ were stamped from it and are superseded.
 - ✅ "Failures are signed chain events" (v0.5). ❌ Never describe an unsigned `FAILED.json` as a chain event.
 - ✅ "Every v0.5 commit carries at least two RFC 3161 tokens taken at mint, each ≥ 120 s before its round."
 - Decision log (spec 0.6, `DECISION-LOG.md`): ✅ "the first decision statement for a (key_id, decision_id) is the
-  authoritative preregistration; a superseded contract is refused by `execute`". ✅ "registration is write-once and
+  authoritative preregistration; a superseded contract is refused by `execute`". ✅ Since 0.10.0: "`execute` fails closed —
+  no confirmed registration, no output; `--allow-unregistered` produces a run labelled DEGRADED". ❌ Never present a
+  DEGRADED transcript as a preregistered result.
+- Operator selective abort (review 2026-09-13, `FALLBACK.md`): ❌ never say "the operator cannot bias a consumer's
+  decision" — today a withheld reveal is visible but moves the consumer to the next pulse; say "withholding is
+  detectable; removing the lever (a commit-bound value) is an open protocol decision". ✅ "registration is write-once and
   append-only; equivocation by the log is detectable (mirror, witnesses, Rekor), not prevented". ❌ Never "prevents
   p-hacking" or "proves this was the only analysis": two decision ids or two keys can name one experiment — say
   "aliases are a naming problem the log makes visible, not one it solves". ❌ Never say a contract is "registered" when

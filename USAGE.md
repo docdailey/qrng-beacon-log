@@ -180,9 +180,11 @@ transcript written: notbefore-executed-3551….json
 missing or fails to verify; if the *latest* token is not strictly before the selected round (the decision could have
 been finalized knowing V); if another contract was registered first under the decision_id; if the registration was
 received at or after the round; or if the input bytes differ from the committed SHA-256. An unregistered or
-unreachable log is a WARN by default (the timestamps still bound *when*) and a refusal with `--require-log`. Offline,
-the mirror in the log checkout (`decisions/`) answers the same question. A contract written before 0.8.0
-(`notbefore/contract/1`, unsigned) runs only with `--allow-unregistered`, labelled in the transcript.
+unreachable log is a **refusal** (since 0.10.0): the log, not you, says which contract was the preregistration.
+Offline, the mirror in the log checkout (`decisions/`) answers the same question. `--allow-unregistered` is the one
+escape hatch — a DEGRADED run for tests and dry runs, labelled in every line of the transcript; it never overrides a
+late token, a superseded contract or a registration at/after the round. A contract written before 0.8.0
+(`notbefore/contract/1`, unsigned) runs only that way.
 
 If a TSA was down, `plan` exits 1 and `notbefore timestamp <contract>` fetches the missing token; if the log was
 down, `notbefore register <contract>` submits the statement later, idempotently. The transcript carries
