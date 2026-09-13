@@ -419,6 +419,9 @@ notbefore keygen                                           # once: the consumer 
 notbefore plan --after <UTC> --purpose <P> --sample 12 <file>   # signed decision contract: two RFC 3161 tokens + write-once decision-log entry (also --split/--assign/--id/--range/--bytes/--seed; --decision-id, --disclose, --no-log)
 notbefore register <contract.json>                         # (re)submit a signed contract's statement to the decision log, idempotently
 notbefore execute <contract.json>                          # no choices: rule-selected pulse, latest token before the round, FIRST entry for its decision_id (--require-log), committed input only
+notbefore receipt <contract.json>                          # one-page human-readable receipt; every line re-derived and re-verified (WORKFLOW.md)
+notbefore bundle <contract.json> --out b.zip               # self-contained verification bundle: contract+sidecars, transcript, pulse pair+tokens+checkpoint+proofs+anchors, decision-log leaf/proof, keys, README, MANIFEST
+notbefore check-bundle b.zip                               # OFFLINE re-verification of a bundle with this installation's pinned keys and roots
 notbefore explain  <seq>                                   # methods-section paragraph: commit/TSA/round/release/V/eligibility
 notbefore checkpoint                                       # the log's signed head, verified; site cross-check; cached-head consistency
 notbefore pin                                              # write notbefore.lock (log sha, CLI, verifier); --lock makes re-runs bit-stable

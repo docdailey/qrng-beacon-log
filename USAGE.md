@@ -1,5 +1,7 @@
 # Using `notbefore` — the tool, not the theorem
 
+*One page for the person who has to defend the randomization — six commands, four artifacts: [`WORKFLOW.md`](WORKFLOW.md).*
+
 `notbefore` turns one hour of the public beacon into a reproducible allocation. Everything below was run against
 the live log on 2026-09-12: the split with `notbefore` 0.7.1, the contract section with 0.8.0; the outputs are real and anyone
 can regenerate them (the allocation below was first produced with 0.4.0 and is byte-identical since — only the provenance fields moved).

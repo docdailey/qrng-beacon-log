@@ -22,6 +22,9 @@ notbefore bytes 45 --purpose sim-seed --n 32                                    
 notbefore keygen                                                # once: your Ed25519 identity (~/.config/notbefore/identity.key)
 notbefore plan --after 2026-10-01T00:00Z --purpose chart-audit-2026-q4 --sample 50 eligible.txt   # signed decision contract: two TSA tokens + write-once decision-log entry
 notbefore execute notbefore-plan-chart-audit-2026-q4.json   # later: no choices; rule-selected pulse; latest token must predate the round; must be the FIRST entry for its decision_id
+notbefore receipt notbefore-plan-chart-audit-2026-q4.json   # one page, human-readable, every line re-verified
+notbefore bundle  notbefore-plan-chart-audit-2026-q4.json --out randomization-1.zip   # attach to the paper / workpaper
+notbefore check-bundle randomization-1.zip                  # what the reviewer runs, offline (WORKFLOW.md)
 notbefore explain 45             # a methods-section paragraph
 notbefore pin                    # notbefore.lock: re-runs verify at exactly this log commit
 notbefore diff-transcript a.json b.json
