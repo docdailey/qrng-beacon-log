@@ -94,6 +94,8 @@ think's NTP clock as bookkeeping. What is attested is *which clock said the hour
 protocol are unchanged (GNSS anchor vs round release). Bill, 2026-09-13: *"think is not a precision machine. it should
 start on a trigger from i210 exactly on the hour."*
 
+**The before/after tables with every step, and the floors that remain, are in `latency_chain.md`.**
+
 **Latency experiments, 2026-09-13 (Bill: "if anyone is going to take the timing aspect seriously we need a fast chain").**
 Measured from k3 unless stated; each row is a method tried, what it cost, and what was adopted.
 
