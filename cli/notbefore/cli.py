@@ -182,14 +182,14 @@ def _execute(a, src):
     if C.canon(c) != raw: _err("contract file is not in canonical form (edited by hand?) — refusing"); return 1
     lines = []
     st = sig = None; dl = {"status": "unsigned", "why": "legacy contract/1: no signer, no decision-log namespace"}
-    if c["spec"] == C.CONTRACT_SPEC:
+    if c["spec"] in C.SIGNED_SPECS:
         st, sig = DL.read_signature(a.contract)
         if st is None: _err(f"refusing: signed contract but no {DL.sig_path(a.contract)} beside it"); return 1
         sok, why = DL.verify_statement(st, sig)
         bound = st["contract_sha256"] == csha and st["key_id"] == c["signer"]["key_id"] and st["public_key_b64"] == c["signer"]["public_key_b64"] and st["decision_id"] == c["decision_id"]
         if not (sok and bound): _err(f"refusing: decision statement does not verify for this contract ({why if not sok else 'statement names a different contract, key or decision_id'})"); return 1
         lines.append(f"[PASS] contract signed by key {st['key_id']} for decision_id {st['decision_id']!r} (Ed25519 statement verifies)")
-    legacy = c["spec"] != C.CONTRACT_SPEC
+    legacy = c["spec"] not in C.SIGNED_SPECS
     toks, bad = C.verify_timestamps(a.contract)
     lines += [f"[PASS] contract timestamped: {n} {ts}" for n, ts, _ in toks]
     pre_ok, pre_why, _ = C.timestamp_verdict(toks, bad, None)          # presence/validity only; the time gate comes after selection
@@ -212,9 +212,19 @@ def _execute(a, src):
             _err("refusing: the decision log did not confirm this contract as the authoritative preregistration (" + dl["status"] + "). A DEGRADED run is possible with --allow-unregistered; the transcript will say no third party vouches for which contract was registered."); return 1
         else: lines.append(f"[WARN] DEGRADED (--allow-unregistered): decision log {dl['status']} — {dl['why']}. Timestamps alone bound WHEN this contract existed, not that it was the only one.")
     after = int(c["selection"]["after_unix_s"])
-    seq, rel, R = C.select_pulse(src, after, refetch=not a.offline, anchors=not a.no_anchors, R_lines=lines)
-    if seq is None: _err("\n".join(lines)); _err(f"no eligible reveal released at or after {c['selection']['after_utc']} yet (or the next five failed) — wait for the hour"); return 1
-    lines.append(f"[PASS] selected by rule '{C.RULE}': reveal {seq:04d} (round released {_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime(rel))} >= after {c['selection']['after_utc']})")
+    commit_bound = (c.get("value") or {}).get("rule") == "commit-bound"
+    sel = None
+    if commit_bound:
+        from . import commitbound as CB
+        sel = CB.select_commit(src, after, refetch=not a.offline, anchors=True, R_lines=lines)
+        if sel is None: _err("\n".join(lines)); _err(f"no eligible commit released at or after {c['selection']['after_utc']} yet — wait for the hour"); return 1
+        if sel["provenance"] == "WAIT": [_err(l) for l in lines]; _err(f"not yet: the reveal window for commit {sel['seq']:04d} closes at {_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime(sel['wait_until']))}; run again after that"); return 3
+        if sel["provenance"] == "ERROR": [_err(l) for l in lines]; _err("refusing: the commit-bound value could not be established (see the FAIL line)"); return 1
+        seq, rel, R = sel["seq"], sel["release_unix"], (sel["Rr"] or sel["Rc"])
+    else:
+        seq, rel, R = C.select_pulse(src, after, refetch=not a.offline, anchors=not a.no_anchors, R_lines=lines)
+        if seq is None: _err("\n".join(lines)); _err(f"no eligible reveal released at or after {c['selection']['after_utc']} yet — wait for the hour"); return 1
+        lines.append(f"[PASS] selected by rule '{C.RULE}': reveal {seq:04d} (round released {_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime(rel))} >= after {c['selection']['after_utc']})")
     ok_t, why_t, latest = C.timestamp_verdict(toks, bad, rel, require_all=not a.allow_unregistered)
     if toks or not ok_t:
         lines.append(f"[{'PASS' if ok_t else 'FAIL'}] {why_t}" + (f" (latest token {_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime(latest))}, {rel-latest} s before release)" if ok_t and latest else ""))
@@ -225,12 +235,21 @@ def _execute(a, src):
         if not early: lines.append(f"[FAIL] decision-log registration was received AT/AFTER the round release: the registration does not predate the value"); [_err(l) for l in lines]; _err("refusing: decision-log entry is not before the round release"); return 1
         lines.append(f"[PASS] decision-log inclusion verified (leaf {dl['index']} of {dl['size']}, log signature under the vendored key); registered {rel - dl['received_unix']} s before release")
     if a.allow_unregistered and not C.timestamp_verdict(toks, bad, rel)[0]: lines.append("[WARN] timestamping INCOMPLETE: this run is labelled as such in the transcript")
-    P = c["purpose"]; S = D.seed(R.attested_value, P)
+    P = c["purpose"]
+    if commit_bound:
+        from . import commitbound as CB
+        vstar = CB.value(sel["C"], sel["rho_hex"], sel["chain_hash"], sel["target_round"]); S = D.seed(vstar, P)
+        lines.append(f"[PASS] commit-bound value V* = SHA256(\"{CB.DOMAIN.decode()}\" || C || rho || chain_hash || R) = {vstar} ({sel['provenance']})")
+    else: S = D.seed(R.attested_value, P)
     try: body, extra = C.run_operation(c, S, a.input or (c.get("input", {}).get("file")))
     except (ValueError, FileNotFoundError) as e: [_err(l) for l in lines]; _err(str(e)); return 1
     t = D.transcript(R, P, S, {"operation": c["operation"], **{k: v for k, v in c["params"].items()}, "contract_sha256": csha, "contract_file": os.path.basename(a.contract),
                                 "contract_timestamped": [{"tsa": n, "time": ts} for n, ts, _ in toks], "contract_timestamped_latest_unix_s": latest, "timestamping_complete": C.timestamp_verdict(toks, bad, rel)[0], "selected_by_rule": C.RULE,
                                 "contract_spec": c["spec"], "signer_key_id": (c.get("signer") or {}).get("key_id"), "decision_id": c.get("decision_id"), "contract_signature_verified": st is not None,
+                                **({"value_rule": "commit-bound", "value_domain": "notbefore/commit-bound/v1", "commit_bound_value": vstar, "provenance": sel["provenance"], "commit_seq": sel["seq"], "reveal_seq": sel["reveal_seq"], "seq": sel["reveal_seq"],
+                                    "pulse_hash_commit": sel["Rc"].pulse_hash_commit, "pulse_hash_reveal": (sel["Rr"].pulse_hash_reveal if sel["Rr"] else None), "attested_value": sel["attested_value"], "drand_round": sel["target_round"],
+                                    "drand": {"round": sel["target_round"], "chain_hash": sel["chain_hash"], "randomness": sel["rho_hex"], "signature": sel["sig_hex"]}, "entropy_commitment": sel["C"],
+                                    "publication_evidence": sel["pub"]} if commit_bound else {"value_rule": "reveal", "provenance": "FULL-ATTESTED"}),
                                 "decision_log": {k: dl.get(k) for k in ("origin", "status", "index", "seq_in_namespace", "size", "root_b64", "received_unix", "why", "source")},
                                 "after_utc": c["selection"]["after_utc"], "input_sha256": c.get("input", {}).get("sha256"), "record_count": c.get("input", {}).get("record_count"),
                                 "output_sha256": D.sha256_hex(body.encode()), **({"A": {"count": extra["A_count"], "sha256": D.sha256_hex(body.encode())}, "B": {"count": extra["B_count"], "sha256": D.sha256_hex(("\n".join(extra["B"]) + "\n").encode())}} if c["operation"] == "split" else {})})
@@ -350,7 +369,7 @@ def main(argv=None):
             print(json.dumps(lockdoc, indent=1, sort_keys=True) if a.json else src.log_git_sha); return 0
         if a.cmd == "diff-transcript":
             A_, B_ = json.load(open(a.a)), json.load(open(a.b))
-            keys = ["operation", "seq", "commit_seq", "purpose", "attested_value", "derived_seed", "input_sha256", "record_count", "frac", "k", "arms", "output_sha256", "A", "B", "log_git_sha", "cli_version", "spec", "verifier_git_sha"]
+            keys = ["operation", "seq", "commit_seq", "purpose", "value_rule", "provenance", "commit_bound_value", "attested_value", "derived_seed", "input_sha256", "record_count", "frac", "k", "arms", "output_sha256", "A", "B", "log_git_sha", "cli_version", "spec", "verifier_git_sha"]
             strip = lambda v: {kk: vv for kk, vv in v.items() if kk != "file"} if isinstance(v, dict) else v   # output FILE NAMES are not part of the allocation
             A_ = {k: strip(v) for k, v in A_.items()}; B_ = {k: strip(v) for k, v in B_.items()}
             diffs = [(k, A_.get(k), B_.get(k)) for k in keys if A_.get(k) != B_.get(k)]

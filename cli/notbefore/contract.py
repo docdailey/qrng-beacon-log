@@ -22,8 +22,11 @@ from . import __version__, SPEC, FIRST_ELIGIBLE_REVEAL
 from .check import VENDOR, check_pair, known_noncompliant
 from . import derive as D
 
-CONTRACT_SPEC = "notbefore/contract/2"                # /2 = /1 + signer + decision_id
-ACCEPTED_SPECS = ("notbefore/contract/1", "notbefore/contract/2")   # /1 (0.6.0–0.7.x, unsigned) still executes, labelled
+CONTRACT_SPEC = "notbefore/contract/3"                # /3 = /2 + value rule "commit-bound" (V*, FALLBACK.md); /2 = /1 + signer + decision_id
+SIGNED_SPECS = ("notbefore/contract/2", "notbefore/contract/3")
+ACCEPTED_SPECS = ("notbefore/contract/1", "notbefore/contract/2", "notbefore/contract/3")   # /1 (unsigned) and /2 (reveal-based) still execute, labelled
+RULE3 = "first-eligible-commit-released-at-or-after"
+VALUE_RULE = {"rule": "commit-bound", "domain": "notbefore/commit-bound/v1", "formula": "SHA256(domain || C || rho_R || chain_hash || R_be8)"}
 RULE = "first-eligible-reveal-released-at-or-after"
 sys.path.insert(0, VENDOR)
 import tsa as _tsa                                    # vendored: TSAS = {"freetsa": ..., "digicert": ...}
@@ -62,6 +65,9 @@ def make(after_utc, purpose, operation, params, input_path=None, note=None, sign
         from . import decisionlog as DL
         c["signer"] = {"alg": "ed25519", "key_id": signer[0], "public_key_b64": signer[1]}
         c["decision_id"] = DL.validate_decision_id(decision_id or P)
+        c["value"] = dict(VALUE_RULE)
+        c["selection"]["rule"] = RULE3
+        c["selection"]["eligibility"] = f"commit, protocol v0.5, seq >= {FIRST_ELIGIBLE_REVEAL - 1}, not KNOWN-NONCOMPLIANT, verifies under the pinned verifier, both RFC 3161 tokens strictly before its round, Rekor-anchored before its round; the value is V* = SHA256(commit-bound domain || C || rho_R || chain_hash || R) whether or not the operator reveals (FULL-ATTESTED / COMMITMENT-FALLBACK)"
     else: c["spec"] = "notbefore/contract/1"
     if note: c["note"] = str(note)[:500]
     if operation in ("sample", "split", "assign", "shuffle", "id"):

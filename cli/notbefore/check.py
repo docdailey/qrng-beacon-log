@@ -78,6 +78,38 @@ def check_pair(seq: int, src: LogSource, refetch=True, anchors=True, verbose=Fal
     except Exception as e: R.say(True, f"transparency-log check unavailable: {e}", "WARN"); R.tlog = "error"
     return R
 
+def check_commit(seq: int, src: LogSource, refetch=True, anchors=True, verbose=False) -> CheckResult:
+    """A COMMIT on its own (contract/3 eligibility, commitbound.py): protocol v0.5, not KNOWN-NONCOMPLIANT, the vendored
+    verifier passes on it (host statements, chain link to seq-1), both RFC 3161 tokens verify (R.tsa_latest_unix set),
+    Rekor anchor verified offline when reachable, transparency-log inclusion. No reveal is consulted here."""
+    R = CheckResult(seq); R.log_git_sha, R.log_ref = src.log_git_sha, (src.ref or "working tree"); R.tsa_latest_unix = None
+    knc = known_noncompliant()
+    if seq in knc: R.say(False, f"seq {seq} is KNOWN-NONCOMPLIANT ({knc[seq].get('erratum')}): {knc[seq].get('reason')}"); return R
+    com = src.pulse(seq)
+    if com is None: R.say(False, f"pulse {seq:04d} is not in the log at {R.log_ref}"); return R
+    cc = com["core"]; R.pulse_hash_commit = com["pulse_hash"]; R.commit_seq = seq
+    R.say(cc.get("v") == "0.5" and cc.get("type") == "commit", f"pulse {seq:04d} is a protocol v0.5 commit (type {cc.get('type')}, v {cc.get('v')})")
+    if not R.ok: return R
+    R.drand_round = int(cc["derived"]["target_round"])
+    p_com = src.materialize(seq); p_prev = src.materialize(seq - 1) if src.has_pulse(seq - 1) else None
+    vpy = os.path.join(VENDOR, "verify.py"); extra = ["--refetch"] if refetch else []
+    rc, out = _run([vpy, p_com, "--pin", KEYS] + (["--prev", p_prev] if p_prev else []) + extra); R.verbose.append(out)
+    R.say(rc == 0 and "ALL CHECKS PASSED" in out, f"commit {seq:04d}: vendored verify.py (pinned keys{', chained to %04d' % (seq-1) if p_prev else ''}{', drand refetched' if refetch else ''})")
+    rc, out = _run([os.path.join(VENDOR, "tsa.py"), "verify", p_com]); R.verbose.append(out)
+    import re as _re, datetime as _dt
+    times = []
+    for m in _re.finditer(r"\[PASS\] RFC3161 (\w+): (.+)", out):
+        try: times.append(int(_dt.datetime.strptime(m.group(2).strip(), "%b %d %H:%M:%S %Y %Z").replace(tzinfo=_dt.timezone.utc).timestamp()))
+        except Exception: pass
+    R.tsa_pass = out.count("[PASS] RFC3161"); R.tsa_latest_unix = max(times) if times else None
+    R.say(R.tsa_pass >= 2 and "[FAIL]" not in out, f"commit {seq:04d}: {R.tsa_pass} RFC 3161 token(s) verify (need >= 2: freetsa + DigiCert)")
+    if anchors: R.anchors = _check_anchors(R, src, (seq,), {"derived": {"round_release_unix_s": cc["derived"]["target_release_unix_s"]}}, refetch)
+    else: R.anchors = "skipped (--no-anchors)"
+    try:
+        from . import tlogcheck; R.tlog = tlogcheck.check(src, (seq,), R, refetch, None)
+    except Exception as e: R.say(True, f"transparency-log check unavailable: {e}", "WARN"); R.tlog = "error"
+    return R
+
 def _check_anchors(R, src, seqs, rev_core, refetch):
     if not src.anchors_available():
         R.say(True, "publication anchors: no anchors branch reachable from this log source — not checked", "WARN"); return "unavailable"

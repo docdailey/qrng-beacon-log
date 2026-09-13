@@ -17,7 +17,7 @@ Sensitive data stays out by default: the input file and the outputs are represen
 the bundle's own copy of them — that copy is for the record."""
 import os, sys, json, hashlib, time, shutil, zipfile, base64, re, tempfile, subprocess
 from . import __version__, SPEC
-from .check import VENDOR, KEYS, CheckResult, check_pair, vendored_meta, _check_anchors, _run
+from .check import VENDOR, KEYS, CheckResult, check_pair, check_commit, vendored_meta, _check_anchors, _run
 from . import contract as C, decisionlog as DL, derive as D
 sys.path.insert(0, VENDOR)
 import tlog as T
@@ -28,6 +28,7 @@ def sha256_file(p):
     with open(p, "rb") as f:
         for b in iter(lambda: f.read(1 << 20), b""): h.update(b)
     return h.hexdigest()
+def _sha12(x): x = str(x or "?"); return x[:12] if all(ch in "0123456789abcdef" for ch in x[:12]) else x
 def utc(x): return time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(int(float(x)))) if x is not None else "—"
 def parse_tsa_time(s):
     import datetime; return int(datetime.datetime.strptime(s.strip(), "%b %d %H:%M:%S %Y %Z").replace(tzinfo=datetime.timezone.utc).timestamp())
@@ -87,6 +88,7 @@ def gather(contract_path, transcript=None, src=None, verify_pair=True, refetch=T
     tp = find_transcript(contract_path, transcript, csha); X = {"path": tp}
     if tp:
         t = json.load(open(tp)); X.update(obj=t, bound=t.get("contract_sha256") == csha, seq=t.get("seq"), commit_seq=t.get("commit_seq"), drand_round=t.get("drand_round"), attested_value=t.get("attested_value"),
+                 value_rule=t.get("value_rule", "reveal"), provenance=t.get("provenance", "FULL-ATTESTED"), commit_bound_value=t.get("commit_bound_value"), drand=t.get("drand"), entropy_commitment=t.get("entropy_commitment"), publication_evidence=t.get("publication_evidence"), reveal_seq=t.get("reveal_seq"),
                  derived_seed=t.get("derived_seed"), operation=t.get("operation"), output_sha256=t.get("output_sha256"), A=t.get("A"), B=t.get("B"), value=t.get("value"), arm_sizes=t.get("arm_sizes"),
                  log_git_sha=t.get("log_git_sha"), verified_utc=t.get("verified_utc"), timestamping_complete=t.get("timestamping_complete"), decision_log=t.get("decision_log"), cli_version=t.get("cli_version"))
         F.say(X["bound"], f"transcript {os.path.basename(tp)} names this contract" if X["bound"] else f"transcript {os.path.basename(tp)} names a DIFFERENT contract ({str(t.get('contract_sha256'))[:16]}…)")
@@ -95,7 +97,30 @@ def gather(contract_path, transcript=None, src=None, verify_pair=True, refetch=T
     F["transcript"] = X
     # the pair, re-verified now (this is what makes "the result" more than a copied number)
     P = {"verified": None}
-    if tp and X.get("bound") and src is not None:
+    if tp and X.get("bound") and src is not None and X.get("value_rule") == "commit-bound":
+        from . import commitbound as CB
+        n = int(X["commit_seq"]); com = src.pulse(n)
+        if com is None: F.say(False, f"commit {n:04d} is not in the log this receipt was generated against")
+        else:
+            cc = com["core"]; P["release_unix"] = int(cc["derived"]["target_release_unix_s"]); P["commit_utc"] = cc["derived"].get("anchor_utc_unix_s")
+            d = X.get("drand") or {}
+            ok, rho = CB.verify_round(cc["derived"]["target_round"], d.get("signature", ""), cc["chain_hash"]) if d.get("signature") else (False, "no drand signature in the transcript")
+            F.say(ok and rho == d.get("randomness"), f"drand round {cc['derived']['target_round']} signature (from the transcript) BLS-verifies under the pinned quicknet key" if ok else f"drand signature: {rho}")
+            if ok:
+                vs = CB.value(cc["derived"]["entropy_commitment"], rho, cc["chain_hash"], cc["derived"]["target_round"]); P["same_value"] = vs == X.get("commit_bound_value")
+                F.say(P["same_value"], "commit-bound value V* recomputes from the commit's C, rho_R, chain_hash and R" if P["same_value"] else "transcript's commit-bound value does NOT recompute from the commit and the round")
+            if verify_pair:
+                Rc = check_commit(n, src, refetch=refetch, anchors=True); P.update(verified=Rc.ok, lines=Rc.lines, log_git_sha=Rc.log_git_sha, cosignatures=Rc.cosignatures, independent_cosignatures=Rc.independent_cosignatures, anchors=Rc.anchors, tlog=Rc.tlog, tsa_pass=Rc.tsa_pass, bls_offline=True)
+                F.say(Rc.ok, f"commit {n:04d} re-verified now (host signatures, {Rc.tsa_pass} TSA tokens, anchors {Rc.anchors}, transparency log {Rc.tlog}) at log {str(Rc.log_git_sha)[:12]}")
+                if X.get("reveal_seq"):
+                    Rr = check_pair(int(X["reveal_seq"]), src, refetch=refetch, anchors=True); P["reveal_verified"] = Rr.ok; F.say(Rr.ok, f"reveal {int(X['reveal_seq']):04d} re-verified: provenance FULL-ATTESTED stands" if Rr.ok else f"reveal {int(X['reveal_seq']):04d} no longer verifies")
+                pe = X.get("publication_evidence") or {}
+                if pe.get("present"): F.say(int(pe["integrated_unix"]) < P["release_unix"], f"Rekor logged the commit {pe.get('before_release_s')} s before its round (logIndex {pe.get('logIndex')}): publication before the round is third-party evidenced")
+            if latest is not None: F.say(latest < P["release_unix"], f"latest RFC 3161 token {utc(latest)} is {P['release_unix'] - latest} s before the round release {utc(P['release_unix'])}" if latest < P["release_unix"] else "latest RFC 3161 token is AT/AFTER the round release")
+            if L.get("received_unix") is not None: F.say(L["received_unix"] < P["release_unix"], f"decision-log registration {L['received_utc']} is {P['release_unix'] - L['received_unix']} s before the round release" if L["received_unix"] < P["release_unix"] else "decision-log registration is AT/AFTER the round release")
+            try: P["seed_recomputes"] = D.seed(X.get("commit_bound_value"), c["purpose"]).hex() == X.get("derived_seed"); F.say(P["seed_recomputes"], "derived seed recomputes from V* and the contract's purpose")
+            except Exception as e: F.say(True, f"seed recomputation skipped: {e}", "WARN")
+    elif tp and X.get("bound") and src is not None:
         seq = int(X["seq"]); rev = src.pulse(seq)
         if rev is None: F.say(False, f"pulse {seq:04d} is not in the log this receipt was generated against")
         else:
@@ -150,21 +175,28 @@ def render(F):
     elif S.get("present"): out.append("- Decision log: no receipt on this machine (not registered, or registered elsewhere).")
     if L.get("live"): out.append(f"- Decision log now ({F['generated_utc']}): {L['live']['status']} — {L['live']['why']}")
     out += ["", "## The randomness", ""]
-    if F["status"] == "executed" and X.get("bound"):
+    if F["status"] == "executed" and X.get("bound") and X.get("value_rule") == "commit-bound":
+        out.append(f"- **Commit-bound value** (contract/3): NotBefore commit **{X['commit_seq']}**, drand quicknet round {X['drand_round']} released {utc(P.get('release_unix'))}; V* = SHA-256(\"notbefore/commit-bound/v1\" ‖ C ‖ ρ ‖ chain ‖ R) = `{X['commit_bound_value']}`.")
+        out.append(f"- Provenance **{X['provenance']}**: " + ("the operator revealed the QRNG preimage in pulse %s and it verifies (V = `%s`)." % (X.get('reveal_seq'), X.get('attested_value')) if X.get("provenance") == "FULL-ATTESTED" else "the operator did not reveal; V* stands unchanged — a withheld reveal cannot change or void the value — but QRNG provenance is not demonstrated for this hour."))
+        pe = X.get("publication_evidence") or {}
+        if pe.get("present"): out.append(f"- The commit was Rekor-logged {pe.get('before_release_s')} s before its round (logIndex {pe.get('logIndex')}, {pe.get('integrated_utc')}): it was public before the randomness existed, by a clock the operator does not run.")
+        if Tk.get("latest_unix") is not None and P.get("release_unix"): out.append(f"- Latest consumer timestamp precedes the round release by **{P['release_unix'] - Tk['latest_unix']} s**" + (f"; decision-log registration precedes it by **{P['release_unix'] - L['received_unix']} s**." if L.get("received_unix") is not None else "."))
+        if P.get("verified") is not None: out.append(f"- Commit re-verified while writing this receipt: **{'PASS' if P['verified'] else 'FAIL'}** (host signatures, {P.get('tsa_pass')} TSA tokens, anchors {P.get('anchors')}, transparency log {P.get('tlog')}) at log commit `{_sha12(P.get('log_git_sha'))}`.")
+    elif F["status"] == "executed" and X.get("bound"):
         out.append(f"- NotBefore pulse **{X['seq']}** (commit {X['commit_seq']}), drand quicknet round {X['drand_round']} released {utc(P.get('release_unix'))}; value V = `{X['attested_value']}`.")
         if P.get("commit_utc"): out.append(f"- The log committed its entropy at {utc(P['commit_utc'])} and revealed at {utc(P.get('reveal_utc'))}: the operator fixed its contribution before the round, the consumer fixed the decision before the round.")
         if Tk.get("latest_unix") is not None and P.get("release_unix"): out.append(f"- Latest consumer timestamp precedes the round release by **{P['release_unix'] - Tk['latest_unix']} s**" + (f"; decision-log registration precedes it by **{P['release_unix'] - L['received_unix']} s**." if L.get("received_unix") is not None else "."))
-        if P.get("verified") is not None: out.append(f"- Pair re-verified while writing this receipt: **{'PASS' if P['verified'] else 'FAIL'}** (host signatures, BLS offline, {P.get('tsa_pass')} TSA tokens on the commit, anchors {P.get('anchors')}, transparency log {P.get('tlog')}" + (f", cosigned by {', '.join(P['cosignatures'])}" if P.get("cosignatures") else "") + f") at log commit `{str(P.get('log_git_sha'))[:12]}`.")
+        if P.get("verified") is not None: out.append(f"- Pair re-verified while writing this receipt: **{'PASS' if P['verified'] else 'FAIL'}** (host signatures, BLS offline, {P.get('tsa_pass')} TSA tokens on the commit, anchors {P.get('anchors')}, transparency log {P.get('tlog')}" + (f", cosigned by {', '.join(P['cosignatures'])}" if P.get("cosignatures") else "") + f") at log commit `{_sha12(P.get('log_git_sha'))}`.")
     else: out.append(f"- Not yet: the pulse is the first eligible reveal released at or after {sel.get('after_utc')}. Run `notbefore execute {F['contract']['name']}` after that hour.")
     out += ["", "## The result", ""]
     if F["status"] == "executed" and X.get("bound"):
         out.append(f"- {_result_line(X)}")
-        out.append(f"- Derived seed S = SHA-256(\"notbefore/derive/v1\" ‖ V ‖ purpose) = `{X.get('derived_seed')}`" + (" (recomputed here)" if P.get("seed_recomputes") else "") + ".")
+        out.append(f"- Derived seed S = SHA-256(\"notbefore/derive/v1\" ‖ {'V*' if X.get('value_rule') == 'commit-bound' else 'V'} ‖ purpose) = `{X.get('derived_seed')}`" + (" (recomputed here)" if P.get("seed_recomputes") else "") + ".")
         out.append(f"- Transcript `{os.path.basename(X['path'])}` (executed {X.get('verified_utc')} with notbefore {X.get('cli_version')}); reproduce with `notbefore execute {F['contract']['name']} --input <the committed file>`.")
     else: out.append("- None yet.")
     out += ["", "## How to check this yourself", "",
             f"1. `pip install notbefore` (any release ≥ 0.9.0), then `notbefore check-bundle <this bundle>` — offline: manifest, contract, statement, tokens, log receipt, pulse pair, checkpoint, anchors.",
-            f"2. `notbefore verify {X.get('seq') if X.get('seq') else '<seq>'}` — the pulse pair against the live public log, drand and Rekor.",
+            f"2. `notbefore verify {X.get('seq') or (int(X['commit_seq']) + 1 if X.get('commit_seq') else '<seq>')}` — the pulse pair against the live public log, drand and Rekor" + (" (for a COMMITMENT-FALLBACK hour there is no reveal: the commit and the drand round are what the bundle carries)." if X.get("provenance") == "COMMITMENT-FALLBACK" else "."),
             f"3. `notbefore execute {F['contract']['name']} --input <file>` — the same output from the same contract, or a refusal with the reason.",
             "4. Compare `decision_id` and `key_id` with the registry entry / protocol your institution holds (NotBefore cannot tell two names for one experiment apart).",
             "", "## Verification trail", ""]
@@ -200,8 +232,9 @@ def bundle(F, out, src=None, include_input=False, include_output=False):
             for cand in ((base + ".A", base + ".B") if X.get("operation") == "split" else ()):
                 if os.path.exists(cand): put(f"output/{cand}", srcpath=cand)
     # the pair, its predecessor, tokens, checkpoint, inclusion proofs, anchors
-    if X.get("seq") and src is not None:
-        seq = int(X["seq"])
+    anchor_seq = int(X["seq"]) if X.get("seq") else (int(X["commit_seq"]) + 1 if X.get("commit_seq") else None)   # the "reveal slot" even when empty
+    if anchor_seq and src is not None:
+        seq = anchor_seq
         for s in (seq - 2, seq - 1, seq):
             if s >= 1 and src.has_pulse(s):
                 for side in ("", ".tsa.json", ".freetsa.tsr", ".digicert.tsr"):
@@ -213,12 +246,13 @@ def bundle(F, out, src=None, include_input=False, include_output=False):
             try:
                 from . import tlogcheck
                 leaves = tlogcheck._chain_leaves_from_source(src); origin_, size, troot = T.parse_checkpoint(T.parse_note(note.decode())[0])
-                proofs = {str(s): [base64.b64encode(h).decode() for h in T.inclusion_path(s - 1, leaves[:size])] for s in (seq - 1, seq) if s - 1 < size}
+                proofs = {str(s): [base64.b64encode(h).decode() for h in T.inclusion_path(s - 1, leaves[:size])] for s in (seq - 1, seq) if s - 1 < size and src.has_pulse(s)}
                 put("log/inclusion.json", json.dumps({"origin": origin_, "size": size, "root_b64": base64.b64encode(troot).decode(), "leaf": "canonical(pulse JSON), index = seq - 1", "proofs": proofs}, indent=1))
             except Exception as e: F.say(True, f"inclusion proofs not bundled: {e}", "WARN")
         try:
             if src.anchors_available():
                 for s in (seq - 1, seq):
+                    if not src.has_pulse(s): continue
                     rec, stmt = src.anchor(s)
                     if rec: put(f"log/anchors/pulse-{s:04d}.anchor.json", json.dumps(rec, indent=1, sort_keys=True)); put(f"log/anchors/pulse-{s:04d}.stmt.json", stmt)
         except Exception as e: F.say(True, f"anchor records not bundled: {e}", "WARN")
@@ -236,7 +270,7 @@ def bundle(F, out, src=None, include_input=False, include_output=False):
     put("verifier/VENDORED.json", srcpath=os.path.join(VENDOR, "VENDORED.json"))
     put("README.md", render(F))
     man = {"bundle": BUNDLE_SPEC, "generated_utc": F["generated_utc"], "tool": F["tool"], "contract_sha256": F["contract"]["sha256"], "decision_id": c.get("decision_id"), "key_id": (c.get("signer") or {}).get("key_id"),
-           "seq": X.get("seq"), "status": F["status"], "all_checks_passed_at_generation": F["ok"], "files": dict(sorted(files.items()))}
+           "seq": X.get("seq"), "commit_seq": X.get("commit_seq"), "value_rule": X.get("value_rule"), "provenance": X.get("provenance"), "status": F["status"], "all_checks_passed_at_generation": F["ok"], "files": dict(sorted(files.items()))}
     mp = os.path.join(root, "MANIFEST.json"); json.dump(man, open(mp, "w"), indent=1, sort_keys=True)
     if zipped:
         with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
@@ -296,7 +330,10 @@ def check_bundle(path, verify_pulses=True):
         tfiles = [f for f in man["files"] if f.startswith("transcript/")]
         if not tfiles: R.say(True, "no transcript: a commitment-only bundle (nothing executed yet)", "INFO"); return R.ok, R.lines
         t = json.load(open(os.path.join(root, tfiles[0]))); R.say(t.get("contract_sha256") == csha, "transcript names this contract")
-        seq = int(t["seq"]); bs = _BundleSource(root); rev, com = bs.pulse(seq), bs.pulse(seq - 1)
+        bs = _BundleSource(root)
+        if t.get("value_rule") == "commit-bound":
+            return _check_bundle_commit_bound(R, root, bs, t, c, latest, received, verify_pulses)
+        seq = int(t["seq"]); rev, com = bs.pulse(seq), bs.pulse(seq - 1)
         if not rev or not com: R.say(False, f"pulse pair {seq-1:04d}/{seq:04d} not in the bundle"); return R.ok, R.lines
         for p, name in ((com, f"commit {seq-1:04d}"), (rev, f"reveal {seq:04d}")):
             R.say(hashlib.sha256(T.canonical(p["core"])).hexdigest() == p["pulse_hash"], f"{name}: pulse_hash == SHA-256(canonical core)")
@@ -339,3 +376,46 @@ def check_bundle(path, verify_pulses=True):
         return R.ok, R.lines
     finally:
         if tmp: shutil.rmtree(tmp, ignore_errors=True)
+
+def _check_bundle_commit_bound(R, root, bs, t, c, latest, received, verify_pulses):
+    """contract/3: the commit is the object; the reveal is provenance. Recompute V* from the bundled commit and the
+    transcript's drand signature (BLS under the pinned key); run the vendored verifier on the commit (+ reveal if present)."""
+    from . import commitbound as CB
+    n = int(t["commit_seq"]); com = bs.pulse(n)
+    if not com: R.say(False, f"commit {n:04d} not in the bundle"); return R.ok, R.lines
+    cc = com["core"]; R.say(hashlib.sha256(T.canonical(cc)).hexdigest() == com["pulse_hash"] == t.get("pulse_hash_commit"), f"commit {n:04d}: pulse_hash == SHA-256(canonical core) == transcript")
+    d = t.get("drand") or {}; ok, rho = CB.verify_round(cc["derived"]["target_round"], d.get("signature", ""), cc["chain_hash"]) if d.get("signature") else (False, "no drand signature in the transcript")
+    R.say(ok and rho == d.get("randomness"), f"drand round {cc['derived']['target_round']}: transcript signature BLS-verifies under the pinned quicknet key (offline)" if ok else f"drand: {rho}")
+    if ok: R.say(CB.value(cc["derived"]["entropy_commitment"], rho, cc["chain_hash"], cc["derived"]["target_round"]) == t.get("commit_bound_value"), "commit-bound value V* recomputes from C, rho_R, chain_hash, R")
+    rel = int(cc["derived"]["target_release_unix_s"])
+    if latest is not None: R.say(latest < rel, f"latest contract token {utc(latest)} {'precedes' if latest < rel else 'does NOT precede'} the round release {utc(rel)}")
+    if received is not None: R.say(received < rel, f"decision-log registration {utc(received)} {'precedes' if received < rel else 'does NOT precede'} the round release")
+    try: R.say(D.seed(t.get("commit_bound_value"), c["purpose"]).hex() == t.get("derived_seed"), "derived seed recomputes from V* and the contract purpose")
+    except Exception as e: R.say(False, f"seed recomputation failed: {e}")
+    pe = t.get("publication_evidence") or {}
+    ar = os.path.join(root, "log", "anchors", f"pulse-{n:04d}.anchor.json")
+    if os.path.exists(ar):
+        rec = json.load(open(ar)); it = int(rec["rekor"]["integratedTime"]); R.say(it < rel and it == int(pe.get("integrated_unix", -1)), f"bundled Rekor record: logged {rel - it} s before the round (matches the transcript's publication evidence)")
+    else: R.say(True, "no Rekor record for the commit in the bundle: publication-before-round evidence not re-checkable offline", "WARN")
+    rev = bs.pulse(n + 1) if os.path.exists(os.path.join(root, "log", "chain", f"pulse-{n+1:04d}.json")) else None
+    prov = t.get("provenance")
+    if prov == "FULL-ATTESTED":
+        R.say(bool(rev) and rev["core"].get("type") == "reveal" and rev["core"]["derived"]["attested_value"] == t.get("attested_value"), f"reveal {n+1:04d} bundled and carries the transcript's attested value (FULL-ATTESTED)")
+    else: R.say(True, f"provenance {prov}: no verifying reveal for commit {n:04d}; V* stands regardless", "INFO")
+    if verify_pulses:
+        vpy = os.path.join(VENDOR, "verify.py"); pc = os.path.join(root, "log", "chain", f"pulse-{n:04d}.json"); pp = os.path.join(root, "log", "chain", f"pulse-{n-1:04d}.json"); pp = pp if os.path.exists(pp) else None
+        rc_, out = _run([vpy, pc, "--pin", KEYS] + (["--prev", pp] if pp else [])); R.verbose.append(out); R.say(rc_ == 0 and "ALL CHECKS PASSED" in out, f"commit {n:04d}: vendored verify.py offline (pinned keys{', chained to %04d' % (n-1) if pp else ''})")
+        rc_, out = _run([os.path.join(VENDOR, "tsa.py"), "verify", pc]); k = out.count("[PASS] RFC3161"); R.say(k >= 2 and "[FAIL]" not in out, f"commit {n:04d}: {k} RFC 3161 token(s) verify against the pinned roots")
+        if rev and rev["core"].get("type") == "reveal":
+            pr = os.path.join(root, "log", "chain", f"pulse-{n+1:04d}.json"); rc_, out = _run([vpy, pr, "--pin", KEYS, "--prev", pc]); R.verbose.append(out); R.say(rc_ == 0 and "ALL CHECKS PASSED" in out, f"reveal {n+1:04d}: vendored verify.py offline (BLS {'offline' if '[full BLS, offline]' in out else 'NOT verified'})")
+    note_p = os.path.join(root, "log", "checkpoint"); inc_p = os.path.join(root, "log", "inclusion.json")
+    if os.path.exists(note_p):
+        from . import tlogcheck; ident = tlogcheck.identity()
+        if ident:
+            pub = T.load_pub_raw(os.path.join(KEYS, os.path.basename(ident["public_key_file"]))); note = open(note_p).read(); ok, text = T.verify_note(note, ident["origin"], pub); o, size, root_h = T.parse_checkpoint(text)
+            R.say(ok and o == ident["origin"], f"pulse-log checkpoint (size {size}) signed by {ident['origin']} (vendored key)")
+            if ok and os.path.exists(inc_p):
+                inc = json.load(open(inc_p))
+                for s_, path in inc["proofs"].items():
+                    pj = bs.pulse(int(s_)); R.say(pj is not None and T.verify_inclusion(T.leaf_hash(T.canonical(pj)), int(s_) - 1, size, [base64.b64decode(x) for x in path], root_h), f"pulse {int(s_):04d} is included in that checkpoint (RFC 6962 proof)")
+    return R.ok, R.lines
