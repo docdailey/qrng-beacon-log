@@ -36,8 +36,9 @@ records their hashes.
 `(key_id, decision_id)` is a namespace. The **first valid statement** appended for it gets `seq_in_namespace 1` and
 is the authoritative preregistration. Later statements for the same tuple are appended as amendments
 (`seq_in_namespace 2, 3, …`) — visible, but never the entry `execute` accepts for the original randomization. A
-statement whose `contract_sha256` is already present is returned unchanged (idempotent). Nothing is updated or
-deleted; the only operation is append.
+statement whose `contract_sha256` is already present **in the same namespace** is returned unchanged (idempotent
+retry); a different key or decision id may register the same hash independently — a hash is not a claim on anyone
+else's namespace (review R7, 2026-09-13). Nothing is updated or deleted; the only operation is append.
 
 ## The log
 

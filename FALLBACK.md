@@ -61,6 +61,13 @@ Practicality: since live anchoring began (2026-09-12 12:47 UTC) every commit has
 round (median 204 s). An hour whose anchor is late is simply not eligible for contract/3 consumers; a think-side
 anchoring step (rather than waiting for GitHub Actions) would widen that margin and is the natural next hardening.
 
+**Evidence withholding (review R2, ERR-015).** The first implementation took publication evidence from the anchors
+branch, which the operator controls and can edit after the round: deleting a record would have steered a contract to
+the next commit. Since 0.12.0 the verifier asks Rekor itself (entries found by the statement hash derived from the
+pulse bytes, verified under the pinned keys; the signed `integratedTime` decides), accepts a signature-verified local
+record offline, and HALTS when it cannot establish eligibility — "no evidence" is never "ineligible", only Rekor's own
+"no such entry" after the grace period is. Test 32 deletes the record and gets the same commit online, a halt offline.
+
 Implementation: `PROTOCOL.md` §"Commit-bound value"; `NOTBEFORE.md` §4.2a, §7.13; `cli/notbefore/commitbound.py`
 (`value`, `select_commit`, `publication_evidence`, `verify_round`); `check.check_commit`; contract/3 is the default for
 signed contracts from `notbefore` 0.11.0; `receipt`/`bundle`/`check-bundle` re-derive V* offline from the bundled

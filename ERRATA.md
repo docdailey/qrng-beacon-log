@@ -6,6 +6,33 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-015 — 0.11.0 read publication time from an unsigned field and advanced past withheld evidence (2026-09-13)
+
+**What was wrong.** The commit-bound rule shipped in `notbefore` 0.11.0 decided "was this commit public before its
+round?" from the anchor record's convenience copy of Rekor's `integratedTime`, which is not covered by Rekor's signed
+entry timestamp; the record wrapper could be edited to make a retroactive anchor look timely. Second, a commit whose
+anchor record was *missing* from the log source was passed over by rule — but the anchors branch is operator-controlled
+and editable after the round, so absence there is not proof of anything; an operator (or a tampered mirror) could steer
+a contract to the next commit by deleting a record. Third, the commit-bound bundle checker read the record's time
+without running the anchor verifier at all, so forged records passed offline. All three were found within hours by an
+external adversarial review (`recommendations.md` R1–R3). The steering claim in `CLAIMS.md` was therefore not yet
+earned for the four hours 0.11.0 was current; no consumer decision is known to have relied on it.
+
+**Fix (0.12.0, spec 0.9).** Anchor verification binds the wrapper's `integratedTime` and `logIndex` to the SIGNED
+entry and exports the signed values (`CheckResult.anchor_facts`); nothing downstream reads the wrapper. Publication
+evidence comes from Rekor itself when online — entries found by the statement hash derived from the pulse bytes,
+verified under the pinned anchor and Rekor keys — and from a signature-verified record when offline; a commit with no
+evidence HALTS execution ("refusing to advance past a candidate whose eligibility cannot be established") instead of
+advancing; "Rekor has no entry" is decisive only after the anchor grace period. The bundle checker runs the same anchor
+verifier as the online path. Tests: 32 (deleting the local record changes nothing online; offline halts), 33 (a
+wrapper rewritten to one second before the round is not believed; the signed time wins). Also from the same review:
+verification verdicts are now VERIFIED / DEGRADED / INVALID with exit codes 0 / 2 / 1 so a dry run cannot become
+"verified" by being bundled (R5); bundles re-run the committed operation when the input is included and bind the
+transcript's parameters to the signed contract (R4); a missing checkpoint fails for checkpointed pulses; `register`
+accepts every signed contract version (R6); range spans above 2^64 are refused instead of looping forever (R10); the
+decision log's idempotency is per signer namespace, not per global hash (R7), and request bodies are measured after
+reading (R8).
+
 ## ERR-014 — the TSA verifier trusted less than the documentation claimed: FreeTSA fetched-on-absence, DigiCert via the system store (2026-09-12)
 
 **What was wrong.** `NOTBEFORE.md`, the package README and `cli/RELEASING.md` said the FreeTSA CA was "vendored and

@@ -395,10 +395,47 @@ def test_32_commit_bound_value_is_unabortable(tmp_path):
     t2 = json.load(open(tmp_path / "fb.json")); assert t2["provenance"] == "COMMITMENT-FALLBACK" and t2["reveal_seq"] is None and t2["commit_seq"] == n, t2
     assert t2["commit_bound_value"] == t["commit_bound_value"] and t2["derived_seed"] == t["derived_seed"] and t2["output_sha256"] == t["output_sha256"], "a withheld reveal must not change the value"
     assert "COMMITMENT-FALLBACK" in e and "BLS-verified" in e
-    # a commit without pre-round publication evidence is passed over by rule (remove the anchor record)
+    # R2 — evidence withholding: deleting the LOCAL anchor record changes nothing online (Rekor itself is asked, by statement hash)
     os.remove(log / "anchors" / f"pulse-{n:04d}.anchor.json"); os.remove(log / "anchors" / f"pulse-{n:04d}.stmt.json")
-    rc, o, e = nb("execute", str(c), "--input", str(f), "--allow-unregistered", "--transcript", "none", cwd=str(tmp_path), log=str(log)); assert rc == 1 and "passed over by rule" in e and ("no Rekor anchor" in e or "no publication anchor" in e), e   # either the eligibility check or the anchor check names the missing anchor
+    rc, o, e = nb("execute", str(c), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "fb2.json"), cwd=str(tmp_path), log=str(log)); assert rc == 0, e
+    t3 = json.load(open(tmp_path / "fb2.json")); assert t3["commit_seq"] == n and t3["commit_bound_value"] == t["commit_bound_value"] and t3["publication_evidence"]["source"] == "rekor-live", t3["publication_evidence"]
+    # ... and offline, with no verified record and no reveal, it HALTS rather than advancing to a later commit
+    rc, o, e = nb("execute", str(c), "--input", str(f), "--allow-unregistered", "--offline", "--transcript", "none", cwd=str(tmp_path), log=str(log)); assert rc == 1 and "refusing to advance" in e and f"commit {n+2:04d}" not in e, e
     # a legacy contract/2 (reveal-based) still executes with the reveal rule
     c2 = _as_contract2(c)
     rc, o, e = nb("execute", str(c2), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "v2.json"), cwd=str(tmp_path)); assert rc == 0, e
     assert json.load(open(tmp_path / "v2.json"))["value_rule"] == "reveal" and "reveal 0043" in e
+
+def test_33_anchor_wrapper_time_is_not_trusted(tmp_path):
+    """R1/ERR-015: the record's convenience integratedTime is unsigned. Rewriting it to look pre-round must not make an
+    ineligible commit eligible: the verifier binds it to Rekor's SIGNED entry and fails the record. Offline log copy with
+    commit 0040 (anchored retroactively at 12:46Z, hours after its 11:05Z round)."""
+    import shutil
+    from notbefore.log import LogSource
+    n = 40; log = tmp_path / "log"; (log / "chain").mkdir(parents=True); (log / "anchors").mkdir(); (log / "ci").mkdir()
+    for fn in os.listdir(os.path.join(LOG, "chain")):
+        m = re.match(r"pulse-(\d{4})\.json", fn)
+        if m and int(m.group(1)) <= n + 1: shutil.copy2(os.path.join(LOG, "chain", fn), log / "chain" / fn)
+    shutil.copy2(os.path.join(LOG, "ci", "KNOWN_NONCOMPLIANT.json"), log / "ci" / "KNOWN_NONCOMPLIANT.json")
+    src = LogSource(log_dir=LOG); rec, stmt = src.anchor(n); src.close(); assert rec
+    rel = json.load(open(log / "chain" / f"pulse-{n:04d}.json"))["core"]["derived"]["target_release_unix_s"]
+    assert int(rec["rekor"]["entry"]["integratedTime"]) > int(rel), "0040 must be a retroactive anchor for this test"
+    rec["rekor"]["integratedTime"] = int(rel) - 1                                    # the forgery: wrapper says 'one second before the round'
+    json.dump(rec, open(log / "anchors" / f"pulse-{n:04d}.anchor.json", "w")); open(log / "anchors" / f"pulse-{n:04d}.stmt.json", "wb").write(stmt)
+    f = tmp_path / "r.txt"; f.write_text("a\nb\nc\n"); c = tmp_path / "c.json"
+    after = __import__("time").strftime("%Y-%m-%dT%H:%M:%SZ", __import__("time").gmtime(int(rel) - 60))
+    rc, o, e = nb("plan", "--after", after, "--purpose", "test:r1", "--sample", "1", "--out", str(c), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0, e
+    rc, o, e = nb("execute", str(c), "--input", str(f), "--allow-unregistered", "--offline", "--transcript", "none", cwd=str(tmp_path), log=str(log))
+    assert rc != 0 and f"commit {n:04d}" in e and "FALLBACK" not in e and "FULL-ATTESTED" not in e, e   # never selected as eligible on the strength of the wrapper
+    from notbefore.check import check_commit
+    src = LogSource(log_dir=str(log)); Rc = check_commit(n, src, refetch=False, anchors=True); src.close()
+    assert not Rc.anchor_facts[n]["ok"] and Rc.anchor_facts[n]["integratedTime"] == int(rec["rekor"]["entry"]["integratedTime"]), Rc.anchor_facts
+
+def test_34_range_span_guard():
+    """R10: spans above 2^64 used to loop forever (acceptance limit 0); now a ValueError, in derive and at plan time."""
+    import notbefore.derive as D, notbefore.contract as C, pytest as _p
+    assert D.rand_range(bytes(32), 5, 5) == 5
+    assert 0 <= D.rand_range(bytes(32), 0, (1 << 64) - 1) < (1 << 64)                # span exactly 2^64 is fine
+    with _p.raises(ValueError): D.rand_range(bytes(32), 0, 1 << 64)                   # span 2^64 + 1
+    with _p.raises(ValueError): C.make("2030-01-01T00:00Z", "test:span", "range", {"lo": 0, "hi": 1 << 64})
+    with _p.raises(ValueError): C.make("2030-01-01T00:00Z", "test:span", "range", {"lo": 3, "hi": 2})

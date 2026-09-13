@@ -1,6 +1,6 @@
 # NotBefore — specification
 
-**Status:** draft 0.8, 2026-09-13 — 0.7 plus the **commit-bound value** (§4.6, §7.13: contracts consume V* fixed by the commit and the drand round, so a withheld reveal cannot change or void a decision); 0.7 made execution fail closed on the decision log (§7.12: an unconfirmed registration is a refusal, not a warning); 0.6 added signed contracts and the write-once decision log (§7.12: a consumer identity, `contract/2`, and a second transparency log in which the first statement per decision wins); 0.5 added decision contracts (§7.11: the consumer's commitment, timestamped before the pulse); 0.4 added the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
+**Status:** draft 0.9, 2026-09-13 — 0.8 with the commit-bound rule's evidence and verdict semantics fixed after an adversarial review (ERR-015: publication evidence from Rekor's signed entries, halt when it cannot be established; VERIFIED / DEGRADED / INVALID verdicts); 0.8 added the **commit-bound value** (§4.6, §7.13: contracts consume V* fixed by the commit and the drand round, so a withheld reveal cannot change or void a decision); 0.7 made execution fail closed on the decision log (§7.12: an unconfirmed registration is a refusal, not a warning); 0.6 added signed contracts and the write-once decision log (§7.12: a consumer identity, `contract/2`, and a second transparency log in which the first statement per decision wins); 0.5 added decision contracts (§7.11: the consumer's commitment, timestamped before the pulse); 0.4 added the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
 **Implements over:** `qrng-beacon-log` protocol v0.5 (live log)  
 **Normative language:** MUST / MUST NOT / SHOULD / MAY
 
@@ -355,8 +355,13 @@ Since 0.8 a signed contract is `notbefore/contract/3`: contract/2 plus `value: {
 **Commit eligibility:** protocol v0.5, seq ≥ 20, not KNOWN-NONCOMPLIANT, the vendored verifier passes on the commit
 (host statements, chain link), both RFC 3161 tokens verify with the LATEST strictly before the round release, **and**
 a Rekor anchor for the commit with `integratedTime` strictly before the release (third-party evidence the commit was
-public before the randomness existed). A commit lacking any of these is passed over *by rule*, and the transcript
-says so. **Execution** computes \(V^*\) (§4.2a) from the selected commit and \(\rho_R\) — taken from the verifying
+public before the randomness existed). A commit *proved* to lack one of these is passed over *by rule*, and the transcript
+says so. **Proof, not absence (0.9 / ERR-015):** the anchor's time is Rekor's SIGNED `integratedTime`, taken from
+Rekor itself when online (entries found by the statement hash derived from the pulse bytes, verified under the pinned
+anchor and Rekor keys) or from a signature-verified record offline; a record's unsigned fields are never read. A
+candidate whose eligibility cannot be established — no Rekor answer and no verified record, an unauthenticated copy of
+the pulse, missing token sidecars — HALTS execution; the verifier never advances past it. "Rekor has no entry" is
+decisive only once the anchor grace period (1500 s) after the round has passed. **Execution** computes \(V^*\) (§4.2a) from the selected commit and \(\rho_R\) — taken from the verifying
 reveal (FULL-ATTESTED) or fetched from drand and BLS-verified under the pinned key (COMMITMENT-FALLBACK); while the
 reveal window (600 s) is still open and no reveal exists it MUST wait (exit 3) so the label is final — and derives
 \(S = \mathrm{SHA256}(D_{derive} \| V^* \| P)\) exactly as before. The transcript carries `value_rule`, `provenance`,
@@ -530,7 +535,7 @@ Do not implement this until isolation can hold a vector of \(E\) and refuse the 
 
 | Item | Version |
 |---|---|
-| This spec | `notbefore/spec/0.5` |
+| This spec | `notbefore/spec/0.9` (the CLI prints the exact constant in `notbefore --version` and every transcript) |
 | Decision contract | `notbefore/contract/1` |
 | Package version | **independent of the spec version** (was "MAJOR.MINOR tracks the spec" until 0.5; `notbefore --version` prints both, and `SPEC` in the package is the binding statement) |
 | Id / range / bytes domains | `notbefore/id/v1`, `notbefore/range/v1`, `notbefore/bytes/v1` |
@@ -591,6 +596,8 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 ## 16. Changelog
 
 **0.5.1 (2026-09-12, later).** §7.11 hardened after code review (ERR-013): both TSAs required, no failing token tolerated, gate on the LATEST token, no candidate cutoff in the rule, JCS/no-float canonical form, "timestamping" not "registration". Package and spec versions decoupled (§12). `DECISION-LOG.md` sketches the write-once decision log that would turn timestamping into registration.
+
+**0.9 (2026-09-13).** After the second adversarial review (ERR-015): §7.13 publication evidence comes from Rekor's signed entries, never a record wrapper, and a verifier halts rather than advancing when it cannot establish a candidate's eligibility; receipts, bundles and `check-bundle` return VERIFIED / DEGRADED / INVALID (exit 0 / 2 / 1), bind the transcript to the signed contract and re-run the operation when the input is bundled; a missing checkpoint fails for checkpointed pulses; range spans > 2^64 are refused. `notbefore` 0.12.0.
 
 **0.8 (2026-09-13).** The commit-bound value (§4.2a) and commit-bound contracts (§7.13, `contract/3`, the default for signed contracts): the consumer's value is \\(V^*\\) fixed by the commit and the drand round; a withheld reveal changes nothing (FULL-ATTESTED / COMMITMENT-FALLBACK); commit eligibility requires a Rekor anchor before the round, making it a pre-round, irrevocable fact. Adopted by Bill after the 2026-09-13 adversarial review (`FALLBACK.md`, with the publication-evidence refinement). `notbefore` 0.11.0.
 

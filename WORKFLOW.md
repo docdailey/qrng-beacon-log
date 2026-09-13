@@ -35,7 +35,8 @@ The input file is committed by SHA-256 and never leaves your machine unless you 
 
 ## What a reviewer or auditor does
 
-1. `pip install notbefore` and `notbefore check-bundle <bundle>`. Offline. It re-verifies the manifest, the contract's
+1. `pip install notbefore` and `notbefore check-bundle <bundle>`. Offline. The verdict is VERIFIED (exit 0), DEGRADED
+   (exit 2: a dry run, or the input was not included so the result was not re-executed) or INVALID (exit 1). It re-verifies the manifest, the contract's
    canonical hash, the signer's statement, both RFC 3161 tokens (against roots pinned in *their* installation, not the
    bundle's copy), the decision-log receipt (signed checkpoint + Merkle inclusion under the vendored log key), the
    transcript's binding, the pulse pair's host signatures, chain links and drand BLS signature, the commit's tokens,

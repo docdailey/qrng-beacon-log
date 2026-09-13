@@ -9,7 +9,7 @@
 **Trust assumptions:** [`PUBLICATION.md`](PUBLICATION.md) · **Cadence + failure semantics:** [`CADENCE.md`](CADENCE.md) ·
 **Why:** [`THESIS.md`](THESIS.md) · **Keys:** [`keys/KEYS.json`](keys/KEYS.json) (history with validity windows) ·
 **Known defects:** [`ERRATA.md`](ERRATA.md) — published pulses are never edited; defects are logged and fixed forward ·
-**Independent verifications:** [`VERIFICATIONS.md`](VERIFICATIONS.md)
+**Independent verifications:** [`VERIFICATIONS.md`](VERIFICATIONS.md) · **External reviews, verbatim:** [`reviews/`](reviews/) (each answered in `ERRATA.md`)
 
 **Status: research prototype and adversarially honest design exercise — not infrastructure to consume.** From pulse
 0020 a hostile or compromised *aggregator* cannot fabricate any host's facts (host isolation, `hosts/ISOLATION.md`); a
@@ -78,7 +78,7 @@ minutes of its push, so a commit's Rekor time precedes its drand release. See `P
   "witnessed"); the request for independent witnesses is drafted in `WITNESS-ONBOARDING.md` (see `TLOG.md`).
 - **Decision contracts** (`notbefore plan` / `execute`, spec §7.11): the consumer commits rule, purpose, operation, parameters
   and input hash *before* the pulse, timestamped by two TSAs; `execute` takes no choices. Timestamping, not registration —
-  the write-once decision log that would close that is designed in `DECISION-LOG.md`.
+  the write-once decision log that closes that is live (`DECISION-LOG.md`): a signed contract's first registration per decision id is the authoritative preregistration.
 - **No silent hours.** A cycle that runs but cannot commit publishes a signed `skip` pulse naming the refusing dependency
   (v0.5.1); only a deliberately stopped timer is silent, and that is announced in `CADENCE.md` first.
 - **Not a blockchain.** Hash-linked and append-only, yes; but one writer, no consensus, no proof-of-work. The

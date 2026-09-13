@@ -187,9 +187,12 @@ were stamped from it and are superseded.
   authoritative preregistration; a superseded contract is refused by `execute`". ✅ Since 0.10.0: "`execute` fails closed —
   no confirmed registration, no output; `--allow-unregistered` produces a run labelled DEGRADED". ❌ Never present a
   DEGRADED transcript as a preregistered result.
-- Commit-bound value (spec 0.8 §4.2a/§7.13, `FALLBACK.md`, `notbefore` ≥ 0.11.0): ✅ "for a contract/3 decision the
-  operator can fail you but cannot steer you: the value \(V^*\) is fixed by the commit and the drand round, a withheld
-  reveal changes nothing, and eligibility (tokens + Rekor anchor before the round) is a pre-round fact". ✅ Say
+- Commit-bound value (spec 0.9 §4.2a/§7.13, `FALLBACK.md`, `notbefore` ≥ 0.12.0 — NOT 0.11.0, see ERR-015): ✅ "for a
+  contract/3 decision the operator can fail you but cannot steer you: the value \(V^*\) is fixed by the commit and the
+  drand round, a withheld reveal changes nothing, eligibility (tokens + Rekor anchor before the round) is a pre-round
+  fact established from Rekor's signed entries — never from the operator's anchor branch — and a verifier that cannot
+  establish it halts rather than advancing". ✅ Say "verdicts are VERIFIED / DEGRADED / INVALID; a DEGRADED receipt or
+  bundle is a dry run". ✅ Say
   "COMMITMENT-FALLBACK hours carry no QRNG provenance". ❌ Never say the operator "cannot stall" or "cannot withhold
   provenance" — it can, blindly and visibly. ❌ Never apply the steering claim to contract/1–2 or to the beacon's own
   reveal-based \(V\). ✅ "registration is write-once and

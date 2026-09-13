@@ -5,12 +5,29 @@ name: notbefore-cli
 on:
   push:
     branches: [main]
-    paths: ["cli/**", ".github/workflows/cli.yml"]
+    # every VENDORED source and the Worker: a root-only change to the verifier, keys or expectations must run the vendoring check (R9)
+    paths: ["cli/**", ".github/workflows/cli.yml", "verify.py", "tsa.py", "tlog.py", "bls_drand.py", "drand_anchor.py", "schema.py", "keys/**", "ci/anchor_lib.py", "ci/KNOWN_NONCOMPLIANT.json", "hosts/EXPECTED.json", "worker/**"]
     tags: ["cli-v*"]
   pull_request:
-    paths: ["cli/**"]
+    paths: ["cli/**", ".github/workflows/cli.yml", "verify.py", "tsa.py", "tlog.py", "bls_drand.py", "drand_anchor.py", "schema.py", "keys/**", "ci/anchor_lib.py", "ci/KNOWN_NONCOMPLIANT.json", "hosts/EXPECTED.json", "worker/**"]
   workflow_dispatch:
 jobs:
+  worker:
+    name: Decision-log Worker conformance (RFC 6962 vectors, signed notes, statements)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: pip install cryptography
+      - name: vectors from the Python side, a throwaway PKCS8 key, then the JS side must agree byte for byte
+        run: |
+          python3 worker/gen_vectors.py > /tmp/vectors.json
+          python3 -c "from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey as K; from cryptography.hazmat.primitives import serialization as S; open('/tmp/k.pem','wb').write(K.generate().private_bytes(S.Encoding.PEM, S.PrivateFormat.PKCS8, S.NoEncryption()))"
+          node worker/test_local.mjs /tmp/k.pem /tmp/vectors.json | tee /tmp/out.txt
+          ! grep -q "\[FAIL\]" /tmp/out.txt
   test:
     runs-on: ubuntu-latest
     steps:

@@ -78,7 +78,9 @@ async function verifyStatement(st, sigB64) {
   if (!ID_RE.test(st.decision_id || "")) return "decision_id must match ^[A-Za-z0-9._:/=@+-]{1,256}$";
   if (!HEX64.test(st.contract_sha256 || "")) return "contract_sha256 must be 64 hex";
   if (!HEX16.test(st.key_id || "")) return "key_id must be 16 hex";
-  if (typeof st.contract_spec !== "string" || typeof st.created_utc !== "string" || Object.keys(st).length !== 7) return "statement has unexpected shape";
+  if (Object.keys(st).length !== 7) return "statement has unexpected shape";
+  if (typeof st.contract_spec !== "string" || !/^notbefore\/contract\/\d{1,3}$/.test(st.contract_spec)) return "contract_spec must be notbefore/contract/<n>";
+  if (typeof st.created_utc !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(st.created_utc)) return "created_utc must be YYYY-MM-DDTHH:MM:SSZ";
   let pub; try { pub = unb64(st.public_key_b64); } catch { return "public_key_b64 is not base64"; }
   if (pub.length !== 32) return "public key must be 32 bytes";
   if (hex(await sha256(pub)).slice(0, 16) !== st.key_id) return "key_id is not SHA256(public_key)[:16]";
@@ -103,8 +105,8 @@ async function latestCheckpoint(env, db) {
   return { note, size, H };
 }
 async function appendEntry(env, db, st, sigB64, tokens, contract) {
-  const existing = await db.prepare("SELECT idx, seq_in_ns, received_utc, leaf FROM entries WHERE contract_sha256 = ?").bind(st.contract_sha256).first();
-  if (existing) return { ...existing, existed: true };
+  const existing = await db.prepare("SELECT idx, seq_in_ns, received_utc, leaf FROM entries WHERE key_id = ? AND decision_id = ? AND contract_sha256 = ?").bind(st.key_id, st.decision_id, st.contract_sha256).first();
+  if (existing) return { ...existing, existed: true };                            // idempotent WITHIN the signer's namespace (R7): another key claiming the same hash gets its own entry
   for (let attempt = 0; attempt < 4; attempt++) {
     const n = (await db.prepare("SELECT COUNT(*) AS c FROM entries").first()).c;
     const k = (await db.prepare("SELECT COUNT(*) AS c FROM entries WHERE key_id = ? AND decision_id = ?").bind(st.key_id, st.decision_id).first()).c + 1;
@@ -118,7 +120,7 @@ async function appendEntry(env, db, st, sigB64, tokens, contract) {
       return { idx: n, seq_in_ns: k, received_utc: received, leaf: leafText, existed: false };
     } catch (e) {                                                                // UNIQUE(idx) or UNIQUE(ns, seq) raced: recompute and retry
       if (!/UNIQUE|constraint/i.test(String(e.message || e))) throw e;
-      const again = await db.prepare("SELECT idx, seq_in_ns, received_utc, leaf FROM entries WHERE contract_sha256 = ?").bind(st.contract_sha256).first();
+      const again = await db.prepare("SELECT idx, seq_in_ns, received_utc, leaf FROM entries WHERE key_id = ? AND decision_id = ? AND contract_sha256 = ?").bind(st.key_id, st.decision_id, st.contract_sha256).first();
       if (again) return { ...again, existed: true };
     }
   }
@@ -185,7 +187,9 @@ async function handle(req, env) {
   }
   if (p === "/decisions/submit" && req.method === "POST") {
     if (+(req.headers.get("content-length") || 0) > MAX_BODY) return bad("body too large", 413);
-    let body; try { body = JSON.parse(await req.text()); } catch { return bad("body must be JSON"); }
+    const raw = await req.text();                                                    // the header is advisory: measure what arrived (R8)
+    if (enc.encode(raw).length > MAX_BODY) return bad("body too large", 413);
+    let body; try { body = JSON.parse(raw); } catch { return bad("body must be JSON"); }
     const st = body.statement, err = await verifyStatement(st, body.signature_b64); if (err) return bad(err);
     const tokens = {};
     for (const name of ["freetsa", "digicert"]) {

@@ -239,8 +239,13 @@ not change V*. Consumers that select by commit (NOTBEFORE.md §7.13, `notbefore/
 **FULL-ATTESTED** when the reveal verifies and **COMMITMENT-FALLBACK** when it does not; the value is the same.
 
 A commit counts for such consumers only if it was demonstrably public before its round: both RFC 3161 tokens strictly
-before the release **and** a Rekor anchor whose `integratedTime` precedes the release. That makes eligibility a
-pre-round, irrevocable fact: nothing decided with knowledge of rho_R can make an eligible commit ineligible or vice
-versa. The operator retains only pre-round, blind choices (skip, delay publication — visible in the log and in CI),
+before the release **and** a Rekor anchor whose **signed** `integratedTime` precedes the release. The time is read from
+Rekor's signed entry (SET), never from a record's unsigned copy; a verifier obtains it from Rekor itself when online
+(entries located by the SHA-256 of the anchor statement derived from the pulse bytes, verified under the pinned anchor
+and Rekor keys) or from a signature-verified record offline. Absence of a record in the operator's anchors branch is
+not evidence: a verifier that cannot establish a candidate's eligibility MUST halt rather than advance to a later
+commit; only Rekor's own "no entry" after the 1500 s anchor grace period, or a signed time at/after the release,
+proves ineligibility. That makes eligibility a pre-round, irrevocable fact: nothing decided with knowledge of rho_R
+can make an eligible commit ineligible or vice versa (ERR-015). The operator retains only pre-round, blind choices (skip, delay publication — visible in the log and in CI),
 which cannot bias a decision; it can still withhold provenance and stall the cadence. Rationale and residuals:
 `FALLBACK.md`.
