@@ -163,6 +163,8 @@ the other's datagram in the kernel (`SO_TIMESTAMPNS`) and in userspace. Clock st
 | 18:15:00 | `chrt -f 50` (SCHED_FIFO) | **+7.1 µs** | **+7.8 µs** | +25.8 µs | 362 µs | 325 µs |
 | 18:17:00 | normal + no deep idle (`cpu_dma_latency` 0) | +6.3 µs | no data: the SSH launch to p550 timed out | | | |
 | 18:18:00 | `chrt -f 50` again | **+5.3 µs** | **+8.0 µs** | +294 µs | 344 µs | 259 µs |
+| 18:19:00 | normal + no deep idle (`/dev/cpu_dma_latency` 0 held) | +6.3 µs | **+8.0 µs** | **+23.0 µs** | 287 µs | 1,410 µs (k3-side outlier) |
+| 18:20:00 | `chrt -f 50` pinned to CPU0 (the i210 IRQ CPU) | +6.2 µs | +278.8 µs | +275.8 µs | 283 µs | 327 µs |
 
 One-way = the peer's send stamp to the receiver's kernel stamp, both software; serializing and the first `sendto` cost
 80–105 µs on either host and are inside these numbers.
@@ -177,12 +179,15 @@ What it shows:
   thread, which the FIFO-50 IRQ threads (all five igb vectors sit on CPU0 at FIFO 50) hold off around the second. The
   cadence service does not sleep on the clock, it waits on the PPS event, which is why the live trigger wakes 15–19 µs
   after the edge regardless.
-- **The pps1 edge stamp is still bimodal and still unexplained.** +26 µs once (18:15) and +269/+277/+294 µs in the
-  other lab runs, +267/+274/+276 µs in the three live cycles: about one fast stamp in seven, and the FIFO repeat at
-  18:18 did not reproduce the fast one, so priority is not the knob. The F9T edge is at the true second and the i210
-  latches it in hardware for ts2phc; only this software stamp (igb "other" vector 178 on CPU0, an RT IRQ thread at
-  FIFO 50) is late. Idle exit (the 60 µs `cpu-retentive` state) and CPU0 placement are being tested next; nothing here
-  is claimed yet.
+- **The ~275 µs is CPU0 leaving its deep idle state.** p550's `sbi_cpuidle` offers WFI and `cpu-retentive` (advertised
+  exit latency 60 µs). All five i210 interrupt vectors sit on CPU0. With the deep state held off by PM QoS
+  (`/dev/cpu_dma_latency` = 0) a *normal-priority* task woke +8.0 µs and the pps1 edge stamp was +23 µs (18:19). With
+  a FIFO task pinned to CPU0 and sleeping there, both its own wake and the edge stamp came at +276–279 µs (18:20): the
+  first event after CPU0 sleeps pays ~270 µs whichever it is. The 18:15 fast stamp was the unpinned FIFO spinner
+  happening to keep CPU0 busy; at 18:18 it ran elsewhere. So: the late p550 wakes at normal priority (6.8 ms, 360 µs)
+  and the bimodal edge stamp seen in every live cycle (+267/+274/+276 µs) are one cause, idle exit on p550's SoC being
+  far slower than advertised, and priority was never the knob. The F9T edge is at the true second and the i210 latches
+  it in hardware for ts2phc; only the software stamp, and everything the cadence service does after it, was late.
 - **The clocks agree to the resolution of software stamps.** In the 18:14 run the two one-way delays were 415 and
   417 µs: a clock offset d would make them differ by 2d, so |d| ≲ a few µs, consistent with the PHC readings (k3
   16 ns → −101 ns from its PHC across the runs; p550 ~1.7 µs, inside its 8 µs PHC read bracket).
@@ -193,5 +198,7 @@ Design option this opens (not built; Bill's call): k3 starts at its own instant 
 record as it arrives ~2.5 ms later, so the datagram attests the instant instead of causing the start. The pulse would then
 name k3's PTP-disciplined clock as the start and p550's i210 event as the independent witness of the same second. What is
 lost: today the start is *caused* by a hardware event on another host; with this change it is caused by k3's clock and
-*confirmed* by that event. SCHED_FIFO matters for p550 only if p550 ever fires on its clock (7.8 and 8.0 µs at FIFO 50 against 360 µs and 6.8 ms
-without); it does not move the pps1 edge stamp.
+*confirmed* by that event. Independent of that decision: keeping CPU0 out of `cpu-retentive` on p550 (per-CPU `cpuidle/state1/disable`, or PM QoS
+held by the cadence service for its last 30 ms) moves the edge stamp from ~+275 µs to ~+23 µs and with it the trigger,
+the datagram and k3's start, about 250 µs each. Applied on CPU0 as a reversible experiment at 18:21Z (sysfs, not
+persistent); the 19:00 cycle's `hw_event.edge_after_instant_ns` shows whether it holds live.
