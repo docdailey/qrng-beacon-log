@@ -53,9 +53,11 @@ Established, independently checkable: who committed (signature), what (contract 
 receipt time fixed by anchored checkpoints), that it was the authoritative preregistration (first entry in a write-once
 namespace), that the value was not yet knowable (a future drand round; the beacon's own entropy committed before it),
 how the result was computed (deterministic derivation, transcript), and that none of it was silently rewritten
-(checkpoints, witnesses, repository mirror, Rekor). Not established: that two decision ids or two keys are not the same
-experiment — that is what the registry-bound `decision_id` convention is for — and, for now, that the beacon operator
-could not withhold a reveal after seeing its value (visible, but a bias lever; the fix is a protocol decision,
-`FALLBACK.md`). Claims discipline: `CLAIMS.md`.
+(checkpoints, witnesses, repository mirror, Rekor). Also established since 0.11.0 (commit-bound contracts): that the beacon operator could not have steered the value —
+it is fixed by the commit and the drand round, a withheld reveal changes nothing (the hour is labelled
+COMMITMENT-FALLBACK and carries no QRNG provenance), and a commit only counts if it was Rekor-anchored before its
+round. Not established: that two decision ids or two keys are not the same experiment — that is what the
+registry-bound `decision_id` convention is for — nor that the operator cannot stall (it can, blindly and visibly).
+Claims discipline: `CLAIMS.md`.
 
 *Spec: `NOTBEFORE.md` (0.6, §7.11–7.12). Log: `DECISION-LOG.md`. Details and every command: `USAGE.md`.*

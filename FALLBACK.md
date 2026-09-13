@@ -1,4 +1,4 @@
-# FALLBACK.md — selective abort by the operator, and the commit-bound value (design note, NOT built)
+# FALLBACK.md — selective abort by the operator, and the commit-bound value (ADOPTED 2026-09-13; spec 0.8 §4.2a, §7.13)
 
 **The attack** (external adversarial review, 2026-09-13). The operator commits E, waits for drand round R, computes
 V = H(D_mix ‖ E ‖ ρ_R ‖ chain ‖ R), and only then decides whether to reveal. A withheld reveal becomes a signed
@@ -50,7 +50,19 @@ pulse, but defined so any verifier computes it from the commit + drand alone. `v
 CLAIMS (a hostile operator can no longer bias a consumer decision; it can still withhold provenance and stall the
 cadence — say exactly that). Legacy: contract/1–2 keep the reveal-based V for their own transcripts.
 
-**Decision required.** Keep the hostile operator out of scope (status quo, documented), or adopt V* (a protocol
-change deserving its own version, domain separation and a migration note). Recommendation: adopt V*. It removes the
-last operator lever at the cost of one hash and one label, and it makes the beacon's promise crisper: *the operator
-can fail you, but cannot steer you.*
+**Adopted** (Bill, 2026-09-13: "do it"), with one refinement found while building it. The consumer's value V* is
+unabortable, but *eligibility* must also be a pre-round fact, or the operator regains a lever by withholding a
+commit's **publication** (mint privately, learn ρ_R, publish only if favourable — leaving no trace). So a commit
+counts only if it was demonstrably public before its round: both RFC 3161 tokens strictly before the release **and** a
+Rekor anchor with `integratedTime` before the release. Then no decision taken with knowledge of ρ_R can change which
+commit a contract consumes: an unanchored commit cannot be made eligible afterwards, an anchored one cannot be
+withdrawn. What the operator keeps is blind and visible — skip, delay, withhold provenance — i.e. denial, not bias.
+Practicality: since live anchoring began (2026-09-12 12:47 UTC) every commit has been anchored 129–208 s before its
+round (median 204 s). An hour whose anchor is late is simply not eligible for contract/3 consumers; a think-side
+anchoring step (rather than waiting for GitHub Actions) would widen that margin and is the natural next hardening.
+
+Implementation: `PROTOCOL.md` §"Commit-bound value"; `NOTBEFORE.md` §4.2a, §7.13; `cli/notbefore/commitbound.py`
+(`value`, `select_commit`, `publication_evidence`, `verify_round`); `check.check_commit`; contract/3 is the default for
+signed contracts from `notbefore` 0.11.0; `receipt`/`bundle`/`check-bundle` re-derive V* offline from the bundled
+commit and the transcript's drand signature. Test 32 executes one contract against the log and against a copy of the
+log with the reveal removed and gets the same V*, seed and output. *The operator can fail you, but cannot steer you.*

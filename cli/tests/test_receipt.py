@@ -23,7 +23,7 @@ def test_40_receipt_is_regenerated_from_verified_facts(tmp_path):
     f, c, t = _planned_and_executed(tmp_path)
     rc, o, e = nb("receipt", str(c), "--transcript", str(t), "--no-anchors", "--out", str(tmp_path / "r.md"), cwd=str(tmp_path)); assert rc == 0, e
     md = open(tmp_path / "r.md").read()
-    for must in ("# NotBefore decision receipt — REG-1/protocol-2/sample-1", "EXECUTED", "Key id `", "Decision id `REG-1/protocol-2/sample-1`", "pulse **23**", "sample of k = 5 from 20 records", "Pair re-verified", "## Verification trail", "derived seed recomputes"):
+    for must in ("# NotBefore decision receipt — REG-1/protocol-2/sample-1", "EXECUTED", "Key id `", "Decision id `REG-1/protocol-2/sample-1`", "commit **42**", "Commit-bound value", "sample of k = 5 from 20 records", "Commit re-verified", "## Verification trail", "derived seed recomputes"):
         assert must in md, must
     assert "WARN" in md and "no decision-log receipt" in md          # honest about what it does not have
     # a commitment-only receipt (not executed yet) says so and exits 0
@@ -36,12 +36,13 @@ def test_41_bundle_roundtrip_and_tamper(tmp_path):
     f, c, t = _planned_and_executed(tmp_path)
     z = tmp_path / "b.zip"; rc, o, e = nb("bundle", str(c), "--transcript", str(t), "--out", str(z), "--no-anchors", cwd=str(tmp_path)); assert rc == 0, e
     names = set(zipfile.ZipFile(z).namelist())
-    for must in ("MANIFEST.json", "README.md", "contract/plan.json", "contract/plan.json.sig.json", "transcript/t.json", "log/chain/pulse-0022.json", "log/chain/pulse-0023.json", "log/chain/pulse-0021.json", "log/checkpoint", "log/inclusion.json", "verifier/keys/decisions.pub", "verifier/keys/tsa/PINS.json", "verifier/VENDORED.json"):
+    tj = json.load(open(t)); n = tj["commit_seq"]
+    for must in ("MANIFEST.json", "README.md", "contract/plan.json", "contract/plan.json.sig.json", "transcript/t.json", f"log/chain/pulse-{n-1:04d}.json", f"log/chain/pulse-{n:04d}.json", f"log/chain/pulse-{n+1:04d}.json", "log/checkpoint", "log/inclusion.json", "verifier/keys/decisions.pub", "verifier/keys/tsa/PINS.json", "verifier/VENDORED.json"):
         assert must in names, must
-    assert not any(n.startswith("input/") or n.startswith("output/") for n in names)          # sensitive files stay out by default
-    man = json.loads(zipfile.ZipFile(z).read("MANIFEST.json")); assert man["bundle"] == "notbefore/bundle/1" and man["seq"] == 23 and man["key_id"] and man["decision_id"] == "REG-1/protocol-2/sample-1"
+    assert not any(n_.startswith("input/") or n_.startswith("output/") for n_ in names)          # sensitive files stay out by default
+    man = json.loads(zipfile.ZipFile(z).read("MANIFEST.json")); assert man["bundle"] == "notbefore/bundle/1" and man["commit_seq"] == n and man["key_id"] and man["decision_id"] == "REG-1/protocol-2/sample-1"
     rc, o, e = nb("check-bundle", str(z), cwd=str(tmp_path)); assert rc == 0, e
-    for must in ("files match the manifest", "decision statement by", "bound to this contract", "pulse_hash == SHA-256(canonical core)", "vendored verify.py offline", "derived seed recomputes", "is included in that checkpoint", "2 RFC 3161 token(s) verify against the pinned roots"):
+    for must in ("files match the manifest", "decision statement by", "bound to this contract", "pulse_hash == SHA-256(canonical core)", "vendored verify.py offline", "derived seed recomputes", "is included in that checkpoint", "2 RFC 3161 token(s) verify against the pinned roots", "commit-bound value V* recomputes"):
         assert must in e, must
     # tamper inside the zip: edit the transcript's attested value -> manifest + binding fail
     d = tmp_path / "unz"; zipfile.ZipFile(z).extractall(d)
@@ -52,3 +53,17 @@ def test_41_bundle_roundtrip_and_tamper(tmp_path):
     assert (dd / "input" / "eligible.txt").read_bytes() == f.read_bytes()
     rc, o, e = nb("check-bundle", str(dd), cwd=str(tmp_path)); assert rc == 0, e
     rc, o, e = nb("bundle", str(c), "--transcript", str(t), "--out", str(dd), cwd=str(tmp_path)); assert rc != 0 and "not empty" in e   # never overwrites a bundle
+
+def test_42_commit_bound_bundle_roundtrip(tmp_path):
+    """contract/3 bundles carry the commit, its drand round and the publication evidence; check-bundle recomputes V*."""
+    f = tmp_path / "r.txt"; f.write_text("a\nb\nc\nd\ne\nf\n"); c = tmp_path / "plan.json"
+    rc, o, e = nb("plan", "--after", "2026-09-12T13:00:00Z", "--purpose", "test:cbbundle", "--sample", "2", "--out", str(c), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0, e
+    rc, o, e = nb("execute", str(c), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "t.json"), cwd=str(tmp_path)); assert rc == 0, e
+    t = json.load(open(tmp_path / "t.json")); assert t["value_rule"] == "commit-bound"
+    rc, o, e = nb("receipt", str(c), "--transcript", str(tmp_path / "t.json"), "--out", str(tmp_path / "r.md"), cwd=str(tmp_path)); assert rc == 0, e
+    md = open(tmp_path / "r.md").read(); assert "Commit-bound value" in md and "Provenance **FULL-ATTESTED**" in md and "Rekor-logged" in md and "V*" in md
+    z = tmp_path / "b.zip"; rc, o, e = nb("bundle", str(c), "--transcript", str(tmp_path / "t.json"), "--out", str(z), cwd=str(tmp_path)); assert rc == 0, e
+    names = set(zipfile.ZipFile(z).namelist()); n = t["commit_seq"]
+    for must in (f"log/chain/pulse-{n:04d}.json", f"log/chain/pulse-{n+1:04d}.json", f"log/anchors/pulse-{n:04d}.anchor.json", "log/inclusion.json"): assert must in names, must
+    rc, o, e = nb("check-bundle", str(z), cwd=str(tmp_path)); assert rc == 0, e
+    for must in ("BLS-verifies under the pinned quicknet key (offline)", "commit-bound value V* recomputes", "bundled Rekor record", "FULL-ATTESTED", f"commit {n:04d}: vendored verify.py offline"): assert must in e, must

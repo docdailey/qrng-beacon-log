@@ -1,6 +1,6 @@
 # NotBefore — specification
 
-**Status:** draft 0.7, 2026-09-13 — 0.6 with **execution failing closed on the decision log** (§7.12: an unconfirmed registration is a refusal, not a warning); 0.6 added signed contracts and the write-once decision log (§7.12: a consumer identity, `contract/2`, and a second transparency log in which the first statement per decision wins); 0.5 added decision contracts (§7.11: the consumer's commitment, timestamped before the pulse); 0.4 added the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
+**Status:** draft 0.8, 2026-09-13 — 0.7 plus the **commit-bound value** (§4.6, §7.13: contracts consume V* fixed by the commit and the drand round, so a withheld reveal cannot change or void a decision); 0.7 made execution fail closed on the decision log (§7.12: an unconfirmed registration is a refusal, not a warning); 0.6 added signed contracts and the write-once decision log (§7.12: a consumer identity, `contract/2`, and a second transparency log in which the first statement per decision wins); 0.5 added decision contracts (§7.11: the consumer's commitment, timestamped before the pulse); 0.4 added the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
 **Implements over:** `qrng-beacon-log` protocol v0.5 (live log)  
 **Normative language:** MUST / MUST NOT / SHOULD / MAY
 
@@ -162,6 +162,19 @@ Reveal MUST be pushed **≤ 600 s** after `release(R_target)`. GNSS reveal ancho
 ### 4.3 Failure
 
 If the reveal cannot be published in time, the chain MUST grow a signed `failure` bound to the commit pulse hash. Consumers MUST treat that hour as having **no** \(V\). There is no substitute leaf and no “use last hour.”
+
+### 4.2a Commit-bound value V* (spec 0.8)
+For any v0.5 commit with commitment \(C\), chain hash and target round \(R\), once round \(R\) exists:
+
+\[ V^* = \mathrm{SHA256}(\texttt{"notbefore/commit-bound/v1"} \,\|\, C \,\|\, \rho_R \,\|\, \mathrm{chain\_hash} \,\|\, R_{be8}) \]
+
+(129-byte preimage; \(\rho_R = \mathrm{SHA256}(\sigma_R)\) BLS-verified under the pinned quicknet key). \(V^*\) is fixed by data
+the operator committed to before \(\rho_R\) was knowable and by data nobody here controls; no reveal, failure, skip or
+silence afterwards changes it. In the random-oracle model it is as unpredictable as \(E \oplus\) drand (\(C\) is a hash of
+\(E\)). The reveal keeps its role as **provenance**: it shows \(C\) committed to genuine QRNG bytes and lets the beacon's
+own \(V\) (§4.2) be recomputed. Labels: **FULL-ATTESTED** (reveal verifies) / **COMMITMENT-FALLBACK** (it does not).
+\(V^*\) is never published in a pulse; every verifier derives it (`notbefore.commitbound.value`). Normative text:
+`PROTOCOL.md` §"Commit-bound value".
 
 ### 4.3a Skip (protocol v0.5.1)
 
@@ -336,6 +349,27 @@ after seeing the thing that mattered. **What it does not prove:** that the *only
 A user can still timestamp several and publish one; §7.12 closes that with the write-once decision log. (Before 0.6
 the defence was the same as for any preregistration — publish the hash where it cannot be quietly withdrawn.)
 
+### 7.13 Commit-bound contracts — the operator cannot steer (spec 0.8)
+Since 0.8 a signed contract is `notbefore/contract/3`: contract/2 plus `value: {rule: "commit-bound", domain:
+"notbefore/commit-bound/v1"}` and the selection rule `first-eligible-commit-released-at-or-after(after_utc)`.
+**Commit eligibility:** protocol v0.5, seq ≥ 20, not KNOWN-NONCOMPLIANT, the vendored verifier passes on the commit
+(host statements, chain link), both RFC 3161 tokens verify with the LATEST strictly before the round release, **and**
+a Rekor anchor for the commit with `integratedTime` strictly before the release (third-party evidence the commit was
+public before the randomness existed). A commit lacking any of these is passed over *by rule*, and the transcript
+says so. **Execution** computes \(V^*\) (§4.2a) from the selected commit and \(\rho_R\) — taken from the verifying
+reveal (FULL-ATTESTED) or fetched from drand and BLS-verified under the pinned key (COMMITMENT-FALLBACK); while the
+reveal window (600 s) is still open and no reveal exists it MUST wait (exit 3) so the label is final — and derives
+\(S = \mathrm{SHA256}(D_{derive} \| V^* \| P)\) exactly as before. The transcript carries `value_rule`, `provenance`,
+`commit_bound_value`, `commit_seq`, `reveal_seq` (or null), the drand round with its signature (so a bundle can
+re-verify offline), and `publication_evidence` (the Rekor record's time relative to the release). `contract/1` and
+`contract/2` keep the reveal-based rule for their own transcripts.
+
+**What this closes.** After the round exists the operator knows \(V^*\) but has no second value to choose: revealing,
+failing or staying silent leaves it unchanged, and eligibility was fixed before the round by clocks the operator does
+not run. **What remains:** the operator can still stall (skip, delay publication or anchoring — all before knowing
+\(\rho_R\), hence blind, and all visible), and can withhold *provenance* for an hour. Operational note: since
+2026-09-12 12:47 UTC every commit has been Rekor-anchored 129–208 s before its round.
+
 ### 7.12 Signed contracts and the decision log — first statement wins (spec 0.6)
 **Identity.** `notbefore keygen` creates one Ed25519 key per consumer (`~/.config/notbefore/identity.key`, 0600, never
 uploaded); `key_id = SHA256(raw public key)[:16]` (the log's own key convention, PROTOCOL.md §5). There is no
@@ -425,7 +459,7 @@ notbefore bytes    <seq> --purpose <P> --n 32              # hex bytes (public)
 notbefore keygen                                           # once: the consumer identity (Ed25519) that signs decision statements (§7.12)
 notbefore plan --after <UTC> --purpose <P> --sample 12 <file>   # signed decision contract: two RFC 3161 tokens + write-once decision-log entry (also --split/--assign/--id/--range/--bytes/--seed; --decision-id, --disclose, --no-log)
 notbefore register <contract.json>                         # (re)submit a signed contract's statement to the decision log, idempotently
-notbefore execute <contract.json>                          # no choices: rule-selected pulse, latest token before the round, FIRST entry for its decision_id (--require-log), committed input only
+notbefore execute <contract.json>                          # no choices: rule-selected COMMIT (contract/3: value V*, FULL-ATTESTED / COMMITMENT-FALLBACK; exit 3 = reveal window still open), latest token before the round, FIRST entry for its decision_id, committed input only
 notbefore receipt <contract.json>                          # one-page human-readable receipt; every line re-derived and re-verified (WORKFLOW.md)
 notbefore bundle <contract.json> --out b.zip               # self-contained verification bundle: contract+sidecars, transcript, pulse pair+tokens+checkpoint+proofs+anchors, decision-log leaf/proof, keys, README, MANIFEST
 notbefore check-bundle b.zip                               # OFFLINE re-verification of a bundle with this installation's pinned keys and roots
@@ -557,6 +591,8 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 ## 16. Changelog
 
 **0.5.1 (2026-09-12, later).** §7.11 hardened after code review (ERR-013): both TSAs required, no failing token tolerated, gate on the LATEST token, no candidate cutoff in the rule, JCS/no-float canonical form, "timestamping" not "registration". Package and spec versions decoupled (§12). `DECISION-LOG.md` sketches the write-once decision log that would turn timestamping into registration.
+
+**0.8 (2026-09-13).** The commit-bound value (§4.2a) and commit-bound contracts (§7.13, `contract/3`, the default for signed contracts): the consumer's value is \\(V^*\\) fixed by the commit and the drand round; a withheld reveal changes nothing (FULL-ATTESTED / COMMITMENT-FALLBACK); commit eligibility requires a Rekor anchor before the round, making it a pre-round, irrevocable fact. Adopted by Bill after the 2026-09-13 adversarial review (`FALLBACK.md`, with the publication-evidence refinement). `notbefore` 0.11.0.
 
 **0.7 (2026-09-13).** Execution fails closed on the decision log for `contract/2` (§7.12); `--allow-unregistered` is the only escape hatch and labels the run DEGRADED; decision-log leaves are bound explicitly to the queried namespace, live and offline. Both from an external adversarial review. The same review's remaining finding — selective abort by the operator — is a protocol decision recorded in `FALLBACK.md`, not yet adopted. \(V\), \(S\) and all derived functions unchanged. `notbefore` 0.10.0.
 

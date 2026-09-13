@@ -176,6 +176,12 @@ $ notbefore execute notbefore-plan-chart-audit-2026-q4.json       # after 2026-1
 transcript written: notbefore-executed-3551….json
 ```
 
+**Which randomness.** Since 0.11.0 a signed contract is *commit-bound*: the rule selects the first eligible **commit**
+(verified, both TSA tokens and its Rekor anchor before its round) and the value is V* = SHA-256("notbefore/commit-bound/v1"
+‖ C ‖ ρ ‖ chain ‖ R) — fixed the moment the drand round exists. If the operator revealed, the hour is **FULL-ATTESTED**
+(QRNG provenance shown); if not, **COMMITMENT-FALLBACK** — same V*, same output, provenance not demonstrated. The
+transcript says which. `execute` exits 3 while a reveal window is still open (run it again after the deadline).
+
 `execute` refuses if the statement does not verify for *this* contract, key and decision_id; if either TSA token is
 missing or fails to verify; if the *latest* token is not strictly before the selected round (the decision could have
 been finalized knowing V); if another contract was registered first under the decision_id; if the registration was

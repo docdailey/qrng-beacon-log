@@ -1,6 +1,6 @@
 """NOTBEFORE.md §14 acceptance tests, run against the repository checkout two levels up (or NOTBEFORE_LOG_DIR).
 Network: drand refetch + Rekor refetch are exercised unless NOTBEFORE_OFFLINE=1."""
-import os, sys, json, subprocess, shutil, tempfile, hashlib, pytest
+import os, sys, json, subprocess, shutil, tempfile, hashlib, re, pytest
 CLI_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG = os.environ.get("NOTBEFORE_LOG_DIR") or os.path.dirname(CLI_DIR)
 OFF = ["--offline"] if os.environ.get("NOTBEFORE_OFFLINE") == "1" else []
@@ -190,8 +190,8 @@ def test_24_decision_contract_plan_execute(tmp_path):
     out2 = tmp_path / "plan2.json"; rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:audit", "--sample", "12", "--out", str(out2), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0
     rc1, o1, e1 = nb("execute", str(out2), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "t1.json"), cwd=str(tmp_path)); assert rc1 == 0, e1
     rc2, o2, e2 = nb("execute", str(out2), "--input", str(f), "--allow-unregistered", "--transcript", "none", cwd=str(tmp_path)); assert o1 == o2 and len(o1.split()) == 12
-    assert "selected by rule" in e1 and "reveal 0023" in e1, e1           # 0022 released 03:05:27Z -> first eligible reveal at/after 03:00 is 0023
-    t = json.load(open(tmp_path / "t1.json")); assert t["contract_sha256"] and t["selected_by_rule"] and t["seq"] == 23
+    assert "selected by rule" in e1 and "commit 0042" in e1, e1           # contract/3: commits before 0042 have only RETROACTIVE anchors -> passed over; 0042 is the first with a pre-round anchor
+    t = json.load(open(tmp_path / "t1.json")); assert t["contract_sha256"] and t["selected_by_rule"] and t["commit_seq"] == 42 and t["seq"] == 43 and t["provenance"] == "FULL-ATTESTED"
     # tampering with the committed input is refused
     f.write_text("\n".join(f"chart-{i:03d}" for i in range(29)) + "\nchart-999\n")
     rc, o, e = nb("execute", str(out2), "--input", str(f), "--allow-unregistered", "--transcript", "none", cwd=str(tmp_path)); assert rc == 1 and "not the committed bytes" in e
@@ -234,8 +234,16 @@ def test_27_rule_traverses_failures_without_a_cutoff(tmp_path):
         p = log / "chain" / f"pulse-{seq:04d}.json"; j = json.load(open(p)); v = j["core"]["derived"]["attested_value"]; j["core"]["derived"]["attested_value"] = ("00" if v[:2] != "00" else "11") + v[2:]; json.dump(j, open(p, "w"))
     f = tmp_path / "r.txt"; f.write_text("a\nb\nc\n"); c = tmp_path / "c.json"
     rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:trav", "--sample", "1", "--out", str(c), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path), log=str(log)); assert rc == 0
-    rc, o, e = nb("execute", str(c), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path), log=str(log))
+    c2 = _as_contract2(c)                                                          # the reveal-based rule (contract/2) is what traverses failed reveals
+    rc, o, e = nb("execute", str(c2), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path), log=str(log))
     assert rc == 0 and "reveal 0035" in e and e.count("passed over by rule") >= 6, e
+
+def _as_contract2(c3_path):
+    """Rewrite a contract/3 file as a signed contract/2 (reveal-based rule) beside it; returns its path."""
+    import notbefore.contract as C, notbefore.decisionlog as DL, notbefore.identity as I
+    j = json.load(open(c3_path)); j["spec"] = "notbefore/contract/2"; j.pop("value", None); j["selection"]["rule"] = C.RULE; j["selection"]["eligibility"] = "reveal"
+    p2 = str(c3_path).replace(".json", ".v2.json"); h = C.write(j, p2)
+    priv, pub, kid, pub_b64 = I.load(os.environ["NOTBEFORE_KEY"]); st = DL.statement(h, j["decision_id"], kid, pub_b64, j["spec"]); DL.write_signature(p2, st, DL.sign_statement(priv, st)); return p2
 
 def test_28_tsa_trust_roots_are_pinned_not_borrowed(tmp_path, monkeypatch):
     """ERR-014: RFC 3161 tokens verify only against the anchors shipped in verifier/keys/tsa — never the host store,
@@ -275,7 +283,8 @@ def test_29_identity_and_signed_contracts(tmp_path, monkeypatch):
     rc, o, e = nb("whoami"); kid = o.split()[0]; assert rc == 0 and len(kid) == 16
     f = tmp_path / "r.txt"; f.write_text("\n".join(f"p{i}" for i in range(9)) + "\n"); c = tmp_path / "c.json"
     rc, o, e = nb("plan", "--after", "2026-09-12T03:00:00Z", "--purpose", "test:signed", "--decision-id", "trial:abc@v1", "--sample", "2", "--out", str(c), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0, e
-    j = json.load(open(c)); assert j["spec"] == "notbefore/contract/2" and j["signer"]["key_id"] == kid and j["decision_id"] == "trial:abc@v1"
+    import notbefore.contract as C
+    j = json.load(open(c)); assert j["spec"] == C.CONTRACT_SPEC and j["signer"]["key_id"] == kid and j["decision_id"] == "trial:abc@v1"
     st, sig = DL.read_signature(str(c)); assert DL.verify_statement(st, sig)[0] and st["contract_sha256"] == hashlib.sha256(open(c, "rb").read()).hexdigest()
     base = [str(c), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "t.json"), "--no-anchors"]
     rc, o, e = nb("execute", *base, cwd=str(tmp_path)); assert rc == 0 and "Ed25519 statement verifies" in e and len(o.split()) == 2, e
@@ -358,3 +367,38 @@ def test_31_live_decision_log_roundtrip(tmp_path, monkeypatch):
     rc, o, e = nb("execute", str(c2), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "not the first registered" in e, e
     rc, o, e = nb("execute", str(c1), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "AT/AFTER the round release" in e, e   # registered today, round in the past
     rc, o, e = nb("register", str(c1), cwd=str(tmp_path)); assert rc == 0 and "already present" in e                     # idempotent
+def test_32_commit_bound_value_is_unabortable(tmp_path):
+    """§4.6 / §7.13 (FALLBACK.md): a signed contract is commit-bound by default. The rule selects the first eligible COMMIT
+    (verified, tokens and Rekor anchor before its round); V* = H(D || C || rho || chain || R) is the same whether the
+    operator revealed (FULL-ATTESTED) or not (COMMITMENT-FALLBACK, rho fetched from drand and BLS-verified). Shown by
+    executing the same contract against the log and against a copy of the log with the reveal removed."""
+    import shutil, notbefore.commitbound as CB
+    from notbefore.log import LogSource
+    f = tmp_path / "r.txt"; f.write_text("\n".join(f"x{i}" for i in range(9)) + "\n"); c = tmp_path / "c.json"
+    rc, o, e = nb("plan", "--after", "2026-09-12T13:00:00Z", "--purpose", "test:cb", "--sample", "3", "--out", str(c), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0, e
+    j = json.load(open(c)); assert j["spec"] == "notbefore/contract/3" and j["value"]["rule"] == "commit-bound" and j["selection"]["rule"] == CB.RULE
+    rc, o, e = nb("execute", str(c), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "full.json"), cwd=str(tmp_path)); assert rc == 0, e
+    t = json.load(open(tmp_path / "full.json")); assert t["value_rule"] == "commit-bound" and t["provenance"] == "FULL-ATTESTED" and t["commit_seq"] >= 42 and t["reveal_seq"] == t["commit_seq"] + 1, t
+    n = t["commit_seq"]; com = json.load(open(os.path.join(LOG, "chain", f"pulse-{n:04d}.json")))["core"]; rev = json.load(open(os.path.join(LOG, "chain", f"pulse-{n+1:04d}.json")))["core"]
+    buf = b"notbefore/commit-bound/v1" + bytes.fromhex(com["derived"]["entropy_commitment"]) + bytes.fromhex(rev["drand"]["randomness"]) + bytes.fromhex(com["chain_hash"]) + int(com["derived"]["target_round"]).to_bytes(8, "big")
+    assert len(buf) == 129 and hashlib.sha256(buf).hexdigest() == t["commit_bound_value"] == CB.value(com["derived"]["entropy_commitment"], rev["drand"]["randomness"], com["chain_hash"], com["derived"]["target_round"])
+    assert t["publication_evidence"]["present"] and t["publication_evidence"]["before_release_s"] > 0 and t["drand"]["signature"] == rev["drand"]["signature"]
+    # the same contract against a log in which the operator never revealed: identical V*, seed and output
+    log = tmp_path / "log"; (log / "chain").mkdir(parents=True); (log / "anchors").mkdir(); (log / "ci").mkdir()
+    for fn in os.listdir(os.path.join(LOG, "chain")):
+        m = re.match(r"pulse-(\d{4})\.json", fn)
+        if m and int(m.group(1)) <= n: shutil.copy2(os.path.join(LOG, "chain", fn), log / "chain" / fn)      # incl. .tsr / .tsa.json sidecars (prefix match)
+    shutil.copy2(os.path.join(LOG, "ci", "KNOWN_NONCOMPLIANT.json"), log / "ci" / "KNOWN_NONCOMPLIANT.json")
+    src = LogSource(log_dir=LOG); rec, stmt = src.anchor(n); src.close(); assert rec, "anchor record for the selected commit must be reachable"
+    json.dump(rec, open(log / "anchors" / f"pulse-{n:04d}.anchor.json", "w")); open(log / "anchors" / f"pulse-{n:04d}.stmt.json", "wb").write(stmt)
+    rc, o, e = nb("execute", str(c), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "fb.json"), cwd=str(tmp_path), log=str(log)); assert rc == 0, e
+    t2 = json.load(open(tmp_path / "fb.json")); assert t2["provenance"] == "COMMITMENT-FALLBACK" and t2["reveal_seq"] is None and t2["commit_seq"] == n, t2
+    assert t2["commit_bound_value"] == t["commit_bound_value"] and t2["derived_seed"] == t["derived_seed"] and t2["output_sha256"] == t["output_sha256"], "a withheld reveal must not change the value"
+    assert "COMMITMENT-FALLBACK" in e and "BLS-verified" in e
+    # a commit without pre-round publication evidence is passed over by rule (remove the anchor record)
+    os.remove(log / "anchors" / f"pulse-{n:04d}.anchor.json"); os.remove(log / "anchors" / f"pulse-{n:04d}.stmt.json")
+    rc, o, e = nb("execute", str(c), "--input", str(f), "--allow-unregistered", "--transcript", "none", cwd=str(tmp_path), log=str(log)); assert rc == 1 and "passed over by rule" in e and ("no Rekor anchor" in e or "no publication anchor" in e), e   # either the eligibility check or the anchor check names the missing anchor
+    # a legacy contract/2 (reveal-based) still executes with the reveal rule
+    c2 = _as_contract2(c)
+    rc, o, e = nb("execute", str(c2), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "v2.json"), cwd=str(tmp_path)); assert rc == 0, e
+    assert json.load(open(tmp_path / "v2.json"))["value_rule"] == "reveal" and "reveal 0043" in e

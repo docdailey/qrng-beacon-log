@@ -222,3 +222,25 @@ commitment to `E` existed (third-party TSA) before `R`, so `E` was not chosen wi
 Assumes: the commit was published before `R` (check the TSA tokens and log history); drand's threshold
 is honest; SHA-256 preimage resistance; Ed25519 keys are the operator's.
 Does not claim: fitness for gambling, certification by any body, or absolute UTC accuracy (L1-only GNSS).
+
+## Commit-bound value V* (consumer-facing; defined 2026-09-13)
+
+Every published v0.5 **commit** defines, once its target round R exists, a value that no later action of the operator
+can change:
+
+    V* = SHA256( "notbefore/commit-bound/v1" || C || rho_R || chain_hash || R_be8 )          (25 + 32 + 32 + 32 + 8 = 129 bytes)
+
+`C` = `core.derived.entropy_commitment` (= SHA256(D_commit ‖ E), fixed before R was knowable), `rho_R` = the drand
+quicknet randomness of round R (= SHA256(BLS signature), verified under the pinned group key), `chain_hash` =
+`core.chain_hash`, `R_be8` = `core.derived.target_round` as 8-byte big-endian. V* is a *derived* quantity: it is not
+published in any pulse and any verifier computes it from the commit pulse and the drand round alone. The reveal of E
+proves **provenance** (that C committed to specific QRNG bytes; the beacon's attested value V is recomputable) and does
+not change V*. Consumers that select by commit (NOTBEFORE.md §7.13, `notbefore/contract/3`) label an hour
+**FULL-ATTESTED** when the reveal verifies and **COMMITMENT-FALLBACK** when it does not; the value is the same.
+
+A commit counts for such consumers only if it was demonstrably public before its round: both RFC 3161 tokens strictly
+before the release **and** a Rekor anchor whose `integratedTime` precedes the release. That makes eligibility a
+pre-round, irrevocable fact: nothing decided with knowledge of rho_R can make an eligible commit ineligible or vice
+versa. The operator retains only pre-round, blind choices (skip, delay publication — visible in the log and in CI),
+which cannot bias a decision; it can still withhold provenance and stall the cadence. Rationale and residuals:
+`FALLBACK.md`.
