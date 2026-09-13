@@ -136,3 +136,7 @@ the dry run (exit 2); `verify 71` passed. Live Worker (deployed 03:20:57Z by the
 two keys registering one hash got entries 8 and 9, an identical retry returned the existing entry, oversized bodies
 were refused with and without Content-Length, a malformed `created_utc` was rejected.
 
+`notbefore 0.12.1` — tag `cli-v0.12.1` on `7e3c405`, verifier vendored at `4dc599a`, workflow run 34735997939, published
+2026-09-13 03:48 UTC; review residuals (value-rule binding, offline-selection notice, witness quorum in bundles). Confirmed
+from a fresh venv against PyPI: `verify 71` passed.
+

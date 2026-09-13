@@ -58,6 +58,13 @@ MIT. Data in the log: CC BY 4.0.
 
 **Releasing** (operators): `RELEASING.md` — every change to the verifier or keys needs a new package, and the flow there is the only way one gets made.
 
+## Verdicts
+
+Every verifier in the package — `verify`, `execute`, `receipt`, `bundle`, `check-bundle` — reports through one result type
+(`notbefore/policy.py`): **VERIFIED** (exit 0), **DEGRADED** (exit 2: nothing failed, required evidence missing; a dry run) or
+**INVALID** (exit 1). Human-readable lines are a rendering of that object, not the policy boundary; authenticated values (signed
+anchor times, checkpoint roots) travel in its `facts`, never re-read from unsigned copies.
+
 ## Tests
 
 `cli/tests` is partitioned (review R9): the default suite is deterministic and offline-capable, the `network` marker covers
