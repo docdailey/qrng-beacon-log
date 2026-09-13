@@ -343,19 +343,19 @@ def main(argv=None):
                 for l in F["lines"]:
                     if not a.quiet or l.startswith(("[FAIL]", "[WARN]", "[DEGRADED]")): _err(l)
                 _err(f"receipt verdict: {F.verdict}" + (" — " + "; ".join(F["degraded"]) if F["degraded"] else ""))
-                return {"VERIFIED": 0, "DEGRADED": 2, "INVALID": 1}[F.verdict]
+                return F.exit_code
             out = a.out or f"notbefore-bundle-{F['contract']['sha256'][:16]}.zip"
             try: path = RC.bundle(F, out, src=src, include_input=a.include_input, include_output=a.include_output)
             except FileExistsError as e: _err(str(e)); return 2
             for l in F["lines"]:
                 if not a.quiet or l.startswith(("[FAIL]", "[WARN]", "[DEGRADED]")): _err(l)
-            _err(f"bundle written: {path} — verification {F.verdict}" + (" (" + "; ".join(F["degraded"]) + ")" if F["degraded"] else "")); print(json.dumps({"bundle": path, "verification": F.verdict, "degraded": F["degraded"], "status": F["status"]}) if a.json else path); return {"VERIFIED": 0, "DEGRADED": 2, "INVALID": 1}[F.verdict]
+            _err(f"bundle written: {path} — verification {F.verdict}" + (" (" + "; ".join(F["degraded"]) + ")" if F["degraded"] else "")); print(json.dumps({"bundle": path, "verification": F.verdict, "degraded": F["degraded"], "status": F["status"]}) if a.json else path); return F.exit_code
         if a.cmd == "check-bundle":
             from . import receipt as RC
             verdict, lines, degraded = RC.check_bundle(a.bundle, verify_pulses=not a.no_pulse_verify)
             for l in lines:
                 if not a.quiet or l.startswith(("[FAIL]", "[WARN]", "[DEGRADED]")): _err(l)
-            _err(f"BUNDLE {verdict}" + (" (" + "; ".join(degraded) + ")" if degraded else "") + f" — {a.bundle}"); print(json.dumps({"verification": verdict, "degraded": degraded, "lines": lines}, indent=1) if a.json else verdict); return {"VERIFIED": 0, "DEGRADED": 2, "INVALID": 1}[verdict]
+            _err(f"BUNDLE {verdict}" + (" (" + "; ".join(degraded) + ")" if degraded else "") + f" — {a.bundle}"); print(json.dumps({"verification": verdict, "degraded": degraded, "lines": lines}, indent=1) if a.json else verdict); from .policy import EXIT; return EXIT[verdict]
         if a.cmd == "pin":
             ident = {}
             try:

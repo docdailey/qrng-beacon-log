@@ -33,18 +33,19 @@ def utc(x): return time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(int(float(
 def parse_tsa_time(s):
     import datetime; return int(datetime.datetime.strptime(s.strip(), "%b %d %H:%M:%S %Y %Z").replace(tzinfo=datetime.timezone.utc).timestamp())
 
+from .policy import Verification, EXIT
+
 class Facts(dict):
-    """Everything the receipt says, each item carrying its own verdict; `lines` is the audit trail.
-    verdict: VERIFIED (every required piece of evidence present and passing) | DEGRADED (nothing failed, but required
-    evidence is missing: tokens, registration, unsigned contract, result not re-executed) | INVALID (a check failed)."""
-    def __init__(self): super().__init__(); self["lines"] = []; self["ok"] = True; self["degraded"] = []
-    def say(self, ok, msg, level=None):
-        tag = level or ("PASS" if ok else "FAIL")
-        if tag == "FAIL": self["ok"] = False
-        self["lines"].append(f"[{tag}] {msg}")
-    def degrade(self, why): self["degraded"].append(why); self["lines"].append(f"[DEGRADED] {why}")
+    """Everything the receipt says, keyed for rendering, with the shared Verification policy underneath (policy.py):
+    `lines`, `ok`, `degraded` and `verdict` are the Verification's; the dict keys are the rendered facts."""
+    def __init__(self):
+        super().__init__(); self.v = Verification(); self["lines"] = self.v.lines; self["degraded"] = self.v.degraded; self["ok"] = True
+    def say(self, ok, msg, level=None): self.v.say(ok, msg, level); self["ok"] = self.v.ok
+    def degrade(self, why): self.v.degrade(why)
     @property
-    def verdict(self): return "INVALID" if not self["ok"] else ("DEGRADED" if self["degraded"] else "VERIFIED")
+    def verdict(self): return self.v.verdict
+    @property
+    def exit_code(self): return self.v.exit_code
 
 def find_transcript(contract_path, explicit=None, csha=None):
     if explicit: return explicit if os.path.exists(explicit) else None
@@ -323,13 +324,13 @@ class _BundleSource:
         rp = os.path.join(self.root, "log", "anchors", f"pulse-{seq:04d}.anchor.json"); sp = rp.replace(".anchor.json", ".stmt.json")
         return (json.load(open(rp)), open(sp, "rb").read()) if os.path.exists(rp) and os.path.exists(sp) else (None, None)
 
-def _verdict(R, degraded): return ("INVALID" if not R.ok else ("DEGRADED" if degraded else "VERIFIED")), R.lines, degraded
+def _verdict(R, degraded=None): return R.verdict, R.lines, R.degraded
 
 def check_bundle(path, verify_pulses=True):
     """Offline re-verification of a bundle with the INSTALLED release's keys and roots.
-    Returns (verdict, lines, degraded): VERIFIED | DEGRADED (nothing failed, required evidence missing) | INVALID."""
-    R = CheckResult(0); tmp = None; degraded = []
-    def degrade(why): degraded.append(why); R.lines.append(f"[DEGRADED] {why}")
+    Returns (verdict, lines, degraded): VERIFIED | DEGRADED (nothing failed, required evidence missing) | INVALID (policy.py)."""
+    R = CheckResult(0); tmp = None; degraded = R.degraded
+    degrade = R.degrade
     if zipfile.is_zipfile(path):
         tmp = tempfile.mkdtemp(prefix="nb-check-"); zipfile.ZipFile(path).extractall(tmp); root = tmp
     else: root = path

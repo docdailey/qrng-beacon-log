@@ -17,19 +17,18 @@ def known_noncompliant():
     try: return {int(k): v for k, v in json.load(open(os.path.join(VENDOR, "ci", "KNOWN_NONCOMPLIANT.json"))).get("pulses", {}).items()}
     except Exception: return {}
 
-class CheckResult:
+from .policy import Verification
+
+class CheckResult(Verification):
+    """A pulse-pair / single-commit verification: the shared Verification (lines, ok, degraded, facts, verdict) plus the pair's fields."""
     def __init__(self, seq):
-        self.seq = seq; self.ok = True; self.lines = []; self.verbose = []
+        super().__init__(); self.seq = seq
         self.commit_seq = self.pulse_hash_reveal = self.pulse_hash_commit = self.attested_value = self.drand_round = None
         self.bls_offline = False; self.tsa_pass = 0; self.anchors = "not checked"; self.tlog = "not checked"; self.cosignatures = []; self.independent_cosignatures = []
         self.log_git_sha = self.log_ref = None; self.verifier_git_sha = vendored_meta().get("git_sha")
-        self.anchor_facts = {}      # seq -> {"ok", "integratedTime", "logIndex", "uuid"} taken from the SIGNED Rekor entry (R1), never from the record wrapper
-    def say(self, ok, msg, level=None):
-        tag = level or ("PASS" if ok else "FAIL")
-        if tag == "FAIL": self.ok = False
-        self.lines.append(f"[{tag}] {msg}")
+        self.facts["anchors"] = {}; self.anchor_facts = self.facts["anchors"]   # seq -> {"ok", "integratedTime", "logIndex", "uuid"} from the SIGNED Rekor entry (R1), never the wrapper
     def summary(self):
-        return {"ok": self.ok, "bls_offline": self.bls_offline, "tsa_tokens_verified": self.tsa_pass, "anchors": self.anchors, "tlog": self.tlog,
+        return {"ok": self.ok, "verification": self.verdict, "degraded": list(self.degraded), "bls_offline": self.bls_offline, "tsa_tokens_verified": self.tsa_pass, "anchors": self.anchors, "tlog": self.tlog,
                 "cosignatures": self.cosignatures, "independent_cosignatures": self.independent_cosignatures, "lines": self.lines}
 
 def _run(args, cwd=None):
