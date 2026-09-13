@@ -50,7 +50,7 @@ def sleep_until(t_ns, spin_ns=1_500_000):
     while time.clock_gettime_ns(CLOCK_REALTIME) < t_ns: pass
 
 POLL_MS = 30
-def hw_wait(t0, pfd):
+def hw_wait(t0, pfd, warm=None):
     """Wait for the PHC's second event for second t0. Blocked in the kernel until POLL_MS before the instant, then
     polling the device (zero timeout) so the core is awake when the interrupt lands: a process blocked for a second paid
     an idle wake of 0.05-2.2 ms (staging runs 3-8); the threaded interrupt handler that stamps the event may pay the same.
@@ -68,6 +68,9 @@ def hw_wait(t0, pfd):
                 if e.errno == errno.ETIMEDOUT: continue                       # nothing in this slice - expected between two seconds' events
                 raise
             if asec >= t0: return {"assert_unix_ns": asec * 10**9 + ansec, "sequence": aseq, "woke_unix_ns": time.clock_gettime_ns(CLOCK_REALTIME)}
+        if warm is not None:
+            try: warm()                                                       # T-30 ms: sign + serialize a full-size dummy so the real one runs warm (21:00Z: 1.4 ms cold vs 0.5 ms warm)
+            except Exception: pass
         while time.time() < t0 + HW_GRACE_S:                                  # polling (zero timeout = no wait): the last POLL_MS and the grace window
             aseq, asec, ansec = fetch(0.0)
             if asec >= t0: return {"assert_unix_ns": asec * 10**9 + ansec, "sequence": aseq, "woke_unix_ns": time.clock_gettime_ns(CLOCK_REALTIME)}
@@ -118,7 +121,12 @@ def trigger(t0):
         hw = None
         if pfd is not None:
             sleep_until((t0 - 1) * 10**9 - 200_000_000)                    # be blocked in the kernel for the last second's events
-            hw = hw_wait(t0, pfd); os.close(pfd)
+            dummy = dict(static, wake={"clock": "CLOCK_REALTIME", "unix_ns": str(t0 * 10**9), "late_ns": 0, "how": "warm-up"},
+                         hw_event={"source": "i210-pps", "device": PPS_DEV, "assert_unix_ns": str(t0 * 10**9), "sequence": 0, "edge_after_instant_ns": 0, "woke_after_edge_ns": 0},
+                         phc={"device": "/dev/ptp0", "unix_ns": str(t0 * 10**9), "realtime_mid_unix_ns": str(t0 * 10**9), "phc_minus_realtime_ns": 0, "bracket_ns": 0, "tai_minus_utc_s": 37},
+                         clock_state={"epoch_ok": True, "refclock_selected": "IPHC", "epoch_row_age_s": 0.0, "ts2phc_state": "s2", "ts2phc_offset_ns": 0, "ts2phc_row_age_s": 0.0},
+                         issued_unix_ns=A.now_ns_str(), nonce=secrets.token_hex(16))
+            hw = hw_wait(t0, pfd, warm=lambda: json.dumps(sign(dummy), separators=(",", ":")).encode()); os.close(pfd)
         if hw is None:
             if time.time() < t0: sleep_until(t0 * 10**9)
             wake = time.clock_gettime_ns(CLOCK_REALTIME); how = "clock-fallback"          # clock_nanosleep to T-1.5 ms then a spin (PROTOCOL.md)

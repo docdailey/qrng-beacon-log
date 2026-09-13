@@ -246,8 +246,10 @@ event on another host" literally true. All p550 experiments were reverted; the h
 
 Against the live 21:00 numbers: p550 spent 1.4 ms between `issued` and the first copy (0.95 ms at 18:00), three times the
 warm figure, because the process has been asleep for an hour and everything is cold; k3 spent 0.94 ms between kernel
-receipt and the start against 0.47 ms warm. The cheap next steps are therefore a pre-instant warm-up on p550 (sign a
-dummy statement at T−50 ms, as k3's listener already warms its verifier) worth ~0.5–0.9 ms, and on k3 sending the
+receipt and the start against 0.47 ms warm. The first of the cheap next steps is done: the cadence service now signs and serializes a full-size dummy statement at
+T−30 ms, just before it starts polling the PPS device (`hw_wait(..., warm=)`). Same-conditions lab minutes, `--once
+--no-send` at SCHED_FIFO 30: issued → first copy **1.36 ms before, 0.73 ms after** (21:07 and 21:08Z); deployed for the
+22:00Z cycle (script sha256 `23210619a8d0…`, self-reported in the trigger's `tools`; not a pinned hash). Still open: and on k3 sending the
 canonical statement bytes so the verifier does not re-canonicalize (~0.1 ms) and a faster Ed25519 (libsodium, if
 present) for another ~0.1 ms. With the GPIO PPS gone the edge itself is at +21 µs; the remaining 2.8 ms to k3's start is
 now all userspace and wire: 0.2 ms to assemble, 1.4 ms to sign cold, 0.25 ms LAN, 0.9 ms to verify and hand over.
