@@ -160,7 +160,9 @@ the other's datagram in the kernel (`SO_TIMESTAMPNS`) and in userspace. Clock st
 |---|---|---|---|---|---|---|
 | 18:12:00 | normal priority | **+5.8 µs** | +6,827 µs | +269 µs | 388 µs | 240 µs |
 | 18:14:00 | normal priority | **+7.0 µs** | +360 µs | +277 µs | 415 µs | 417 µs |
-| 18:15:00 | `chrt -f 50` (SCHED_FIFO) | **+7.1 µs** | **+7.8 µs** | **+25.8 µs** | 362 µs | 325 µs |
+| 18:15:00 | `chrt -f 50` (SCHED_FIFO) | **+7.1 µs** | **+7.8 µs** | +25.8 µs | 362 µs | 325 µs |
+| 18:17:00 | normal + no deep idle (`cpu_dma_latency` 0) | +6.3 µs | no data: the SSH launch to p550 timed out | | | |
+| 18:18:00 | `chrt -f 50` again | **+5.3 µs** | **+8.0 µs** | +294 µs | 344 µs | 259 µs |
 
 One-way = the peer's send stamp to the receiver's kernel stamp, both software; serializing and the first `sendto` cost
 80–105 µs on either host and are inside these numbers.
@@ -175,11 +177,12 @@ What it shows:
   thread, which the FIFO-50 IRQ threads (all five igb vectors sit on CPU0 at FIFO 50) hold off around the second. The
   cadence service does not sleep on the clock, it waits on the PPS event, which is why the live trigger wakes 15–19 µs
   after the edge regardless.
-- **The pps1 edge stamp itself moved from ~+275 µs to +26 µs when a FIFO process was busy at the boundary.** The
-  "bimodal, unexplained" edge stamp in §5 is therefore interrupt service latency on p550 (idle exit and IRQ-thread
-  scheduling), not the PPS. The F9T edge is at the true second; the i210 latches it in hardware for ts2phc; only the
-  software stamp is late. Two follow-up runs test whether disabling the 60 µs `cpu-retentive` idle state alone
-  (`/dev/cpu_dma_latency` = 0) does the same, or whether it takes the priority.
+- **The pps1 edge stamp is still bimodal and still unexplained.** +26 µs once (18:15) and +269/+277/+294 µs in the
+  other lab runs, +267/+274/+276 µs in the three live cycles: about one fast stamp in seven, and the FIFO repeat at
+  18:18 did not reproduce the fast one, so priority is not the knob. The F9T edge is at the true second and the i210
+  latches it in hardware for ts2phc; only this software stamp (igb "other" vector 178 on CPU0, an RT IRQ thread at
+  FIFO 50) is late. Idle exit (the 60 µs `cpu-retentive` state) and CPU0 placement are being tested next; nothing here
+  is claimed yet.
 - **The clocks agree to the resolution of software stamps.** In the 18:14 run the two one-way delays were 415 and
   417 µs: a clock offset d would make them differ by 2d, so |d| ≲ a few µs, consistent with the PHC readings (k3
   16 ns → −101 ns from its PHC across the runs; p550 ~1.7 µs, inside its 8 µs PHC read bracket).
@@ -190,5 +193,5 @@ Design option this opens (not built; Bill's call): k3 starts at its own instant 
 record as it arrives ~2.5 ms later, so the datagram attests the instant instead of causing the start. The pulse would then
 name k3's PTP-disciplined clock as the start and p550's i210 event as the independent witness of the same second. What is
 lost: today the start is *caused* by a hardware event on another host; with this change it is caused by k3's clock and
-*confirmed* by that event. Separately, and independent of that decision, the cadence service should run at SCHED_FIFO
-(systemd `CPUSchedulingPolicy=fifo`): that alone moves p550's edge stamp, and everything after it, ~250 µs earlier.
+*confirmed* by that event. SCHED_FIFO matters for p550 only if p550 ever fires on its clock (7.8 and 8.0 µs at FIFO 50 against 360 µs and 6.8 ms
+without); it does not move the pps1 edge stamp.
