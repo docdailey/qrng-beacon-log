@@ -82,7 +82,7 @@ def tai_minus_utc():
     except Exception: return 37
 def refclock_selected():
     try:
-        src = subprocess.run(["chronyc", "sources"], capture_output=True, text=True, timeout=8).stdout
+        src = subprocess.run(["chronyc", "-n", "sources"], capture_output=True, text=True, timeout=8).stdout
         line = [l for l in src.splitlines() if l.split()[1:2] == [REFID]]; return bool(line and line[0].strip().startswith("#*"))
     except Exception: return None
 

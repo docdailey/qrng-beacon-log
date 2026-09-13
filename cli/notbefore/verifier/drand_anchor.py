@@ -28,22 +28,22 @@ def _get_one(base, path, timeout):
     with urllib.request.urlopen(urllib.request.Request(f"{base}/{CHAIN}{path}", headers=UA), timeout=timeout) as r:
         return json.loads(r.read().decode()), base
 
-def _get(path, timeout=10):
-    """Ask every relay at once and take the first good answer (2026-09-13: cold fetches from k3 were 0.24 / 0.57 / 0.91 s
-    for api/api2/api3 and the relays publish a new round 1.13-1.38 s after its release, in a different order each time).
-    The relay is not trusted for anything: the round is BLS-verified under the pinned group key by the caller."""
-    from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED, wait
+def _get(path, timeout=4):
+    """Ask every relay at once and return the FIRST good answer without waiting for the others (2026-09-13: a
+    ThreadPoolExecutor context manager joined the slow relays and held a commit for 4 s). Detached daemon threads,
+    a short per-relay timeout, and nothing blocks process exit. The relay is not trusted for anything: the round is
+    BLS-verified under the pinned group key by the caller."""
+    import threading, queue
+    q = queue.Queue()
+    def one(base):
+        try: q.put((True, _get_one(base, path, timeout)))
+        except Exception as e: q.put((False, f"{base}: {type(e).__name__}: {str(e)[:60]}"))
+    for b in ENDPOINTS: threading.Thread(target=one, args=(b,), daemon=True).start()
     errors = []
-    with ThreadPoolExecutor(max_workers=len(ENDPOINTS)) as ex:
-        pending = {ex.submit(_get_one, b, path, timeout) for b in ENDPOINTS}
-        while pending:
-            done, pending = wait(pending, return_when=FIRST_COMPLETED)
-            for f in done:
-                try:
-                    doc, base = f.result()
-                    for q in pending: q.cancel()
-                    return doc, base
-                except Exception as e: errors.append(f"{type(e).__name__}: {str(e)[:60]}")
+    for _ in ENDPOINTS:
+        ok, val = q.get(timeout=timeout + 1)
+        if ok: return val
+        errors.append(val)
     raise RuntimeError(f"all drand endpoints failed; {errors}")
 
 def round_time(rnd):

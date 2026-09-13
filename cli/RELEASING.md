@@ -158,3 +158,10 @@ carries the cadence-trigger checks (commits from 0092). Confirmed from a fresh v
 wheel's SHA-256 equals the locally built one (`ca61da44…`); with a local copy one pulse behind the site the reconcile path ran
 and the pair verified.
 
+`notbefore 0.14.0` — tag `cli-v0.14.0` on `01e17d6`, verifier vendored at `9a60e08` (content of `01e17d6`), workflow run 34762725985
+(test 3.10 + 3.12, live, Worker conformance, publish), published 2026-09-13 14:33 UTC; **spec 0.11**: `execution.via = agentd`
+accepted against pinned `agentd_sha256` (the machine-to-machine service that replaces the SSH forced command from the k3
+cutover), k3's aggregator key (`56c30593534ad116`, valid from 96) vendored, `core.cadence.self_trigger`, native blst BLS,
+relay race, concurrent TSAs. Released BEFORE the first agentd pulse because older verifiers reject those statements.
+Confirmed from a fresh venv against PyPI: `verify 95` passed; PyPI wheel SHA-256 equals the local build (`962e9fec…`).
+

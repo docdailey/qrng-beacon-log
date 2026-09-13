@@ -64,6 +64,12 @@ Measured 2026-09-11. This, not f9t, is the clock the beacon stamps with.
 ⚠️ The SoC MACs `end0`/`end1` report **`PTP Hardware Clock: none`** — no 1588 timestamping. The i210
 in the PCIe slot is the only real clock on this box. Kernel `6.6.138-rt74+` (PREEMPT_RT).
 
+**Its PPS source.** The igb driver registers the i210 PHC as a PPS source (`/dev/pps1`, `/sys/class/pps/pps1/name` =
+`ptp0`): one kernel event per PHC second, stamped in `CLOCK_REALTIME` by the interrupt handler ~20–280 µs after the boundary
+on this PREEMPT_RT kernel. Any process may block on it beside chrony (`PPS_FETCH`; `beacon` has an ACL, udev rule
+`98-beacon-pps.rules`). The i210 has `n_ext_ts 2` (SDP0 = F9T TP1, SDP1 = extts chan 1) and `n_per_out 2` with **SDP2 and
+SDP3 free** — the periodic output that can carry the instant to k3 as a physical pulse.
+
 **Since 2026-09-13 this clock also attests the beacon's hour.** `beacon-cadence.service` (`hosts/beacon-cadence.py`,
 user `beacon`) wakes at :00:00.000 UTC with `clock_nanosleep(TIMER_ABSTIME)` on `CLOCK_REALTIME` — which chrony holds
 to the i210 PHC (refid IPHC, RMS a few ns) — reads the PHC, signs a cadence trigger with the `time_attester` key and

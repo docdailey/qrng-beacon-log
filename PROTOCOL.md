@@ -140,7 +140,10 @@ A commit may carry `core.cadence.trigger`: a **statement signed by the time host
   "signature": { "alg":"ed25519", "key_id", "public_key_b64", "sig_b64", "over":"canon(statement)" } }
 ```
 `core.cadence.self_trigger` (from pulse 0096) is the aggregator's OWN wake record for the instant — `{host, scheduled_unix_s,
-wake:{unix_ns, late_ns}, phc:{...}}` — covered by the aggregator signature only (it is not a host statement). `core.cadence.source`
+start_source: "hw-datagram" | "clock", datagram_rx_unix_ns?, time_host_event?, wake:{unix_ns, late_ns}, phc:{...}}` — covered by
+the aggregator signature only (it is not a host statement). The time host's trigger statement may carry `hw_event`
+`{source, assert_unix_ns, sequence, edge_after_instant_ns, woke_after_edge_ns}`: the PHC's own second-boundary interrupt the
+process was blocked on; absent when the clock fallback fired (`wake.how` says which). `core.cadence.source`
 is `"k3 clock + p550/i210 trigger"` (both present), `"k3 clock"` (self only), `"p550/i210 cadence trigger"` (think era, 0092–0095)
 or `"<host>-timer"` (the :02 fallback, no instant); `core.cadence.targeting` is
 `"scheduled-instant+lead"` (target round = the round released **at** `scheduled_unix_s` + `derived.lead_rounds`, so

@@ -128,3 +128,6 @@ nonce cache and the ±30 s window, and by the monotonic sequence for anything th
 an unpinned key, a request addressed to another host, a stale timestamp, a replayed nonce and garbage are all refused;
 a `noop` reaches the allow-list and is refused there. The SSH forced-command lines stay installed during the transition
 and are removed once the aggregator has run on the daemon for a day.
+
+`beacon` on p550 additionally has read/write access to `/dev/pps1` (the i210 PHC's PPS event source; ACL + udev rule) so the
+cadence trigger can block on the hardware clock's own event. That grants the ability to observe second boundaries, nothing else.

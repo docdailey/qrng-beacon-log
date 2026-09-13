@@ -122,14 +122,32 @@ def sleep_until(t_ns, spin_ns=1_500_000):
         if r != 4: raise OSError(r, os.strerror(r))
     while time.clock_gettime_ns(time.CLOCK_REALTIME) < t_ns: pass
 
+HW_WAIT_MS = float(os.environ.get("BEACON_HW_TRIGGER_WAIT_MS", "25"))   # p550: wake ~0.5 ms + sign ~1 ms + LAN 0.25 ms; 25 ms is margin, not expectation
 def self_trigger(t0):
-    """Sleep to the instant on CLOCK_REALTIME, then record wake time and a PHC reading. Written to trigger/self.json."""
+    """Start the cycle ON THE PULSE when it can, on the clock when it must (Bill, 2026-09-13: "non-userspace. we know the
+    time precisely.. we shouldn't have to wait for system clock"). The time host fires on its i210 PHC's own second
+    interrupt and sends the signed datagram; if that datagram arrives here within HW_WAIT_MS of the instant the cycle
+    starts on it (start_source = hw-datagram, ~1 ms after the pulse over the LAN). Otherwise the process wakes on
+    CLOCK_REALTIME at t0 + HW_WAIT_MS (start_source = clock). A wire from the i210's periodic output to a k3 GPIO would
+    remove the network hop; until then the datagram IS the hardware event, relayed. Written to trigger/self.json."""
+    global TRIGGER_ARRIVED
+    import threading
     fd = None
     try: fd = os.open(PHC_DEV, os.O_RDONLY)
     except OSError: pass
-    sleep_until(t0 * 10**9)
-    wake = time.clock_gettime_ns(time.CLOCK_REALTIME); rec = {"host": HOST, "scheduled_unix_s": t0,
-           "wake": {"clock": "CLOCK_REALTIME", "unix_ns": str(wake), "late_ns": wake - t0 * 10**9, "how": "clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME) to T-1.5 ms, then a spin on the clock, in the aggregator process"}}
+    ev = TRIGGER_ARRIVED if TRIGGER_ARRIVED is not None else threading.Event()
+    sleep_until(t0 * 10**9)                                                  # be awake AT the instant either way
+    deadline = t0 * 10**9 + int(HW_WAIT_MS * 1e6)
+    while not ev.is_set() and time.clock_gettime_ns(time.CLOCK_REALTIME) < deadline: ev.wait(0.0002)
+    wake = time.clock_gettime_ns(time.CLOCK_REALTIME)
+    if ev.is_set():
+        src = {"start_source": "hw-datagram", "datagram_rx_unix_ns": str(ev.rx_ns), "time_host_event": (ev.statement or {}).get("hw_event"),
+               "meaning": "started on the time host's signed datagram, itself fired by the i210 PHC's second interrupt; the aggregator's clock was not consulted for the start"}
+    else:
+        src = {"start_source": "clock", "meaning": f"no hardware-originated datagram within {HW_WAIT_MS:g} ms; started on CLOCK_REALTIME"}
+    rec = {"host": HOST, "scheduled_unix_s": t0, **src,
+           "wake": {"clock": "CLOCK_REALTIME", "unix_ns": str(wake), "late_ns": wake - t0 * 10**9,
+                    "how": "clock_nanosleep to T-1.5 ms + spin to T, then wait up to HW_WAIT_MS for the time host's hardware-triggered datagram"}}
     if fd is not None:
         clk = ((~fd) << 3) | 3; best = None
         for _ in range(5):
@@ -141,6 +159,7 @@ def self_trigger(t0):
     d = os.path.join(REPO, "trigger"); os.makedirs(d, mode=0o700, exist_ok=True); path = os.path.join(d, "self.json")
     json.dump(rec, open(path, "w")); return path, rec
 
+TRIGGER_ARRIVED = None      # threading.Event set by udp_listener when a valid trigger for t0 has been written (with .rx_ns)
 def udp_listener(t0, until):
     """Accept the time host's signed cadence trigger for t0 as a UDP datagram (no session, no handshake: the signature is the
     authentication). Verified here against keys/KEYS.json (p550's active time_attester key), then written to
@@ -164,9 +183,11 @@ def udp_listener(t0, until):
             try: signed = json.loads(data); good, why = ok(signed)
             except Exception as e: good, why = False, f"{type(e).__name__}"
             if not good: log(f"udp trigger from {addr[0]} rejected: {why}"); continue
+            st = signed["statement"]
+            if TRIGGER_ARRIVED is not None: TRIGGER_ARRIVED.rx_ns = rx; TRIGGER_ARRIVED.statement = st; TRIGGER_ARRIVED.set()   # start first, write after
             d = os.path.join(REPO, "trigger"); os.makedirs(d, mode=0o700, exist_ok=True); tmp = os.path.join(d, ".pending.tmp")
             json.dump({"received_unix_ns": str(rx), "from": addr[0], "delivery": "udp", "trigger": signed}, open(tmp, "w")); os.replace(tmp, os.path.join(d, "pending.json"))
-            st = signed["statement"]; log(f"udp trigger from {addr[0]} for {t0}: p550 woke {st['wake']['late_ns'] / 1000:.1f} us after the instant, received {(rx - t0 * 10**9) / 1e6:.1f} ms after"); return
+            log(f"udp trigger from {addr[0]} for {t0}: p550 {st.get('hw_event', {}).get('source', 'clock')} trigger, p550 woke {st['wake']['late_ns'] / 1000:.1f} us after the instant, received {(rx - t0 * 10**9) / 1e6:.1f} ms after"); return
         log("no udp trigger arrived from the time host (the pulse will carry the aggregator's own wake record only)")
     threading.Thread(target=run_, daemon=True).start()
 
@@ -286,10 +307,11 @@ def precise_main(t0, commit_only=False):
         log("an unresolved commit is at the head; resuming it now instead of waiting for the instant")
         if claim_hour(hour_of(t0)): reveal_phase(*resume)
         return
+    import threading; globals()["TRIGGER_ARRIVED"] = threading.Event(); TRIGGER_ARRIVED.rx_ns = None; TRIGGER_ARRIVED.statement = None
     warm_connections(); udp_listener(t0, until=t0 + 240)
     if time.time() > t0: log(f"instant {utc(t0)} already passed during preparation ({time.time() - t0:.1f} s); minting now"); 
     path, rec = self_trigger(t0)
-    log(f"instant {utc(t0)}: woke {rec['wake']['late_ns'] / 1000:.1f} us late" + (f"; PHC-REALTIME {rec['phc']['phc_minus_realtime_ns']} ns" if "phc" in rec else ""))
+    log(f"instant {utc(t0)}: started on {rec['start_source']} {rec['wake']['late_ns'] / 1000:.1f} us after the instant" + (f"; PHC-REALTIME {rec['phc']['phc_minus_realtime_ns']} ns" if "phc" in rec else ""))
     if not claim_hour(hour_of(t0)): log("this hour was already claimed (a cycle is running); exiting"); return
     seq, target, release = commit_phase(["--self-trigger", path, "--trigger-dir", "trigger"])
     if commit_only: log("commit-only mode: stopping before the reveal (staging)"); return

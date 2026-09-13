@@ -15,7 +15,7 @@ from i210 exactly on the hour" / "we need to do it without ssh obviously. signal
                                     --no-send prints the signed trigger instead of sending it (testing)
   env CADENCE_UDP=host:port          where the datagram goes (default 192.168.68.24:5510, the aggregator k3)
 """
-import os, sys, json, time, ctypes, ctypes.util, subprocess, secrets, socket
+import os, sys, json, time, ctypes, ctypes.util, subprocess, secrets, socket, fcntl, struct, base64
 sys.path.insert(0, os.path.expanduser("~/beacon"))
 import attest_lib as A
 
@@ -24,6 +24,12 @@ PHC_DEV = os.environ.get("PHC_DEV", "/dev/ptp0"); HOSTNAME = "p550"
 UDP = os.environ.get("CADENCE_UDP", "192.168.68.24:5510")       # aggregator host:port for the signed datagram
 CHAIN_HASH = "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
 RING_DIR = "/run/beacon-clocklog"; STATE_DIR = "/run/beacon-cadence"
+# The i210 PHC registers its own PPS source (/dev/pps1 on p550): a kernel event at every PHC second boundary, stamped in
+# CLOCK_REALTIME by the interrupt handler (~22 us after the boundary on this PREEMPT_RT box). A process blocked in
+# PPS_FETCH runs 40-150 us after that stamp (measured 2026-09-13). The hardware clock decides the instant; nothing here
+# sleeps on the system clock. Constants from <sys/timepps.h> on p550 (the size field the kernel actually encodes is 8).
+PPS_DEV = os.environ.get("CADENCE_PPS_DEV", "/dev/pps1"); PPS_FETCH, PPS_SETPARAMS, PPS_GETPARAMS = 0xc00870a4, 0x400870a2, 0x800870a1
+HW_GRACE_S = 0.05                                          # if the PHC event for the instant has not come by then, fall back to the clock
 CLOCK_REALTIME, TIMER_ABSTIME, EINTR = 0, 1, 4
 DRY = False
 
@@ -42,6 +48,20 @@ def sleep_until(t_ns, spin_ns=1_500_000):
         if r == 0: break
         if r != EINTR: raise OSError(r, os.strerror(r))
     while time.clock_gettime_ns(CLOCK_REALTIME) < t_ns: pass
+
+def hw_wait(t0, pfd):
+    """Block in the kernel on the PHC's second events until the event for second t0. Returns
+    {"assert_unix_ns", "sequence", "woke_unix_ns"} or None when the stream is silent past t0 + HW_GRACE_S (fall back)."""
+    buf = bytearray(64)
+    while True:
+        remaining = t0 + HW_GRACE_S - time.time()
+        if remaining <= 0: return None
+        sec = int(remaining); struct.pack_into("qiI", buf, 48, sec, int((remaining - sec) * 1e9), 0)     # relative timeout
+        try: fcntl.ioctl(pfd, PPS_FETCH, buf, True)
+        except OSError: return None
+        woke = time.clock_gettime_ns(CLOCK_REALTIME)
+        aseq = struct.unpack_from("I", buf, 0)[0]; asec, ansec = struct.unpack_from("qi", buf, 8)
+        if asec >= t0: return {"assert_unix_ns": asec * 10**9 + ansec, "sequence": aseq, "woke_unix_ns": woke}
 
 def phc_read(fd):
     """Tightest of five REALTIME/PHC/REALTIME brackets."""
@@ -71,22 +91,40 @@ def trigger(t0):
               "tools": A.tool_binding(os.path.abspath(__file__), os.path.join(os.path.expanduser("~/beacon"), "attest_lib.py")),
               "execution": A.execution_context(),
               "meaning": "the time host's clock reached the scheduled instant; the aggregator embeds this statement in the commit (PROTOCOL.md 'Cadence trigger')"}
-    priv = A.load_private("time_attester")                                   # key in memory before the instant
+    priv = A.load_private("time_attester"); raw, pub_b64, kid = A.pub_of(priv)   # key in memory before the instant
+    def sign(statement):
+        """attest_lib.sign_statement without re-reading the PEM (its first call cost 8-143 ms on p550; this is ~1 ms)."""
+        st = A.normalize(statement); sig = priv.sign(A.canon(st))
+        return {"statement": st, "signature": {"alg": "ed25519", "key_id": kid, "public_key_b64": pub_b64, "sig_b64": base64.b64encode(sig).decode(), "over": "canon(statement)"}}
+    sign({"warm": 1})                                                         # first-use costs paid before the instant
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); host, port = UDP.rsplit(":", 1); dest = (host, int(port))
     try:
         ep, ts2 = ring_last("epoch") or {}, ring_last("ts2phc") or {}       # read a moment before the instant (rows <= 1 s old)
         if not DRY: sock.sendto(b"cadence-arp-warm", dest)                   # resolves the aggregator's MAC now, not at the instant (E1: 8 ms)
-        sleep_until(t0 * 10**9)
-        wake = time.clock_gettime_ns(CLOCK_REALTIME); phc = phc_read(fd)
-        st = dict(static, wake={"clock": "CLOCK_REALTIME", "unix_ns": str(wake), "late_ns": wake - t0 * 10**9,
-                                 "how": "clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME) to T-1.5 ms then a spin on the clock, on PREEMPT_RT; CLOCK_REALTIME is chrony-disciplined from the i210 PHC (refid IPHC)"},
+        pfd = None
+        try: pfd = os.open(PPS_DEV, os.O_RDWR)
+        except OSError as e: log(f"{PPS_DEV} not available ({e}); clock fallback")
+        hw = None
+        if pfd is not None:
+            sleep_until((t0 - 1) * 10**9 - 200_000_000)                    # be blocked in the kernel for the last second's events
+            hw = hw_wait(t0, pfd); os.close(pfd)
+        if hw is None:
+            if time.time() < t0: sleep_until(t0 * 10**9)
+            wake = time.clock_gettime_ns(CLOCK_REALTIME); how = "clock fallback: clock_nanosleep to T-1.5 ms then a spin on CLOCK_REALTIME (chrony-disciplined from the i210 PHC)"
+        else:
+            wake = hw["woke_unix_ns"]; how = f"blocked in the kernel on the i210 PHC's second event ({PPS_DEV}); no timer, no clock arithmetic - the hardware clock fired the instant"
+        phc = phc_read(fd)
+        st = dict(static, wake={"clock": "CLOCK_REALTIME", "unix_ns": str(wake), "late_ns": wake - t0 * 10**9, "how": how},
+                  hw_event=None if hw is None else {"source": f"i210 PHC PPS interrupt ({PPS_DEV})", "assert_unix_ns": str(hw["assert_unix_ns"]), "sequence": hw["sequence"],
+                                                     "edge_after_instant_ns": hw["assert_unix_ns"] - t0 * 10**9, "woke_after_edge_ns": hw["woke_unix_ns"] - hw["assert_unix_ns"],
+                                                     "meaning": "the PHC's own second-boundary interrupt, stamped in CLOCK_REALTIME by the handler (~22 us after the boundary here); the process was blocked on it"},
                   phc={**phc, "tai_minus_utc_s": ep.get("tai_minus_utc_s"),
                        "meaning": "i210 PHC (TAI) read at wake; phc_minus_realtime_ns minus tai_minus_utc_s*1e9 is how far the system clock sat from the PHC at the trigger"},
                   clock_state={"epoch_ok": ep.get("epoch_ok"), "refclock_selected": ep.get("refclock_selected"), "epoch_row_age_s": ep.get("age_s"),
                                "ts2phc_state": ts2.get("state"), "ts2phc_offset_ns": ts2.get("offset_ns"), "ts2phc_row_age_s": ts2.get("age_s"),
                                "source": "beacon-clocklog rings (/run/beacon-clocklog), read just before the instant"},
                   issued_unix_ns=A.now_ns_str(), nonce=secrets.token_hex(16))
-        signed = A.sign_statement("time_attester", st)
+        signed = sign(st)
         data = json.dumps(signed, separators=(",", ":")).encode(); sent = []
         for _ in range(3):
             if not DRY: sock.sendto(data, dest)
@@ -108,7 +146,8 @@ def main():
         log(f"next trigger at {target} ({time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(target))}Z), in {target - time.time():.1f} s")
         while target - time.time() > 2.5: time.sleep(min(60.0, target - time.time() - 2.0))      # coarse wait, then absolute
         signed, wake, sent, nbytes = trigger(target); st = signed["statement"]
-        log(f"trigger {target}: woke {st['wake']['late_ns'] / 1000:.1f} us late; signed at +{(int(st['issued_unix_ns']) - target * 10**9) / 1e6:.3f} ms; "
+        hw = st.get("hw_event"); log(f"trigger {target}: {'hardware event: edge +%d ns, woke %d ns after it' % (hw['edge_after_instant_ns'], hw['woke_after_edge_ns']) if hw else 'clock fallback'}; "
+            f"woke {st['wake']['late_ns'] / 1000:.1f} us after the instant; signed at +{(int(st['issued_unix_ns']) - target * 10**9) / 1e6:.3f} ms; "
             f"{'would send' if dry else 'sent'} {nbytes} B x3 by UDP to {UDP}, first copy at +{(sent[0] - target * 10**9) / 1e6:.3f} ms; "
             f"PHC-REALTIME {st['phc']['phc_minus_realtime_ns']} ns; epoch_ok {st['clock_state']['epoch_ok']} ts2phc {st['clock_state']['ts2phc_state']} {st['clock_state']['ts2phc_offset_ns']} ns")
         tmp = os.path.join(STATE_DIR, ".last.json.tmp")

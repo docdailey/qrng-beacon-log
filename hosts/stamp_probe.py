@@ -30,7 +30,7 @@ def st(v):
 def chrony():
     o={}
     try:
-        for ln in subprocess.run(["chronyc","tracking"],capture_output=True,text=True,timeout=8).stdout.splitlines():
+        for ln in subprocess.run(["chronyc","-n","tracking"],capture_output=True,text=True,timeout=8).stdout.splitlines():
             if ":" in ln: k,v=ln.split(":",1); o[k.strip()]=v.strip()
     except Exception as e: o["error"]=str(e)
     return o
@@ -218,7 +218,7 @@ except Exception:
     guard["iphc_epoch_check_status"] = None
 # chrony must still be SELECTING this host's hardware refclock ('#*'), not a LAN/NTP fallback
 try:
-    src = subprocess.run(["chronyc","sources"],capture_output=True,text=True,timeout=8).stdout
+    src = subprocess.run(["chronyc","-n","sources"],capture_output=True,text=True,timeout=8).stdout
     line = [l for l in src.splitlines() if l.split()[1:2] == [expect_refid]] if src else []
     guard["chrony_refclock_line"] = line[0].strip() if line else None
     guard["chrony_selects_refclock"] = bool(line and line[0].strip().startswith("#*"))
