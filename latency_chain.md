@@ -165,6 +165,8 @@ the other's datagram in the kernel (`SO_TIMESTAMPNS`) and in userspace. Clock st
 | 18:18:00 | `chrt -f 50` again | **+5.3 µs** | **+8.0 µs** | +294 µs | 344 µs | 259 µs |
 | 18:19:00 | normal + no deep idle (`/dev/cpu_dma_latency` 0 held) | +6.3 µs | **+8.0 µs** | **+23.0 µs** | 287 µs | 1,410 µs (k3-side outlier) |
 | 18:20:00 | `chrt -f 50` pinned to CPU0 (the i210 IRQ CPU) | +6.2 µs | +278.8 µs | +275.8 µs | 283 µs | 327 µs |
+| 18:22:00 | normal, `cpu-retentive` disabled on CPU0 only | +6.1 µs | +7.9 µs | +294 µs | 555 µs | 350 µs |
+| 18:23:00 | normal, `cpu-retentive` disabled on CPU0 only | +6.8 µs | +8.3 µs | +283 µs | 741 µs | 359 µs |
 
 One-way = the peer's send stamp to the receiver's kernel stamp, both software; serializing and the first `sendto` cost
 80–105 µs on either host and are inside these numbers.
@@ -179,15 +181,15 @@ What it shows:
   thread, which the FIFO-50 IRQ threads (all five igb vectors sit on CPU0 at FIFO 50) hold off around the second. The
   cadence service does not sleep on the clock, it waits on the PPS event, which is why the live trigger wakes 15–19 µs
   after the edge regardless.
-- **The ~275 µs is CPU0 leaving its deep idle state.** p550's `sbi_cpuidle` offers WFI and `cpu-retentive` (advertised
-  exit latency 60 µs). All five i210 interrupt vectors sit on CPU0. With the deep state held off by PM QoS
-  (`/dev/cpu_dma_latency` = 0) a *normal-priority* task woke +8.0 µs and the pps1 edge stamp was +23 µs (18:19). With
-  a FIFO task pinned to CPU0 and sleeping there, both its own wake and the edge stamp came at +276–279 µs (18:20): the
-  first event after CPU0 sleeps pays ~270 µs whichever it is. The 18:15 fast stamp was the unpinned FIFO spinner
-  happening to keep CPU0 busy; at 18:18 it ran elsewhere. So: the late p550 wakes at normal priority (6.8 ms, 360 µs)
-  and the bimodal edge stamp seen in every live cycle (+267/+274/+276 µs) are one cause, idle exit on p550's SoC being
-  far slower than advertised, and priority was never the knob. The F9T edge is at the true second and the i210 latches
-  it in hardware for ts2phc; only the software stamp, and everything the cadence service does after it, was late.
+- **The ~275 µs is deep-idle exit on p550, but not CPU0's alone.** p550's `sbi_cpuidle` offers WFI and `cpu-retentive`
+  (advertised exit latency 60 µs); the five i210 hard interrupts land on CPU0, their RT IRQ threads may run on CPUs 0–3.
+  With the deep state held off on *all* CPUs by PM QoS (`/dev/cpu_dma_latency` = 0), a normal-priority task woke +8.0 µs
+  and the pps1 edge stamp was +23 µs (18:19, one sample). With `cpu-retentive` disabled on CPU0 only, the task still
+  woke +8 µs but the edge stamp stayed at +283–294 µs (18:22, 18:23). A FIFO task pinned to CPU0 and sleeping there saw
+  +276–279 µs for both its wake and the stamp (18:20). Reading: the first event after a CPU sleeps pays ~270 µs on this
+  SoC, and the PPS stamp is taken on whichever CPU the `irq/178` thread wakes on, not only CPU0. The 18:15 fast stamp was
+  the unpinned FIFO spinner keeping the right CPU busy by chance. A run with the state disabled on all four CPUs is next;
+  until it lands, the fix is not claimed.
 - **The clocks agree to the resolution of software stamps.** In the 18:14 run the two one-way delays were 415 and
   417 µs: a clock offset d would make them differ by 2d, so |d| ≲ a few µs, consistent with the PHC readings (k3
   16 ns → −101 ns from its PHC across the runs; p550 ~1.7 µs, inside its 8 µs PHC read bracket).
@@ -198,7 +200,7 @@ Design option this opens (not built; Bill's call): k3 starts at its own instant 
 record as it arrives ~2.5 ms later, so the datagram attests the instant instead of causing the start. The pulse would then
 name k3's PTP-disciplined clock as the start and p550's i210 event as the independent witness of the same second. What is
 lost: today the start is *caused* by a hardware event on another host; with this change it is caused by k3's clock and
-*confirmed* by that event. Independent of that decision: keeping CPU0 out of `cpu-retentive` on p550 (per-CPU `cpuidle/state1/disable`, or PM QoS
-held by the cadence service for its last 30 ms) moves the edge stamp from ~+275 µs to ~+23 µs and with it the trigger,
-the datagram and k3's start, about 250 µs each. Applied on CPU0 as a reversible experiment at 18:21Z (sysfs, not
-persistent); the 19:00 cycle's `hw_event.edge_after_instant_ns` shows whether it holds live.
+*confirmed* by that event. Independent of that decision: if the all-CPU test confirms it, keeping p550 out of `cpu-retentive` around the instant
+(PM QoS held by the cadence service for its last 30 ms, or the state disabled outright) would move the edge stamp from
+~+275 µs to ~+25 µs and with it the trigger, the datagram and k3's start, about 250 µs each. CPU0-only was applied at
+18:21Z and did not do it; all four CPUs at 18:24Z as a reversible sysfs experiment.
