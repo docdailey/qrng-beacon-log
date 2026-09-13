@@ -34,12 +34,17 @@ def parse_tsa_time(s):
     import datetime; return int(datetime.datetime.strptime(s.strip(), "%b %d %H:%M:%S %Y %Z").replace(tzinfo=datetime.timezone.utc).timestamp())
 
 class Facts(dict):
-    """Everything the receipt says, each item carrying its own verification verdict; `lines` is the audit trail."""
-    def __init__(self): super().__init__(); self["lines"] = []; self["ok"] = True
+    """Everything the receipt says, each item carrying its own verdict; `lines` is the audit trail.
+    verdict: VERIFIED (every required piece of evidence present and passing) | DEGRADED (nothing failed, but required
+    evidence is missing: tokens, registration, unsigned contract, result not re-executed) | INVALID (a check failed)."""
+    def __init__(self): super().__init__(); self["lines"] = []; self["ok"] = True; self["degraded"] = []
     def say(self, ok, msg, level=None):
         tag = level or ("PASS" if ok else "FAIL")
         if tag == "FAIL": self["ok"] = False
         self["lines"].append(f"[{tag}] {msg}")
+    def degrade(self, why): self["degraded"].append(why); self["lines"].append(f"[DEGRADED] {why}")
+    @property
+    def verdict(self): return "INVALID" if not self["ok"] else ("DEGRADED" if self["degraded"] else "VERIFIED")
 
 def find_transcript(contract_path, explicit=None, csha=None):
     if explicit: return explicit if os.path.exists(explicit) else None
@@ -61,13 +66,15 @@ def gather(contract_path, transcript=None, src=None, verify_pair=True, refetch=T
         bound = st["contract_sha256"] == csha and st["key_id"] == signer.get("key_id") and st["public_key_b64"] == signer.get("public_key_b64") and st["decision_id"] == c.get("decision_id")
         S.update(ok=ok and bound, why=why if not ok else ("ok" if bound else "statement names a different contract, key or decision_id"), key_id=st["key_id"], public_key_b64=st["public_key_b64"], decision_id=st["decision_id"], created_utc=st["created_utc"], statement=st, signature_b64=sig)
         F.say(S["ok"], f"decision statement by key {st['key_id']} for decision_id {st['decision_id']!r}: {S['why']}")
-    elif c.get("spec") == C.CONTRACT_SPEC: S.update(ok=False, why="signed contract without its .sig.json"); F.say(False, "signed contract/2 but no .sig.json beside it")
-    else: S.update(ok=None, why="legacy unsigned contract/1"); F.say(True, "legacy unsigned contract/1: no signer, no decision-log namespace", "WARN")
+    elif c.get("spec") in C.SIGNED_SPECS: S.update(ok=False, why=f"signed {c.get('spec')} without its .sig.json"); F.say(False, f"signed {c.get('spec')} but no .sig.json beside it")
+    else: S.update(ok=None, why="legacy unsigned contract/1"); F.degrade("legacy unsigned contract/1: no signer identity, no decision-log namespace")
     F["statement"] = S
     # RFC 3161
     toks, bad = C.verify_timestamps(contract_path); ok_t, why_t, latest = C.timestamp_verdict(toks, bad, None)
     F["tsa"] = {"tokens": [{"tsa": n, "time": t, "unix": u} for n, t, u in toks], "any_failed": bad, "complete": ok_t, "why": why_t, "latest_unix": latest}
-    F.say(ok_t, f"RFC 3161: {why_t}" if ok_t else f"RFC 3161: {why_t}", None if ok_t else ("FAIL" if bad else "WARN"))
+    if ok_t: F.say(True, f"RFC 3161: {why_t}")
+    elif bad: F.say(False, f"RFC 3161: {why_t}")
+    else: F.degrade(f"RFC 3161: {why_t}")
     # decision log: the stored receipt, verified offline; the live namespace, if allowed
     L = {"receipt_present": False}
     rp = DL.receipt_path(contract_path)
@@ -78,11 +85,13 @@ def gather(contract_path, transcript=None, src=None, verify_pair=True, refetch=T
                      received_utc=leaf["received_utc"], received_unix=DL.parse_utc(leaf["received_utc"]), authoritative=leaf["seq_in_namespace"] == 1, receipt=rc, origin=DL.origin())
             F.say(ok, f"decision-log receipt: entry {rc['index']} of {size}, seq_in_namespace {leaf['seq_in_namespace']}, received {leaf['received_utc']} — {why}")
         except Exception as e: L.update(receipt_present=True, receipt_ok=False, why=f"{type(e).__name__}: {e}"); F.say(False, f"decision-log receipt unreadable: {e}")
-    elif st is not None: F.say(True, "no decision-log receipt beside the contract (not registered, or registered by another machine)", "WARN")
+    elif st is not None: L["receipt_ok"] = False
     if st is not None and live_log and DL.enabled():
         live = DL.check_authoritative(st, offline=False); L["live"] = live
-        lvl = "PASS" if live["status"] == "authoritative" else ("FAIL" if live["status"] == "superseded" else "WARN")
-        F.say(lvl != "FAIL", f"decision log now: {live['why']}", lvl)
+        if live["status"] == "authoritative": F.say(True, f"decision log now: {live['why']}")
+        elif live["status"] == "superseded": F.say(False, f"decision log now: {live['why']}")
+        else: F.degrade(f"decision log now: {live['why']}")
+    elif st is not None and not L.get("receipt_ok"): F.degrade("decision-log registration not confirmed (no verified receipt beside the contract and the live log was not consulted)")
     F["log"] = L
     # transcript + the pulse
     tp = find_transcript(contract_path, transcript, csha); X = {"path": tp}
@@ -92,9 +101,26 @@ def gather(contract_path, transcript=None, src=None, verify_pair=True, refetch=T
                  derived_seed=t.get("derived_seed"), operation=t.get("operation"), output_sha256=t.get("output_sha256"), A=t.get("A"), B=t.get("B"), value=t.get("value"), arm_sizes=t.get("arm_sizes"),
                  log_git_sha=t.get("log_git_sha"), verified_utc=t.get("verified_utc"), timestamping_complete=t.get("timestamping_complete"), decision_log=t.get("decision_log"), cli_version=t.get("cli_version"))
         F.say(X["bound"], f"transcript {os.path.basename(tp)} names this contract" if X["bound"] else f"transcript {os.path.basename(tp)} names a DIFFERENT contract ({str(t.get('contract_sha256'))[:16]}…)")
+        if X["bound"]:
+            if t.get("timestamping_complete") is False: F.degrade("the execution ran with incomplete timestamping (--allow-unregistered)")
+            dls = (t.get("decision_log") or {}).get("status")
+            if dls and dls != "authoritative": F.degrade(f"the execution ran without a confirmed decision-log registration (status {dls}, --allow-unregistered)")
+            # R4: the transcript's operation and parameters must be the CONTRACT's, not whatever the transcript says
+            bound_ops = t.get("operation") == c.get("operation") and all(str(t.get(k)) == str(v) for k, v in (c.get("params") or {}).items()) and t.get("purpose") == c.get("purpose") \
+                        and (not c.get("input") or (t.get("input_sha256") == c["input"]["sha256"] and t.get("record_count") == c["input"]["record_count"]))
+            F.say(bound_ops, "transcript's operation, parameters, purpose and input hash are the contract's" if bound_ops else "transcript's operation/parameters/purpose/input do NOT match the signed contract")
         F["status"] = "executed"
     else: F["status"] = "committed"; F.say(True, "not executed yet (no transcript): the receipt covers the commitment only", "INFO")
     F["transcript"] = X
+    if tp and X.get("bound") and c.get("input"):
+        ip = os.path.join(os.path.dirname(contract_path) or ".", c["input"]["file"])
+        if os.path.exists(ip) and sha256_file(ip) == c["input"]["sha256"]:
+            try:
+                Sx = bytes.fromhex(X["derived_seed"]); body, extra = C.run_operation(c, Sx, ip); oh = D.sha256_hex(body.encode())
+                same = (oh == X.get("output_sha256")) if c["operation"] != "split" else (oh == (X.get("A") or {}).get("sha256") and D.sha256_hex(("\n".join(extra["B"]) + "\n").encode()) == (X.get("B") or {}).get("sha256"))
+                F.say(same, "the committed operation re-run on the committed input reproduces the transcript's output" if same else "re-running the committed operation does NOT reproduce the transcript's output")
+            except Exception as e: F.say(False, f"re-running the operation failed: {e}")
+        else: F.degrade("result not re-executed here: the committed input file is not at hand (its hash is bound to the contract)")
     # the pair, re-verified now (this is what makes "the result" more than a copied number)
     P = {"verified": None}
     if tp and X.get("bound") and src is not None and X.get("value_rule") == "commit-bound":
@@ -114,8 +140,11 @@ def gather(contract_path, transcript=None, src=None, verify_pair=True, refetch=T
                 F.say(Rc.ok, f"commit {n:04d} re-verified now (host signatures, {Rc.tsa_pass} TSA tokens, anchors {Rc.anchors}, transparency log {Rc.tlog}) at log {str(Rc.log_git_sha)[:12]}")
                 if X.get("reveal_seq"):
                     Rr = check_pair(int(X["reveal_seq"]), src, refetch=refetch, anchors=True); P["reveal_verified"] = Rr.ok; F.say(Rr.ok, f"reveal {int(X['reveal_seq']):04d} re-verified: provenance FULL-ATTESTED stands" if Rr.ok else f"reveal {int(X['reveal_seq']):04d} no longer verifies")
-                pe = X.get("publication_evidence") or {}
-                if pe.get("present"): F.say(int(pe["integrated_unix"]) < P["release_unix"], f"Rekor logged the commit {pe.get('before_release_s')} s before its round (logIndex {pe.get('logIndex')}): publication before the round is third-party evidenced")
+                pe = X.get("publication_evidence") or {}; af = (Rc.anchor_facts or {}).get(n)
+                if af and af.get("ok"):
+                    F.say(af["integratedTime"] < P["release_unix"] and (not pe.get("present") or int(pe.get("integrated_unix", -1)) == af["integratedTime"]),
+                          f"Rekor's SIGNED entry time puts the commit {P['release_unix'] - af['integratedTime']} s before its round (logIndex {af['logIndex']}); matches the transcript" if af["integratedTime"] < P["release_unix"] else "Rekor's signed entry time is AT/AFTER the round: the commit was not publicly anchored before the randomness existed")
+                else: F.degrade("publication-before-round evidence not re-verified here (no verified anchor record reachable from this log source)")
             if latest is not None: F.say(latest < P["release_unix"], f"latest RFC 3161 token {utc(latest)} is {P['release_unix'] - latest} s before the round release {utc(P['release_unix'])}" if latest < P["release_unix"] else "latest RFC 3161 token is AT/AFTER the round release")
             if L.get("received_unix") is not None: F.say(L["received_unix"] < P["release_unix"], f"decision-log registration {L['received_utc']} is {P['release_unix'] - L['received_unix']} s before the round release" if L["received_unix"] < P["release_unix"] else "decision-log registration is AT/AFTER the round release")
             try: P["seed_recomputes"] = D.seed(X.get("commit_bound_value"), c["purpose"]).hex() == X.get("derived_seed"); F.say(P["seed_recomputes"], "derived seed recomputes from V* and the contract's purpose")
@@ -157,7 +186,9 @@ def render(F):
     c = F["contract"]["obj"]; S, Tk, L, X, P = F["statement"], F["tsa"], F["log"], F["transcript"], F["pair"]
     sel = c.get("selection", {}); prm = ", ".join(f"{k} = {v}" for k, v in (c.get("params") or {}).items()) or "none"; inp = c.get("input")
     out = [f"# NotBefore decision receipt — {c.get('decision_id') or c.get('purpose')}", ""]
-    out.append(f"**Status:** {'EXECUTED' if F['status'] == 'executed' else 'COMMITTED, not yet executed'} · **all checks:** {'PASS' if F['ok'] else 'FAIL — see the verification trail'} · generated {F['generated_utc']} by notbefore {__version__} ({SPEC})")
+    out.append(f"**Status:** {'EXECUTED' if F['status'] == 'executed' else 'COMMITTED, not yet executed'} · **verification: {F.verdict}**" + (" — " + "; ".join(F["degraded"]) if F.verdict == "DEGRADED" else (" — see the verification trail" if F.verdict == "INVALID" else "")) + f" · generated {F['generated_utc']} by notbefore {__version__} ({SPEC})")
+    if F.verdict == "DEGRADED": out += ["", "> **DEGRADED.** Nothing failed, but evidence a preregistered result needs is missing (listed above). Treat this as a dry run, not as a preregistered decision."]
+    if F.verdict == "INVALID": out += ["", "> **INVALID.** At least one check failed. Do not rely on this receipt."]
     out += ["", "## Who committed", ""]
     if S.get("present"): out.append(f"- Key id `{S['key_id']}` (Ed25519 public key `{S['public_key_b64']}`), statement signed {S['created_utc']} — signature {'verifies' if S['ok'] else 'does NOT verify: ' + S['why']}.")
     else: out.append(f"- Legacy unsigned contract/1: no signer identity ({S.get('why')}).")
@@ -270,7 +301,7 @@ def bundle(F, out, src=None, include_input=False, include_output=False):
     put("verifier/VENDORED.json", srcpath=os.path.join(VENDOR, "VENDORED.json"))
     put("README.md", render(F))
     man = {"bundle": BUNDLE_SPEC, "generated_utc": F["generated_utc"], "tool": F["tool"], "contract_sha256": F["contract"]["sha256"], "decision_id": c.get("decision_id"), "key_id": (c.get("signer") or {}).get("key_id"),
-           "seq": X.get("seq"), "commit_seq": X.get("commit_seq"), "value_rule": X.get("value_rule"), "provenance": X.get("provenance"), "status": F["status"], "all_checks_passed_at_generation": F["ok"], "files": dict(sorted(files.items()))}
+           "seq": X.get("seq"), "commit_seq": X.get("commit_seq"), "value_rule": X.get("value_rule"), "provenance": X.get("provenance"), "status": F["status"], "verification": F.verdict, "degraded": F["degraded"], "files": dict(sorted(files.items()))}
     mp = os.path.join(root, "MANIFEST.json"); json.dump(man, open(mp, "w"), indent=1, sort_keys=True)
     if zipped:
         with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
@@ -292,31 +323,38 @@ class _BundleSource:
         rp = os.path.join(self.root, "log", "anchors", f"pulse-{seq:04d}.anchor.json"); sp = rp.replace(".anchor.json", ".stmt.json")
         return (json.load(open(rp)), open(sp, "rb").read()) if os.path.exists(rp) and os.path.exists(sp) else (None, None)
 
+def _verdict(R, degraded): return ("INVALID" if not R.ok else ("DEGRADED" if degraded else "VERIFIED")), R.lines, degraded
+
 def check_bundle(path, verify_pulses=True):
-    """Offline re-verification of a bundle with the INSTALLED release's keys and roots. Returns (ok, lines)."""
-    R = CheckResult(0); tmp = None
+    """Offline re-verification of a bundle with the INSTALLED release's keys and roots.
+    Returns (verdict, lines, degraded): VERIFIED | DEGRADED (nothing failed, required evidence missing) | INVALID."""
+    R = CheckResult(0); tmp = None; degraded = []
+    def degrade(why): degraded.append(why); R.lines.append(f"[DEGRADED] {why}")
     if zipfile.is_zipfile(path):
         tmp = tempfile.mkdtemp(prefix="nb-check-"); zipfile.ZipFile(path).extractall(tmp); root = tmp
     else: root = path
     try:
         mp = os.path.join(root, "MANIFEST.json")
-        if not os.path.exists(mp): R.say(False, "no MANIFEST.json: not a NotBefore bundle"); return False, R.lines
+        if not os.path.exists(mp): R.say(False, "no MANIFEST.json: not a NotBefore bundle"); return _verdict(R, degraded)
         man = json.load(open(mp)); R.say(man.get("bundle") == BUNDLE_SPEC, f"manifest {man.get('bundle')} generated {man.get('generated_utc')} by notbefore {man.get('tool', {}).get('cli_version')}")
         bad = [rel for rel, h in man["files"].items() if not os.path.exists(os.path.join(root, rel)) or sha256_file(os.path.join(root, rel)) != h]
         R.say(not bad, f"{len(man['files'])} files match the manifest" if not bad else f"{len(bad)} file(s) missing or altered since the bundle was written: {bad[:3]}")
         extra = [os.path.relpath(os.path.join(dp, fn), root) for dp, _, fns in os.walk(root) for fn in fns if os.path.relpath(os.path.join(dp, fn), root) not in man["files"] and fn != "MANIFEST.json"]
         if extra: R.say(True, f"{len(extra)} file(s) not in the manifest (ignored): {extra[:3]}", "WARN")
         cfiles = [f for f in man["files"] if f.startswith("contract/") and f.endswith(".json") and not f.endswith((".sig.json", ".tsa.json", ".log.json"))]
-        if len(cfiles) != 1: R.say(False, "expected exactly one contract in contract/"); return False, R.lines
+        if len(cfiles) != 1: R.say(False, "expected exactly one contract in contract/"); return _verdict(R, degraded)
         cp = os.path.join(root, cfiles[0]); raw = open(cp, "rb").read(); c = json.loads(raw); csha = hashlib.sha256(raw).hexdigest()
         R.say(C.canon(c) == raw and csha == man["contract_sha256"], f"contract canonical, SHA-256 {csha} == manifest")
         st, sig = DL.read_signature(cp)
-        if c.get("spec") == C.CONTRACT_SPEC:
+        if c.get("spec") in C.SIGNED_SPECS:
             ok, why = DL.verify_statement(st, sig) if st else (False, "no .sig.json")
-            bound = bool(st) and st["contract_sha256"] == csha and st["key_id"] == c["signer"]["key_id"] and st["decision_id"] == c["decision_id"]
+            bound = bool(st) and st["contract_sha256"] == csha and st["key_id"] == c["signer"]["key_id"] and st["public_key_b64"] == c["signer"]["public_key_b64"] and st["decision_id"] == c["decision_id"]
             R.say(ok and bound, f"decision statement by {c['signer']['key_id']} for {c['decision_id']!r}: {why if not ok else ('bound to this contract' if bound else 'NOT bound to this contract')}")
-        else: R.say(True, "legacy unsigned contract/1", "WARN")
-        toks, tbad = C.verify_timestamps(cp); ok_t, why_t, latest = C.timestamp_verdict(toks, tbad, None); R.say(ok_t, f"contract RFC 3161 tokens (pinned roots of this installation): {why_t}", None if ok_t else ("FAIL" if tbad else "WARN"))
+        else: degrade("legacy unsigned contract/1: no signer, no decision-log namespace")
+        toks, tbad = C.verify_timestamps(cp); ok_t, why_t, latest = C.timestamp_verdict(toks, tbad, None)
+        if ok_t: R.say(True, f"contract RFC 3161 tokens (pinned roots of this installation): {why_t}")
+        elif tbad: R.say(False, f"contract RFC 3161 tokens: {why_t}")
+        else: degrade(f"contract RFC 3161 tokens: {why_t}")
         # decision-log receipt, offline
         received = None; rp = DL.receipt_path(cp)
         if os.path.exists(rp) and st:
@@ -326,15 +364,24 @@ def check_bundle(path, verify_pulses=True):
                 R.say(leaf["seq_in_namespace"] == 1, f"seq_in_namespace {leaf['seq_in_namespace']}: {'authoritative preregistration' if leaf['seq_in_namespace'] == 1 else 'an AMENDMENT, not the preregistration'}")
                 dcp = os.path.join(root, "decisions", "checkpoint")
                 if os.path.exists(dcp): R.say(open(dcp).read() == rc["checkpoint"], "bundled decisions/checkpoint is the receipt's checkpoint")
+        elif st: degrade("no decision-log receipt in the bundle: registration not confirmed")
         # transcript + pulses
         tfiles = [f for f in man["files"] if f.startswith("transcript/")]
-        if not tfiles: R.say(True, "no transcript: a commitment-only bundle (nothing executed yet)", "INFO"); return R.ok, R.lines
+        if not tfiles: R.say(True, "no transcript: a commitment-only bundle (nothing executed yet)", "INFO"); return _verdict(R, degraded)
         t = json.load(open(os.path.join(root, tfiles[0]))); R.say(t.get("contract_sha256") == csha, "transcript names this contract")
+        if t.get("timestamping_complete") is False: degrade("the execution ran with incomplete timestamping (--allow-unregistered)")
+        dls = (t.get("decision_log") or {}).get("status")
+        if st and dls != "authoritative": degrade(f"the execution ran without a confirmed decision-log registration (status {dls})")
+        # R4: the transcript's operation/parameters/purpose/input are the CONTRACT's; the result is re-executed when the input is bundled
+        bound_ops = t.get("operation") == c.get("operation") and all(str(t.get(k)) == str(v) for k, v in (c.get("params") or {}).items()) and t.get("purpose") == c.get("purpose") \
+                    and (not c.get("input") or (t.get("input_sha256") == c["input"]["sha256"] and t.get("record_count") == c["input"]["record_count"]))
+        R.say(bound_ops, "transcript's operation, parameters, purpose and input hash are the signed contract's" if bound_ops else "transcript's operation/parameters/purpose/input do NOT match the signed contract")
+        _rerun_result(R, root, man, c, t, degrade)
         bs = _BundleSource(root)
         if t.get("value_rule") == "commit-bound":
-            return _check_bundle_commit_bound(R, root, bs, t, c, latest, received, verify_pulses)
+            _check_bundle_commit_bound(R, root, bs, t, c, latest, received, verify_pulses, degrade); return _verdict(R, degraded)
         seq = int(t["seq"]); rev, com = bs.pulse(seq), bs.pulse(seq - 1)
-        if not rev or not com: R.say(False, f"pulse pair {seq-1:04d}/{seq:04d} not in the bundle"); return R.ok, R.lines
+        if not rev or not com: R.say(False, f"pulse pair {seq-1:04d}/{seq:04d} not in the bundle"); return _verdict(R, degraded)
         for p, name in ((com, f"commit {seq-1:04d}"), (rev, f"reveal {seq:04d}")):
             R.say(hashlib.sha256(T.canonical(p["core"])).hexdigest() == p["pulse_hash"], f"{name}: pulse_hash == SHA-256(canonical core)")
         R.say(rev["core"]["derived"]["attested_value"] == t.get("attested_value") and rev["pulse_hash"] == t.get("pulse_hash_reveal") and com["pulse_hash"] == t.get("pulse_hash_commit"), "transcript's pulse hashes and attested value match the bundled pulses")
@@ -368,21 +415,46 @@ def check_bundle(path, verify_pulses=True):
                 except Exception as e: R.say(True, f"cosignature check skipped: {e}", "WARN")
         if bs.anchors_available():
             try: R.anchors = _check_anchors(R, bs, (seq - 1, seq), rev["core"], False)
-            except Exception as e: R.say(True, f"anchor check unavailable offline: {e}", "WARN")
-        # outputs, if included
-        for rel_ in [f for f in man["files"] if f.startswith("output/")]:
-            h = sha256_file(os.path.join(root, rel_)); expect = {t.get("A", {}).get("file") if isinstance(t.get("A"), dict) else None: (t.get("A") or {}).get("sha256"), (t.get("B") or {}).get("file") if isinstance(t.get("B"), dict) else None: (t.get("B") or {}).get("sha256")}
-            R.say(h in (expect.get(os.path.basename(rel_)), t.get("output_sha256")), f"{rel_} hashes to the transcript's value")
-        return R.ok, R.lines
+            except Exception as e: R.say(False, f"anchor check failed: {e}")
+        else: degrade("no Rekor anchor records in the bundle: publication anchors not re-verified")
+        _require_checkpoint_coverage(R, root, (seq - 1, seq), degrade)
+        return _verdict(R, degraded)
     finally:
         if tmp: shutil.rmtree(tmp, ignore_errors=True)
 
-def _check_bundle_commit_bound(R, root, bs, t, c, latest, received, verify_pulses):
+def _rerun_result(R, root, man, c, t, degrade):
+    """R4: with the committed input at hand, rerun the committed operation from the transcript's seed and compare outputs."""
+    inp = [f for f in man["files"] if f.startswith("input/")]
+    if not c.get("input"): return
+    if not inp: degrade("result not re-executed: the committed input is not in the bundle (its hash is bound to the contract)"); return
+    ip = os.path.join(root, inp[0])
+    if sha256_file(ip) != c["input"]["sha256"]: R.say(False, "bundled input does NOT hash to the contract's input sha256"); return
+    try:
+        Sx = bytes.fromhex(t["derived_seed"]); body, extra = C.run_operation(c, Sx, ip); oh = D.sha256_hex(body.encode())
+        if c["operation"] == "split": same = oh == (t.get("A") or {}).get("sha256") and D.sha256_hex(("\n".join(extra["B"]) + "\n").encode()) == (t.get("B") or {}).get("sha256")
+        else: same = oh == t.get("output_sha256")
+        R.say(same, "the committed operation re-run on the bundled input reproduces the transcript's output" if same else "re-running the committed operation does NOT reproduce the transcript's output")
+        for rel_ in [f for f in man["files"] if f.startswith("output/")]:
+            h = sha256_file(os.path.join(root, rel_)); want = {"A": (t.get("A") or {}).get("sha256"), "B": (t.get("B") or {}).get("sha256")}
+            R.say(h in (want["A"], want["B"], t.get("output_sha256")), f"{rel_} hashes to the transcript's value")
+    except Exception as e: R.say(False, f"re-running the operation failed: {e}")
+
+def _require_checkpoint_coverage(R, root, seqs, degrade):
+    """R5: pulses from the first checkpoint on must be provably included; a bundle without checkpoint + proofs is not verified."""
+    from . import tlogcheck; ident = tlogcheck.identity(); first = int((ident or {}).get("first_checkpoint_size") or 0)
+    need = [s for s in seqs if first and s >= first]
+    if need and not (os.path.exists(os.path.join(root, "log", "checkpoint")) and os.path.exists(os.path.join(root, "log", "inclusion.json"))):
+        R.say(False, f"pulses {need} are checkpointed pulses but the bundle carries no checkpoint + inclusion proofs"); return
+    if need:
+        inc = json.load(open(os.path.join(root, "log", "inclusion.json"))); missing = [s for s in need if str(s) not in inc.get("proofs", {})]
+        R.say(not missing, "inclusion proofs cover every checkpointed pulse in the bundle" if not missing else f"inclusion proofs missing for {missing}")
+
+def _check_bundle_commit_bound(R, root, bs, t, c, latest, received, verify_pulses, degrade):
     """contract/3: the commit is the object; the reveal is provenance. Recompute V* from the bundled commit and the
     transcript's drand signature (BLS under the pinned key); run the vendored verifier on the commit (+ reveal if present)."""
     from . import commitbound as CB
     n = int(t["commit_seq"]); com = bs.pulse(n)
-    if not com: R.say(False, f"commit {n:04d} not in the bundle"); return R.ok, R.lines
+    if not com: R.say(False, f"commit {n:04d} not in the bundle"); return
     cc = com["core"]; R.say(hashlib.sha256(T.canonical(cc)).hexdigest() == com["pulse_hash"] == t.get("pulse_hash_commit"), f"commit {n:04d}: pulse_hash == SHA-256(canonical core) == transcript")
     d = t.get("drand") or {}; ok, rho = CB.verify_round(cc["derived"]["target_round"], d.get("signature", ""), cc["chain_hash"]) if d.get("signature") else (False, "no drand signature in the transcript")
     R.say(ok and rho == d.get("randomness"), f"drand round {cc['derived']['target_round']}: transcript signature BLS-verifies under the pinned quicknet key (offline)" if ok else f"drand: {rho}")
@@ -393,10 +465,13 @@ def _check_bundle_commit_bound(R, root, bs, t, c, latest, received, verify_pulse
     try: R.say(D.seed(t.get("commit_bound_value"), c["purpose"]).hex() == t.get("derived_seed"), "derived seed recomputes from V* and the contract purpose")
     except Exception as e: R.say(False, f"seed recomputation failed: {e}")
     pe = t.get("publication_evidence") or {}
-    ar = os.path.join(root, "log", "anchors", f"pulse-{n:04d}.anchor.json")
-    if os.path.exists(ar):
-        rec = json.load(open(ar)); it = int(rec["rekor"]["integratedTime"]); R.say(it < rel and it == int(pe.get("integrated_unix", -1)), f"bundled Rekor record: logged {rel - it} s before the round (matches the transcript's publication evidence)")
-    else: R.say(True, "no Rekor record for the commit in the bundle: publication-before-round evidence not re-checkable offline", "WARN")
+    if bs.anchors_available() and os.path.exists(os.path.join(root, "log", "anchors", f"pulse-{n:04d}.anchor.json")):
+        try: R.anchors = _check_anchors(R, bs, (n,), {"derived": {"round_release_unix_s": rel}}, False)      # R3: statement, anchor signature, SET, inclusion — under the INSTALLED pins
+        except Exception as e: R.say(False, f"anchor check failed: {e}")
+        af = R.anchor_facts.get(n)
+        if af and af.get("ok"): R.say(af["integratedTime"] < rel and int(pe.get("integrated_unix", -1)) == af["integratedTime"], f"Rekor's SIGNED entry time: {rel - af['integratedTime']} s before the round; equals the transcript's publication evidence" if af["integratedTime"] < rel else "Rekor's signed entry time is AT/AFTER the round")
+        else: R.say(False, "the bundled Rekor record for the commit does not verify")
+    else: R.say(False, "no Rekor anchor record for the commit in the bundle: a commit-bound result needs its publication evidence")
     rev = bs.pulse(n + 1) if os.path.exists(os.path.join(root, "log", "chain", f"pulse-{n+1:04d}.json")) else None
     prov = t.get("provenance")
     if prov == "FULL-ATTESTED":
@@ -418,4 +493,4 @@ def _check_bundle_commit_bound(R, root, bs, t, c, latest, received, verify_pulse
                 inc = json.load(open(inc_p))
                 for s_, path in inc["proofs"].items():
                     pj = bs.pulse(int(s_)); R.say(pj is not None and T.verify_inclusion(T.leaf_hash(T.canonical(pj)), int(s_) - 1, size, [base64.b64decode(x) for x in path], root_h), f"pulse {int(s_):04d} is included in that checkpoint (RFC 6962 proof)")
-    return R.ok, R.lines
+    _require_checkpoint_coverage(R, root, (n,) + ((n + 1,) if rev else ()), degrade)

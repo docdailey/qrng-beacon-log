@@ -47,17 +47,55 @@ def fetch_round(R: int):
     import drand_anchor
     return drand_anchor.fetch(int(R))
 
-def publication_evidence(src, seq, release_unix):
-    """Third-party evidence the commit was public before its round: the Rekor anchor record (verified offline by
-    check_commit -> _check_anchors) with integratedTime < release. -> (ok, dict)."""
+ANCHOR_GRACE_S = 1500
+
+def rekor_direct(src, seq):
+    """Ask Rekor itself (append-only, not operator-controlled) for anchor entries of this commit: the statement is derived
+    from the pulse bytes, its hash indexes Rekor, every returned entry is checked under the pinned anchor + Rekor keys (SET,
+    inclusion). Returns (status, facts): status in {found, none, error}; facts = earliest valid entry (signed integratedTime)."""
+    import anchor_lib as L
     try:
-        rec, _ = src.anchor(seq)
-    except Exception: rec = None
-    if not rec: return False, {"kind": "rekor", "present": False, "why": "no Rekor anchor record for this commit reachable from this log source"}
-    it = int(rec["rekor"]["integratedTime"]); ok = it < int(release_unix)
-    return ok, {"kind": "rekor", "present": True, "logIndex": rec["rekor"]["logIndex"], "uuid": rec["rekor"]["uuid"], "integrated_unix": it,
-                "integrated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(it)), "before_release_s": int(release_unix) - it,
-                "why": "Rekor logged this commit before its round released" if ok else "Rekor logged this commit only AFTER its round released (retroactive or late anchor): not evidence of pre-round publication"}
+        pf = src.materialize(seq); statement, _ = L.statement_for(pf)
+        anchor_pub = L.load_pub(open(os.path.join(KEYS, "anchor.pub"), "rb").read()); rekor_pub = L.load_pub(open(os.path.join(KEYS, "rekor.pub"), "rb").read())
+        uuids = L.rekor_search_by_hash(L.sha256(statement)) or []
+        best = None
+        for u in uuids:
+            try:
+                e = L.rekor_get(u); h, k = L.entry_hash_and_key(e)
+                if h != L.sha256(statement) or k is None or L.key_id(L.load_pub(k)) != L.key_id(anchor_pub): continue
+                if e.get("logID") != L.REKOR_LOG_ID or not L.verify_set(e, rekor_pub) or not L.verify_inclusion(e, rekor_pub)[0]: continue
+                if best is None or int(e["integratedTime"]) < best["integratedTime"]: best = {"ok": True, "integratedTime": int(e["integratedTime"]), "logIndex": int(e["logIndex"]), "uuid": u, "source": "rekor-live"}
+            except Exception: continue
+        return ("found", best) if best else ("none", None)
+    except Exception as e: return "error", {"why": f"{type(e).__name__}: {str(e)[:100]}"}
+
+def publication_evidence(src, seq, release_unix, Rc, online, now=None):
+    """Was the commit PUBLIC before its round, by a clock the operator does not run? Evidence, in order of authority:
+      1. Rekor itself (online): entries found by the statement hash, verified under the pinned keys; the earliest signed
+         integratedTime decides. None found after the anchor grace period -> proved absent (ineligible); before it -> WAIT.
+      2. A local anchor record (anchors branch / bundle) whose signed entry verified in check_commit (R.anchor_facts).
+    Absence of a LOCAL record is never proof of anything: the anchors branch is operator-controlled and editable after the
+    round (R2). -> (verdict, dict) with verdict in {eligible, ineligible, wait, unavailable}."""
+    now = now or time.time(); rel = int(release_unix); facts = None
+    if online:
+        st, f = rekor_direct(src, seq)
+        if st == "found": facts = f
+        elif st == "none":
+            if now - rel < ANCHOR_GRACE_S: return "wait", {"kind": "rekor", "present": False, "why": f"Rekor has no anchor for this commit yet and its round released {int(now - rel)} s ago (grace {ANCHOR_GRACE_S} s): cannot decide"}
+            return "ineligible", {"kind": "rekor", "present": False, "why": "Rekor holds no anchor for this commit (queried directly by statement hash): it was never anchored, so pre-round publication is not established"}
+        else:
+            lf = (Rc.anchor_facts or {}).get(seq)
+            if lf and lf.get("ok"): facts = lf                                    # Rekor unreachable, but a signed record is at hand
+            else: return "unavailable", {"kind": "rekor", "present": False, "why": f"Rekor not reachable ({f.get('why')}) and no verified local anchor record: cannot establish publication"}
+    else:
+        lf = (Rc.anchor_facts or {}).get(seq)
+        if not (lf and lf.get("ok")): return "unavailable", {"kind": "rekor", "present": False, "why": "offline and no verified anchor record for this commit in this log source: cannot establish publication (run online, or supply the anchors branch)"}
+        facts = lf
+    it = int(facts["integratedTime"]); ok = it < rel
+    d = {"kind": "rekor", "present": True, "source": facts.get("source"), "logIndex": facts["logIndex"], "uuid": facts.get("uuid"), "integrated_unix": it,
+         "integrated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(it)), "before_release_s": rel - it,
+         "why": "Rekor logged this commit before its round released (signed entry time)" if ok else "Rekor logged this commit only AFTER its round released (signed entry time): not evidence of pre-round publication"}
+    return ("eligible" if ok else "ineligible"), d
 
 def select_commit(src, after_unix_s, refetch, anchors, R_lines, now=None):
     """The contract/3 rule. Walk pulses in seq order; the first COMMIT whose round released at/after `after` AND that is
@@ -70,13 +108,21 @@ def select_commit(src, after_unix_s, refetch, anchors, R_lines, now=None):
         if typ == "commit" and c.get("v") == "0.5" and seq not in knc:
             rel = int(c["derived"]["target_release_unix_s"])
             if rel >= after_unix_s:
-                Rc = check_commit(seq, src, refetch=refetch, anchors=anchors)
+                Rc = check_commit(seq, src, refetch=refetch, anchors=True)
+                halt = lambda why: (R_lines.append(f"[FAIL] commit {seq:04d}: {why} — refusing to advance past a candidate whose eligibility cannot be established (R2)"), {"seq": seq, "provenance": "ERROR", "halt": True})[1]
                 if not Rc.ok:
+                    # Advance only on PROVED ineligibility: the pulse bytes are authenticated by the log's signed checkpoint (tlog ok) and the
+                    # pulse itself fails (host signatures / chain link / tokens). Anything else (unauthenticated copy, tree error) halts.
                     why = next((l[7:] for l in Rc.lines if l.startswith("[FAIL] ")), "verification failed")
-                    R_lines.append(f"[INFO] commit {seq:04d} released at/after `after` but is not eligible ({why[:140]}) — passed over by rule"); seq += 1; continue
-                if Rc.tsa_latest_unix is None or not (Rc.tsa_latest_unix < rel): R_lines.append(f"[INFO] commit {seq:04d}: RFC 3161 tokens not strictly before its round — passed over by rule"); seq += 1; continue
-                pub_ok, pub = publication_evidence(src, seq, rel)
-                if not pub_ok: R_lines.append(f"[INFO] commit {seq:04d}: {pub['why']} — passed over by rule"); seq += 1; continue
+                    if Rc.tlog == "ok" and not any(w in why for w in ("transparency", "checkpoint", "anchor", "SPLIT", "could not rebuild")):
+                        R_lines.append(f"[INFO] commit {seq:04d} is authenticated by the checkpoint but not eligible ({why[:140]}) — passed over by rule"); seq += 1; continue
+                    return halt(why[:160])
+                if Rc.tsa_latest_unix is None: return halt("its RFC 3161 tokens are missing from this log source (they are part of the log): cannot establish")
+                if not (Rc.tsa_latest_unix < rel): R_lines.append(f"[INFO] commit {seq:04d}: RFC 3161 tokens not strictly before its round — passed over by rule"); seq += 1; continue
+                verdict, pub = publication_evidence(src, seq, rel, Rc, online=refetch, now=now)
+                if verdict == "ineligible": R_lines.append(f"[INFO] commit {seq:04d}: {pub['why']} — passed over by rule"); seq += 1; continue
+                if verdict == "wait": R_lines.append(f"[WAIT] commit {seq:04d}: {pub['why']}"); return {"seq": seq, "provenance": "WAIT", "wait_until": rel + ANCHOR_GRACE_S, "halt": False}
+                if verdict == "unavailable": return halt(pub["why"])
                 R_lines.append(f"[PASS] selected by rule '{RULE}': commit {seq:04d} (round {c['derived']['target_round']} released {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(rel))} >= after; verified; tokens {rel - Rc.tsa_latest_unix} s and Rekor {pub['before_release_s']} s before the round)")
                 out = {"seq": seq, "release_unix": rel, "Rc": Rc, "target_round": int(c["derived"]["target_round"]), "C": c["derived"]["entropy_commitment"], "chain_hash": c["chain_hash"], "pub": pub,
                        "reveal_seq": None, "provenance": None, "rho_hex": None, "sig_hex": None, "attested_value": None, "Rr": None, "wait_until": None}
@@ -92,7 +138,9 @@ def select_commit(src, after_unix_s, refetch, anchors, R_lines, now=None):
                 elif nxt: R_lines.append(f"[INFO] pulse {seq+1:04d} is a {nxt['core'].get('type')}: the operator did not reveal for commit {seq:04d}")
                 if now < rel + REVEAL_DEADLINE_S and not (nxt and nxt["core"].get("type") in ("failure", "skip")):
                     out.update(provenance="WAIT", wait_until=rel + REVEAL_DEADLINE_S); R_lines.append(f"[WAIT] the reveal window for commit {seq:04d} is open until {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(rel + REVEAL_DEADLINE_S))}; V* is already fixed but the provenance label is not — run again then"); return out
-                # COMMITMENT-FALLBACK: rho from drand itself, BLS-verified under the pinned key
+                # COMMITMENT-FALLBACK: rho from drand itself, BLS-verified under the pinned key (never over the network when offline — R10)
+                if not refetch:
+                    R_lines.append(f"[FAIL] commit {seq:04d}: no verifying reveal and --offline: the drand round {out['target_round']} is needed to compute V* and cannot be fetched offline"); out.update(provenance="ERROR"); return out
                 try:
                     rd = fetch_round(out["target_round"]); ok, rho = verify_round(out["target_round"], rd["signature"], out["chain_hash"])
                 except Exception as e:

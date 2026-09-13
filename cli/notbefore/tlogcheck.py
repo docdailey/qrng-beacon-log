@@ -59,7 +59,11 @@ def check(src, seqs, R, refetch=True, site_url=None):
     if not ident.get("enabled"): R.say(True, f"transparency log: identity {ident['origin']} vendored but checkpoints not yet enabled by the operator — skipped", "INFO"); return "no identity"
     origin = ident["origin"]; pub_raw = T.load_pub_raw(os.path.join(KEYS, os.path.basename(ident["public_key_file"])))
     note_b = src._read_bytes("checkpoint")
-    if note_b is None: R.say(True, f"transparency log ({origin}): no `checkpoint` published at {R.log_ref} yet", "WAIT"); return "absent"
+    if note_b is None:
+        first = int(ident.get("first_checkpoint_size") or 0)
+        if first and seqs and max(seqs) >= first:            # every pulse from the first checkpoint on MUST be provably included (R5)
+            R.say(False, f"transparency log ({origin}): no `checkpoint` in this log source although pulses >= {first} are checkpointed — a copy without its checkpoint cannot be verified"); return "absent"
+        R.say(True, f"transparency log ({origin}): no `checkpoint` published at {R.log_ref} yet", "WAIT"); return "absent"
     note = note_b.decode()
     ok, text = T.verify_note(note, origin, pub_raw); R.say(ok, f"checkpoint signature by {origin} (vendored key id {T.key_id(origin, pub_raw).hex()})")
     if not ok: return "bad signature"

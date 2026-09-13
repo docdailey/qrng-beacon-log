@@ -54,7 +54,7 @@ def make(after_utc, purpose, operation, params, input_path=None, note=None, sign
     if operation not in OPS: raise ValueError(f"operation must be one of {sorted(OPS)}")
     missing = [k for k in OPS[operation] if k not in params]
     if missing: raise ValueError(f"{operation} needs parameters {missing}")
-    P = D.normalize_purpose(purpose).decode()
+    P = D.normalize_purpose(purpose).decode(); _validate_params(operation, params)
     c = {"spec": CONTRACT_SPEC, "log": {"origin": "notbefore.net/log", "repo": "github.com/docdailey/qrng-beacon-log"},
          "selection": {"rule": RULE, "after_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(parse_utc(after_utc))), "after_unix_s": parse_utc(after_utc),
                        "eligibility": f"reveal, protocol v0.5, seq >= {FIRST_ELIGIBLE_REVEAL}, not KNOWN-NONCOMPLIANT, pair verifies under the pinned verifier; skip/failure hours are never selected"},
@@ -84,6 +84,14 @@ def _param(op, k, v):
         if not (0 < fr < 1): raise ValueError("frac must be in (0, 1)")
         return str(v) if isinstance(v, str) else format(float(v), "g")
     return int(v)
+
+def _validate_params(op, params):
+    if op == "range":
+        lo, hi = int(params["lo"]), int(params["hi"])
+        if lo > hi: raise ValueError("lo must be <= hi")
+        if hi - lo + 1 > (1 << 64): raise ValueError("range span must be <= 2^64")
+    for k in ("k", "arms", "n", "hexlen"):
+        if k in params and int(params[k]) < 0: raise ValueError(f"{k} must be >= 0")
 
 def read_records(path):
     raw = open(path, "rb").read(); recs = raw.decode("utf-8").split("\n")

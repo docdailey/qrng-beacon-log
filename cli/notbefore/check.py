@@ -23,6 +23,7 @@ class CheckResult:
         self.commit_seq = self.pulse_hash_reveal = self.pulse_hash_commit = self.attested_value = self.drand_round = None
         self.bls_offline = False; self.tsa_pass = 0; self.anchors = "not checked"; self.tlog = "not checked"; self.cosignatures = []; self.independent_cosignatures = []
         self.log_git_sha = self.log_ref = None; self.verifier_git_sha = vendored_meta().get("git_sha")
+        self.anchor_facts = {}      # seq -> {"ok", "integratedTime", "logIndex", "uuid"} taken from the SIGNED Rekor entry (R1), never from the record wrapper
     def say(self, ok, msg, level=None):
         tag = level or ("PASS" if ok else "FAIL")
         if tag == "FAIL": self.ok = False
@@ -75,7 +76,7 @@ def check_pair(seq: int, src: LogSource, refetch=True, anchors=True, verbose=Fal
     else: R.anchors = "skipped (--no-anchors)"
     try:
         from . import tlogcheck; R.tlog = tlogcheck.check(src, (seq - 1, seq), R, refetch, site_url)
-    except Exception as e: R.say(True, f"transparency-log check unavailable: {e}", "WARN"); R.tlog = "error"
+    except Exception as e: R.say(False, f"transparency-log check failed: {type(e).__name__}: {e}"); R.tlog = "error"
     return R
 
 def check_commit(seq: int, src: LogSource, refetch=True, anchors=True, verbose=False) -> CheckResult:
@@ -103,11 +104,17 @@ def check_commit(seq: int, src: LogSource, refetch=True, anchors=True, verbose=F
         except Exception: pass
     R.tsa_pass = out.count("[PASS] RFC3161"); R.tsa_latest_unix = max(times) if times else None
     R.say(R.tsa_pass >= 2 and "[FAIL]" not in out, f"commit {seq:04d}: {R.tsa_pass} RFC 3161 token(s) verify (need >= 2: freetsa + DigiCert)")
-    if anchors: R.anchors = _check_anchors(R, src, (seq,), {"derived": {"round_release_unix_s": cc["derived"]["target_release_unix_s"]}}, refetch)
+    if anchors:
+        # For a single commit the LOCAL record is only one evidence source (commitbound.publication_evidence asks Rekor directly when
+        # online): a PRESENT record must verify (else FAIL, and anchor_facts says ok=False); an ABSENT record is not a failure here.
+        try: rec_present = src.anchor(seq)[0] is not None
+        except Exception: rec_present = False
+        if rec_present: R.anchors = _check_anchors(R, src, (seq,), {"derived": {"round_release_unix_s": cc["derived"]["target_release_unix_s"]}}, refetch)
+        else: R.anchors = "no local record"; R.say(True, f"commit {seq:04d}: no local anchor record in this log source (publication evidence is taken from Rekor directly when online; offline it cannot be established)", "INFO")
     else: R.anchors = "skipped (--no-anchors)"
     try:
         from . import tlogcheck; R.tlog = tlogcheck.check(src, (seq,), R, refetch, None)
-    except Exception as e: R.say(True, f"transparency-log check unavailable: {e}", "WARN"); R.tlog = "error"
+    except Exception as e: R.say(False, f"transparency-log check failed: {type(e).__name__}: {e}"); R.tlog = "error"
     return R
 
 def _check_anchors(R, src, seqs, rev_core, refetch):
@@ -134,6 +141,9 @@ def _check_anchors(R, src, seqs, rev_core, refetch):
         ok &= L.verify_sig(anchor_pub, base64.b64decode(rec["signature_b64"]), want)
         ok &= entry.get("logID") == L.REKOR_LOG_ID and L.verify_set(entry, rekor_pub)
         inc, why = L.verify_inclusion(entry, rekor_pub); ok &= inc
+        # the record's convenience copies must equal the SIGNED entry's values; nothing downstream may read the wrapper (ERR-015 / R1)
+        ok &= int(rec["rekor"].get("integratedTime", -1)) == int(entry["integratedTime"]) and int(rec["rekor"].get("logIndex", -1)) == int(entry["logIndex"])
+        R.anchor_facts[s] = {"ok": bool(ok), "integratedTime": int(entry["integratedTime"]), "logIndex": int(entry["logIndex"]), "uuid": rec["rekor"].get("uuid"), "source": "record"}
         live = ""
         if refetch and ok:
             try:
@@ -144,7 +154,7 @@ def _check_anchors(R, src, seqs, rev_core, refetch):
         status.append("ok" if ok else "FAIL")
     if all(x == "ok" for x in status):
         rel = float((rev_core.get("derived") or {}).get("round_release_unix_s") or 0); rec_c, _ = src.anchor(seqs[0])
-        it = rec_c["rekor"]["entry"]["integratedTime"]
+        it = int(rec_c["rekor"]["entry"]["integratedTime"])
         if it < rel: R.say(True, f"commit {seqs[0]:04d}: Rekor time precedes the drand release by {rel-it:.0f} s (third independent clock on the commit)")
         else: R.say(True, f"commit {seqs[0]:04d}: Rekor time is {it-rel:.0f} s AFTER the drand release — a retroactive anchor (pulses ≤ 0041 were anchored 2026-09-12 12:47 UTC); the RFC 3161 tokens are the commit-time proof", "WARN")
     return "/".join(status)

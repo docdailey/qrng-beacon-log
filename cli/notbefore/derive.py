@@ -74,6 +74,7 @@ def rand_range(key: bytes, lo: int, hi: int) -> int:
     chunk = SHA256(D_RANGE || S || counter_be8)[:8] as uint64 BE; accept if chunk < floor(2^64 / span) * span."""
     if lo > hi: raise ValueError("lo must be <= hi")
     span = hi - lo + 1
+    if span > (1 << 64): raise ValueError("range span must be <= 2^64 (notbefore/range/v1 samples 64-bit chunks; a wider span would never accept)")
     if span == 1: return lo
     limit = ((1 << 64) // span) * span; c = 0
     while True:

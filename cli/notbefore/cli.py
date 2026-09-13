@@ -324,7 +324,7 @@ def main(argv=None):
         if a.cmd == "register":
             from . import contract as C
             c = json.load(open(a.contract))
-            if c.get("spec") != C.CONTRACT_SPEC: _err("only signed contract/2 files can be registered"); return 2
+            if c.get("spec") not in C.SIGNED_SPECS: _err(f"only signed contracts ({', '.join(C.SIGNED_SPECS)}) can be registered; this is {c.get('spec')}"); return 2
             r = _register(a.contract, c, a); print(json.dumps(r) if a.json and r else ("" if not r else r["status"])); return 0 if r else 1
         if a.cmd == "timestamp":
             from . import contract as C
@@ -341,20 +341,21 @@ def main(argv=None):
                 if a.out: open(a.out, "w").write(md); _err(f"receipt written: {a.out}")
                 else: sys.stdout.write(md if not a.json else json.dumps({k: v for k, v in F.items() if k != "contract"} | {"contract": {k: v for k, v in F["contract"].items() if k != "obj"}}, indent=1, sort_keys=True, default=str))
                 for l in F["lines"]:
-                    if not a.quiet or l.startswith(("[FAIL]", "[WARN]")): _err(l)
-                return 0 if F["ok"] else 1
+                    if not a.quiet or l.startswith(("[FAIL]", "[WARN]", "[DEGRADED]")): _err(l)
+                _err(f"receipt verdict: {F.verdict}" + (" — " + "; ".join(F["degraded"]) if F["degraded"] else ""))
+                return {"VERIFIED": 0, "DEGRADED": 2, "INVALID": 1}[F.verdict]
             out = a.out or f"notbefore-bundle-{F['contract']['sha256'][:16]}.zip"
             try: path = RC.bundle(F, out, src=src, include_input=a.include_input, include_output=a.include_output)
             except FileExistsError as e: _err(str(e)); return 2
             for l in F["lines"]:
-                if not a.quiet or l.startswith(("[FAIL]", "[WARN]")): _err(l)
-            _err(f"bundle written: {path} ({'all checks passed' if F['ok'] else 'WITH FAILURES — see README.md'})"); print(json.dumps({"bundle": path, "ok": F["ok"], "status": F["status"]}) if a.json else path); return 0 if F["ok"] else 1
+                if not a.quiet or l.startswith(("[FAIL]", "[WARN]", "[DEGRADED]")): _err(l)
+            _err(f"bundle written: {path} — verification {F.verdict}" + (" (" + "; ".join(F["degraded"]) + ")" if F["degraded"] else "")); print(json.dumps({"bundle": path, "verification": F.verdict, "degraded": F["degraded"], "status": F["status"]}) if a.json else path); return {"VERIFIED": 0, "DEGRADED": 2, "INVALID": 1}[F.verdict]
         if a.cmd == "check-bundle":
             from . import receipt as RC
-            ok, lines = RC.check_bundle(a.bundle, verify_pulses=not a.no_pulse_verify)
+            verdict, lines, degraded = RC.check_bundle(a.bundle, verify_pulses=not a.no_pulse_verify)
             for l in lines:
-                if not a.quiet or l.startswith(("[FAIL]", "[WARN]")): _err(l)
-            _err(("BUNDLE VERIFIED" if ok else "BUNDLE NOT VERIFIED") + f" — {a.bundle}"); print(json.dumps({"ok": ok, "lines": lines}, indent=1) if a.json else ("ok" if ok else "FAIL")); return 0 if ok else 1
+                if not a.quiet or l.startswith(("[FAIL]", "[WARN]", "[DEGRADED]")): _err(l)
+            _err(f"BUNDLE {verdict}" + (" (" + "; ".join(degraded) + ")" if degraded else "") + f" — {a.bundle}"); print(json.dumps({"verification": verdict, "degraded": degraded, "lines": lines}, indent=1) if a.json else verdict); return {"VERIFIED": 0, "DEGRADED": 2, "INVALID": 1}[verdict]
         if a.cmd == "pin":
             ident = {}
             try:

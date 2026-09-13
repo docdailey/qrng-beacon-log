@@ -14,5 +14,7 @@
   "site": "https://notbefore.net",
   "site_checkpoint_url": "https://notbefore.net/checkpoint",
   "site_note": "notbefore.net serves this repository's root as static assets (wrangler.jsonc); /checkpoint and /checkpoints/* are text/plain, CORS-open. Clients cross-check the checkpoint served by the site against the one in git: two different heads under this key is a split between publication surfaces.",
-  "enabled_utc": "2026-09-12T16:20:00Z"
+  "enabled_utc": "2026-09-12T16:20:00Z",
+  "first_checkpoint_size": 49,
+  "first_checkpoint_note": "the first published checkpoint covered 49 pulses (000049, 2026-09-12 16:21Z); verifiers treat a missing checkpoint as a failure for any pulse >= 49"
 }
