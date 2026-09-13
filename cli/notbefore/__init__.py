@@ -3,7 +3,7 @@ pinned, vendored verifier, and derive labeled seeds / shuffles / splits from its
 
 Spec: NOTBEFORE.md in https://github.com/docdailey/qrng-beacon-log (version in SPEC below). Not a certification of anything.
 """
-__version__ = "0.13.0"
+__version__ = "0.13.1"
 SPEC = "notbefore/spec/0.10"
 D_DERIVE = b"notbefore/derive/v1"
 D_SHUFFLE = b"notbefore/shuffle/v1"

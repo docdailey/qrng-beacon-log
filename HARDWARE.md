@@ -64,6 +64,14 @@ Measured 2026-09-11. This, not f9t, is the clock the beacon stamps with.
 ⚠️ The SoC MACs `end0`/`end1` report **`PTP Hardware Clock: none`** — no 1588 timestamping. The i210
 in the PCIe slot is the only real clock on this box. Kernel `6.6.138-rt74+` (PREEMPT_RT).
 
+**Since 2026-09-13 this clock also starts the beacon's hour.** `beacon-cadence.service` (`hosts/beacon-cadence.py`,
+user `beacon`) wakes at :00:00.000 UTC with `clock_nanosleep(TIMER_ABSTIME)` on `CLOCK_REALTIME` — which chrony holds
+to the i210 PHC (refid IPHC, RMS a few ns) — reads the PHC, signs a cadence trigger with the `time_attester` key and
+starts the aggregator's cycle on think over a forced-command-only SSH key. Measured wake lateness 0.1–0.4 ms; every
+trigger records it. The clock evidence a statement quotes now comes from `beacon-clocklog@time` (`hosts/clocklog.py`):
+ts2phc offsets per PPS, the i210's observation of the BMC GM, and the epoch guard, logged at source rate to
+`/run/beacon-clocklog` and the timehat DB. See CADENCE.md §2.
+
 **Discipline chain — verified, not assumed.** `ts2phc-f9t.service` is active; `/run/ts2phc-f9t.status`
 states the source verbatim: *"ZED-F9T TP1 (falling edge on the second) -> i210 SDP0, ts2phc generic"*.
 

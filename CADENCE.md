@@ -26,6 +26,15 @@ first compliant, host-isolated pair; timer re-enabled 02:57:14Z. **First UNATTEN
 pulse 0022 (commit, 2 TSA 03:01:44Z, pushed 221 s before round 32126321) / 0023 (reveal); entropy host finalized.**
 **05:00 UTC 2026-09-12: first cycle under the review-4 model** (recover-first, durable secret, execution enforcement from seq 26) → 0026/0027 clean.
 Only think mints; `pulse.py` refuses on any host whose checkout has diverged from the published head (a checkout merely behind it fast-forwards — ERR-010).
+**2026-09-13 12:26:57Z: one unscheduled pair (ERR-016)** — rewriting `qrng-beacon.timer` to the :02 fallback with `Persistent=true` made
+systemd run a catch-up cycle at once → **0090/0091**, valid, `cadence.source = "think-timer"`, release 12:32:03Z, reveal pushed **15 s**
+after the round (source-rate rings + concurrent statements; the previous 87 pairs took ~85 s).
+**First cycle started by the time host's clock: 2026-09-13 13:00:00Z → 0092/0093.** p550 woke **113.6 µs** after the instant
+(`wake.late_ns`), PHC−REALTIME 36 999 998 322 ns at wake (epoch_ok, ts2phc s2, +4 ns); think received the signed trigger **0.68 s**
+after the instant and started the cycle at +0.80 s; `pulse.py commit` began at +4.7 s (git pull + recover); commit minted at
+13:00:13Z and pushed **285 s before** the release; target release **13:05:00Z exactly** (`scheduled-instant+lead`); the reveal
+began 1.29 s after the round, its GNSS anchor is 10 s after, pushed **15 s** after. `verify.py` passes all five cadence checks
+on 0092. Next trigger armed for 14:00:00Z.
 
 **Cadence source (since 2026-09-13):** the hour is started by the **time host's clock, not by think's timer**.
 `hosts/beacon-cadence.py` runs on p550 (PREEMPT_RT; `CLOCK_REALTIME` disciplined by chrony from the i210 PHC, which

@@ -133,6 +133,22 @@ def test_17_site_cross_check(tmp_path, monkeypatch):
     site.write_text(note(n - 5, leaves)); R = C.CheckResult(23); TC.check(NL.LogSource(log_dir=str(log)), (23,), R, refetch=True, site_url=site.as_uri()); assert R.ok and any("consistent heads of one log" in l for l in R.lines), R.lines
     forked = list(leaves); forked[3], forked[4] = forked[4], forked[3]
     site.write_text(note(n, forked)); R = C.CheckResult(23); TC.check(NL.LogSource(log_dir=str(log)), (23,), R, refetch=True, site_url=site.as_uri()); assert not R.ok and any("SPLIT VIEW between publication surfaces" in l for l in R.lines), R.lines
+    # site AHEAD of this log copy (a mint landed after the copy was taken - routine): the missing pulses are fetched from the
+    # site (<site base>/chain/pulse-NNNN.json), chain-linked, and the two heads reconciled instead of refusing (2026-09-13)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache2"))      # a fresh machine: the log copy is SHORTER than above, which the cached-head rollback detector would (rightly) refuse
+    (tmp_path / "chain").mkdir()
+    for k in (n - 1, n): shutil.move(str(log / "chain" / f"pulse-{k:04d}.json"), str(tmp_path / "chain" / f"pulse-{k:04d}.json"))
+    (log / "checkpoint").write_text(note(n - 2, leaves)); site.write_text(note(n, leaves))
+    R = C.CheckResult(23); TC.check(NL.LogSource(log_dir=str(log)), (23,), R, refetch=True, site_url=site.as_uri())
+    assert R.ok and any("2 pulse(s) ahead of this log copy" in l for l in R.lines) and any("consistent heads of one log" in l for l in R.lines), R.lines
+    # a pulse the site serves that does not chain to the previous one is not accepted: refuse, never reconcile
+    jn = json.load(open(tmp_path / "chain" / f"pulse-{n:04d}.json")); jn["core"]["prev_hash"] = "00" * 32; json.dump(jn, open(tmp_path / "chain" / f"pulse-{n:04d}.json", "w"))
+    R = C.CheckResult(23); TC.check(NL.LogSource(log_dir=str(log)), (23,), R, refetch=True, site_url=site.as_uri())
+    assert not R.ok and any("could not be fetched from the site" in l and "does not chain" in l for l in R.lines), R.lines
+    # too far ahead to reconcile from the site: refuse
+    site.write_text(note(n, leaves)); monkeypatch.setattr(TC, "MAX_SITE_AHEAD", 1)
+    R = C.CheckResult(23); TC.check(NL.LogSource(log_dir=str(log)), (23,), R, refetch=True, site_url=site.as_uri())
+    assert not R.ok and any("exceeds the pulses available" in l and "cannot reconcile" in l for l in R.lines), R.lines
 
 def test_18_live_checkpoint_verifies_with_the_vendored_identity():
     """The repository's published checkpoint (notbefore.net/log) verifies under the vendored key, and a verify proves inclusion against it."""

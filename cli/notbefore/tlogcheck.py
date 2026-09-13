@@ -33,6 +33,29 @@ def fetch_site_checkpoint(url, timeout=15):
     import urllib.request
     with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "notbefore-cli"}), timeout=timeout) as r: return r.read().decode()
 
+MAX_SITE_AHEAD = 12          # pulses the site may be ahead of a log copy and still be reconciled from the site itself
+
+def fetch_site_pulse(base, seq, timeout=15):
+    import urllib.request
+    with urllib.request.urlopen(urllib.request.Request(f"{base}/chain/pulse-{seq:04d}.json", headers={"User-Agent": "notbefore-cli"}), timeout=timeout) as r:
+        return json.loads(r.read().decode())
+
+def _extend_from_site(leaves, need, url):
+    """The site is ahead of this log copy: a pulse landed after the copy was taken, which is routine around a mint
+    (2026-09-13: every consumer with a copy a minute old halted for the length of the mint). Fetch the missing pulses
+    from the site, require each to chain to the previous pulse and to hash to its own pulse_hash, and append them so
+    the consistency proof runs over one tree. Nothing is trusted: the site's leaves must then recompute the root in
+    the site's own signed checkpoint, and the git head must be a prefix of it."""
+    import hashlib
+    base = url.rsplit("/", 1)[0]; got = list(leaves)
+    prev_hash = json.loads(got[-1])["pulse_hash"] if got else None
+    for n in range(len(got) + 1, need + 1):
+        j = fetch_site_pulse(base, n)
+        if j["core"]["seq"] != n or (prev_hash and j["core"]["prev_hash"] != prev_hash): raise RuntimeError(f"pulse {n:04d} from the site does not chain to pulse {n-1:04d}")
+        if hashlib.sha256(T.canonical(j["core"])).hexdigest() != j["pulse_hash"]: raise RuntimeError(f"pulse {n:04d} from the site: pulse_hash != SHA256(canon(core))")
+        prev_hash = j["pulse_hash"]; got.append(T.canonical(j))
+    return got
+
 def cross_check_site(R, ident, pub_raw, git_note, git_size, git_root, leaves, url=None):
     """The site (notbefore.net) and git are two publication surfaces of the same log. Fetch the site's checkpoint and
     require it to be the same head or an append-only relative of the git head. Unreachable -> WARN; different -> FAIL."""
@@ -45,7 +68,16 @@ def cross_check_site(R, ident, pub_raw, git_note, git_size, git_root, leaves, ur
     o, ssize, sroot = T.parse_checkpoint(text)
     if note == git_note: R.say(True, f"site {url} serves the same checkpoint as git (size {ssize})"); return "same"
     lo, hi = (ssize, git_size) if ssize <= git_size else (git_size, ssize)
-    if hi > len(leaves): R.say(False, f"site checkpoint size {ssize} exceeds the pulses available ({len(leaves)}); cannot reconcile"); return "site ahead"
+    if hi > len(leaves):
+        missing = hi - len(leaves)
+        if ssize > git_size and missing <= MAX_SITE_AHEAD:
+            try:
+                leaves = _extend_from_site(leaves, hi, url)
+                R.say(True, f"site is {missing} pulse(s) ahead of this log copy (a mint landed after the copy was taken); fetched them from the site, chain-linked, to reconcile the two heads", "INFO")
+            except Exception as e:
+                R.say(False, f"site checkpoint size {ssize} exceeds the pulses available ({len(leaves)}) and the missing pulses could not be fetched from the site ({str(e)[:90]}); cannot reconcile"); return "site ahead"
+        else:
+            R.say(False, f"site checkpoint size {ssize} exceeds the pulses available ({len(leaves)}); cannot reconcile"); return "site ahead"
     oroot, nroot = (sroot, git_root) if ssize <= git_size else (git_root, sroot)
     cons = T.verify_consistency(lo, hi, T.consistency_proof(lo, leaves[:hi]), oroot, nroot)
     R.say(cons, f"site checkpoint (size {ssize}) and git checkpoint (size {git_size}) are consistent heads of one log" if cons else

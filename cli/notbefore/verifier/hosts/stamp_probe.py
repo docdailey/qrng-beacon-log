@@ -66,12 +66,41 @@ try:
 except Exception as e:
     phc_x={"device":phc_dev,"error":str(e)}
 
+# ---- ring buffers (beacon-clocklog, 2026-09-13): the host logs its clock evidence at SOURCE rate to /run/beacon-clocklog;
+# a statement summarises the trailing WINDOW of that log in milliseconds instead of sampling live for tens of seconds.
+# If a ring is missing or stale the probe falls back to live sampling and says so (ring_used=false).
+RING_DIR="/run/beacon-clocklog"; RING_WINDOW_S=int(os.environ.get("BEACON_RING_WINDOW_S","60")); RING_STALE_S=15
+def ring_rows(name, window_s=RING_WINDOW_S):
+    """Rows of the last window_s seconds of a ring, newest last; [] if absent or stale."""
+    try:
+        now=time.time(); rows=[json.loads(l) for l in open(os.path.join(RING_DIR,name+".jsonl")) if l.strip()]
+        rows=[r for r in rows if now-r.get("t",0)<=window_s]
+        if not rows or now-rows[-1]["t"]>RING_STALE_S: return []
+        return rows
+    except Exception: return []
+def ring_span(rows): return round(rows[-1]["t"]-rows[0]["t"],1) if len(rows)>1 else 0.0
+
 # Discipline: whichever servo this host actually runs.
 disc={}
+rows=ring_rows("ts2phc")
+if rows:
+    vals=[r["offset_ns"] for r in rows]; last=rows[-1]
+    disc={"servo":"ts2phc","reference":"u-blox ZED-F9T TP1 PPS (falling, on-time edge) -> i210 SDP0",
+          "last_offset_ns":last["offset_ns"],"state":last["state"],"freq_ppb":last["freq_ppb"],
+          "window_s":ring_span(rows),"samples":len(vals),
+          "offset_ns_rms":round((sum(x*x for x in vals)/len(vals))**0.5,2) if len(vals)>=3 else None,
+          "offset_ns_min":min(vals),"offset_ns_max":max(vals),
+          "states":sorted({r["state"] for r in rows}),
+          "source":"ring /run/beacon-clocklog/ts2phc.jsonl (beacon-clocklog, one row per ts2phc update)","ring_used":True,
+          "note":"offset_ns_rms is null when fewer than 3 samples fell in the window; last_offset_ns is signed and instantaneous"}
 try:
-    # Sample the ts2phc status over a window so RMS is a real statistic with a stated n,
-    # never a single signed offset mislabelled as RMS.
-    seen_ts={}; pat_ts=re.compile(r"offset\s+(-?\d+)\s+(s\d)\s+freq\s+(-?\d+)")
+  if disc: raise StopIteration
+  # Only a ts2phc host has this status file; a ptp4l-only host (k3) skips straight to the ptp4l ring/journal below.
+  if not os.path.exists("/run/ts2phc-f9t.status"): raise StopIteration
+  # Fallback: sample the ts2phc status live over a window so RMS is a real statistic with a stated n,
+  # never a single signed offset mislabelled as RMS.
+  if True:
+    seen_ts={}; pat_ts=re.compile(r"offset\s+(-?\d+)\s+(s\d)\s+freq\s+([-+]?\d+)")
     t_end_ts=time.time()+12
     while time.time()<t_end_ts:
         try:
@@ -87,9 +116,20 @@ try:
               "window_s":12,"samples":len(vals),
               "offset_ns_rms":round((sum(x*x for x in vals)/len(vals))**0.5,2) if len(vals)>=3 else None,
               "offset_ns_min":min(vals),"offset_ns_max":max(vals),
-              "states":sorted({v[1] for v in seen_ts.values()}),
+              "states":sorted({v[1] for v in seen_ts.values()}),"ring_used":False,
               "note":"offset_ns_rms is null when fewer than 3 samples fell in the window; last_offset_ns is signed and instantaneous"}
+except StopIteration: pass
 except Exception: pass
+if not disc:
+    rows=ring_rows("ptp4l")
+    if rows:
+        offs=[r["offset_ns"] for r in rows]
+        disc={"servo":"ptp4l","reference":"P550-BMC GPS GM (domain 44, UDPv4)",
+            "samples":len(offs),"window_s":ring_span(rows),"offset_ns_min":min(offs),"offset_ns_max":max(offs),
+            "offset_ns_rms":round((sum(x*x for x in offs)/len(offs))**0.5,1),
+            "offset_ns_stdev":round(statistics.pstdev(offs),1),
+            "path_delay_ns_last":rows[-1]["path_delay_ns"],"states":sorted({r["state"] for r in rows}),
+            "source":"ring /run/beacon-clocklog/ptp4l.jsonl (beacon-clocklog, one row per ptp4l sync)","ring_used":True}
 if not disc:
     try:
         j=subprocess.run(["journalctl","-u","ptp4l-bmc","--since","-5min","-o","cat"],
@@ -101,15 +141,31 @@ if not disc:
             "samples":len(offs),"offset_ns_min":min(offs),"offset_ns_max":max(offs),
             "offset_ns_rms":round((sum(x*x for x in offs)/len(offs))**0.5,1),
             "offset_ns_stdev":round(statistics.pstdev(offs),1),
-            "path_delay_ns_last":pd[-1] if pd else None,"states":states}
+            "path_delay_ns_last":pd[-1] if pd else None,"states":states,"ring_used":False}
     except Exception as e: disc={"error":str(e)}
 
 # Mesh cross-check: on p550 the i210 continuously MEASURES the BMC PHC (free_running,
 # read-only) so the BMC grandmaster is never an unwatched clock.
 mesh={}
+rows=ring_rows("mesh")
+if rows:
+    v=[r["offset_ns"] for r in rows]
+    mesh={"what":"i210 PHC continuously measures the P550-BMC PHC (ptp4l free_running=1, "
+                 "slaveOnly=1 -> read-only instrument; it never steers the i210)",
+          "monitor":"bmc-phc-monitor.service","samples":len(v),"window_s":ring_span(rows),
+          "offset_ns_min":min(v),"offset_ns_max":max(v),
+          "offset_ns_rms":round((sum(x*x for x in v)/len(v))**0.5,1),
+          "offset_ns_stdev":round(statistics.pstdev(v),1) if len(v)>1 else None,
+          "path_delay_ns":rows[-1]["path_delay_ns"],
+          "servo_states":sorted({r["state"] for r in rows}),
+          "bmc_announced_health":rows[-1].get("health"),
+          "source":"ring /run/beacon-clocklog/mesh.jsonl (beacon-clocklog, one row per monitor update)","ring_used":True}
 try:
+  if mesh: raise StopIteration
+  if not os.path.exists("/run/bmc-phc.status"): raise StopIteration      # only p550 runs the BMC monitor
+  if True:
     seen={}
-    pat2=re.compile(r"master offset\s+(-?\d+)\s+(s\d)\s+freq\s+(-?\d+)\s+path delay\s+(-?\d+)")
+    pat2=re.compile(r"master offset\s+(-?\d+)\s+(s\d)\s+freq\s+([-+]?\d+)\s+path delay\s+(-?\d+)")
     t_end=time.time()+20
     while time.time()<t_end:
         try:
@@ -128,7 +184,8 @@ try:
               "offset_ns_stdev":round(statistics.pstdev(v),1) if len(v)>1 else None,
               "path_delay_ns":list(seen.values())[-1][2],
               "servo_states":sorted({x[1] for x in seen.values()}),
-              "bmc_announced_health":list(seen.values())[-1][3]}
+              "bmc_announced_health":list(seen.values())[-1][3],"ring_used":False}
+except StopIteration: pass
 except Exception as e:
     mesh={"error":str(e)}
 

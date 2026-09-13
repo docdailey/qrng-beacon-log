@@ -248,6 +248,15 @@ That last clause is the point: a client that remembers the head it saw last time
 view by itself, without contacting anyone. Persist the newest verified checkpoint under the
 user's cache dir and refuse — loudly — on an inconsistency.
 
+- **Site cross-check** (`notbefore` ≥ 0.4.x; reconcile since 0.13.1): the checkpoint served by notbefore.net must be
+  the git head or an append-only relative of it. When the site is **ahead** of the client's log copy — routine for a
+  copy taken minutes before a mint — the client fetches the missing pulses (at most 12) from the site's own
+  `chain/pulse-NNNN.json`, requires each to chain to the previous pulse and to hash to its own `pulse_hash`, and then
+  proves consistency over the joined tree: the site's leaves must recompute the root in the site's own signed
+  checkpoint with the git head as a prefix. Anything else — a pulse that does not chain, a root that does not match,
+  a gap larger than 12 — is still a refusal. Before 0.13.1 the client refused outright ("site checkpoint size N
+  exceeds the pulses available"), which halted every consumer with a slightly stale copy for the length of each mint.
+
 ---
 
 ## 9. Conformance

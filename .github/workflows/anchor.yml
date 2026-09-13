@@ -34,4 +34,11 @@ jobs:
           if git diff --cached --quiet; then echo "no new anchors"; exit 0; fi
           n=$(ls pulse-*.anchor.json | wc -l | tr -d ' ')
           git commit -q -m "anchors: ${n} pulses anchored (run ${{ github.run_id }})"
-          git push origin HEAD:anchors
+          # GitHub occasionally answers "[remote rejected] HEAD -> anchors (failure)" (server-side, transient; twice on
+          # 2026-09-13 08:43-08:55Z). Runs are serialized by the concurrency group, so a rebase-and-retry is safe.
+          for attempt in 1 2 3 4 5; do
+            git push origin HEAD:anchors && exit 0
+            echo "push attempt ${attempt} failed; fetching and retrying"; sleep $((attempt * 20))
+            git fetch -q origin anchors && git rebase -q origin/anchors || { git rebase --abort 2>/dev/null; true; }
+          done
+          echo "::error::could not publish the anchors branch after 5 attempts (the next scheduled run at :37 catches up)"; exit 1

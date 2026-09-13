@@ -6,6 +6,24 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-016 — an unscheduled cycle at 12:26:57Z when the fallback timer's schedule was changed (2026-09-13)
+
+**What was wrong.** While moving the hour's start from think's timer to the time host's clock (CADENCE.md §2 "Cadence
+source"), `qrng-beacon.timer` was rewritten from `OnCalendar=hourly` to `OnCalendar=*:02:00` (the fallback) and reloaded
+at 12:26:57Z. The timer has `Persistent=true`; systemd compared the new schedule's most recent elapse (12:02) with the
+last recorded trigger (12:00:26) and ran the service immediately as a missed run. That started a full cycle off the
+hourly grid: **pulse 0090** (commit 12:27:10Z, target release 12:32:03Z, `core.cadence.source = "think-timer"`,
+`targeting = "drand-latest+lead"`) and **pulse 0091** (reveal, pushed 15 s after the round). Both verify; nothing about
+their construction differs from a scheduled pair. The stated cadence is one pair per hour on the hour, and this pair is
+outside it. Operator error, not a chain fault.
+
+**Fix.** The pair stays in the chain (append-only). CADENCE.md records it. Operational rule: when changing a
+`Persistent=true` timer's schedule, stop the timer first or touch its stamp file
+(`~/.local/share/systemd/timers/stamp-<unit>.timer`) before `daemon-reload`, so the new schedule cannot be read as a
+missed elapse. The one-cycle-per-hour guard in `beacon-cycle.py` (`.cycle-hour`) does not cover this case because it
+was the first cycle of that hour. (At 13:02 the fallback timer fired while the triggered 13:00 cycle was still running;
+systemd treated the start as a no-op because the unit was active, so no second cycle began — the guard was not needed.)
+
 ## ERR-015 — 0.11.0 read publication time from an unsigned field and advanced past withheld evidence (2026-09-13)
 
 **What was wrong.** The commit-bound rule shipped in `notbefore` 0.11.0 decided "was this commit public before its
