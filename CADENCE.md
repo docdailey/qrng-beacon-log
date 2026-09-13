@@ -37,7 +37,7 @@ began 1.29 s after the round, its GNSS anchor is 10 s after, pushed **15 s** aft
 on 0092. Next trigger armed for 14:00:00Z.
 
 **2026-09-13 15:07Z: commit 0096 failed at the reveal (ERR-016 was the timer; this is ERR-017)** — think's 15:00 fallback cycle ran the new
-reveal path, which crashed on a missing import; failure pulse **0097** was minted inside the window and the abandonment finalized.
+reveal path, which crashed on a missing import; failure pulse **0097** was minted inside the window and the abandonment finalized. Note: a local test of the mint-time anchoring code on 2026-09-13 uploaded a second Rekor entry for 0097's statement before the find-before-upload step existed; both entries are valid and sign the same statement, and the code now looks for an existing entry first.
 **Aggregator moved to k3 (from pulse 0098, 2026-09-13 16:00Z).** think ran the cycle from 0012 to 0097. Bill, 2026-09-13:
 *"we need to trigger on that pulse and switch to milkv from think. it has much tighter time and faster clock"* and *"we need to
 do it without ssh obviously. signaling outside of auth."* k3 (Milk-V, RISC-V, `CLOCK_REALTIME` held by chrony to its PTP PHC at
@@ -115,7 +115,7 @@ Measured from k3 unless stated; each row is a method tried, what it cost, and wh
 | TSA (two tokens) | sequential | 0.41 s | concurrent: ~0.25 s |
 | git push to GitHub | fresh SSH each push | 0.81 s negotiation | `ControlMaster` to github.com: 0.35 s |
 | interpreter start | `python3 pulse.py` per phase | 0.04 s + 0.20 s imports | kept (subprocess boundary is worth the 0.25 s); candidate for in-process later |
-| Rekor anchor | CI workflow after the push | 18 s after the push | unchanged for now; anchoring from the aggregator at mint is the next step and would allow a 3-minute lead |
+| Rekor anchor | CI workflow after the push (through 0099) | 18 s after the push | **at mint from 0100** (2026-09-13 17:00Z): the aggregator enters the commit statement into Rekor beside the git push, integratedTime = instant + 1 s (upload 0.66 s); CI still records the entry on the anchors branch. This is what let the lead drop to 60 s at 0102 |
 | probe's chrony calls | `chronyc sources` (resolves source names) | **5.3 s stall on p550 and k3 at the same instant** in staging run 3 (a resolver timeout) | `chronyc -n` everywhere (probe and logger); the probe never touches DNS |
 | the trigger's wake | `clock_nanosleep` + spin on the system clock | 5–7 µs late, but decided by the system clock | **blocked in the kernel on the i210 PHC's own second event** (`/dev/pps1`): edge stamped 21–30 µs after the boundary, process runs 0.1–0.8 ms after the stamp; the clock path is the fallback |
 | signing the trigger | `sign_statement` re-reading the PEM key | 8–143 ms on first use | key preloaded and one warm-up signature before the instant: ~1 ms |
