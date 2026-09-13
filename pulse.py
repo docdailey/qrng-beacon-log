@@ -3,7 +3,10 @@
 pulse.py — v0.5 AGGREGATOR. Assembles statements that each role host produced AND SIGNED ITSELF;
 the aggregator can neither invent a host's facts nor alter them without breaking that host's signature.
 
-  pulse.py commit [--lead N]   entropy host generates+holds E and signs {commitment, target_round};
+  pulse.py commit [--lead N] [--trigger FILE]
+                               entropy host generates+holds E and signs {commitment, target_round};
+                               --trigger: the time host's signed cadence trigger (beacon-trigger.py); target = round at the
+                               scheduled instant + lead, and the trigger is embedded in core.cadence;
                                gnss/time/witness hosts sign their own measurements bound to the commitment;
                                drand round at commit is BLS-verified here; >=2 RFC 3161 tokens or NOTHING is written.
   pulse.py reveal              refuses until drand released the target round (BLS-verified); entropy host releases E
@@ -28,6 +31,7 @@ KEYS   = os.path.join(HERE, "keys", "KEYS.json")
 # (beacon-cmd) accepts a fixed set of operations. Role, host name and probe are fixed ON THE HOST, never sent from here.
 SSH = {"protectli": "beacon@192.168.70.1", "p550": "beacon@192.168.68.44", "k3": "beacon@192.168.68.24", "f9t": "beacon@192.168.68.46"}
 DEFAULT_LEAD, MIN_LEAD = 100, 60
+START_NS = time.time_ns()                      # aggregator clock at process start (think, NTP ~10 us): latency bookkeeping only
 _PULSE_RE = re.compile(r"^pulse-\d{4}\.json$")
 
 def die(m): sys.stderr.write("REFUSING TO MINT: %s\n" % m); sys.exit(2)
@@ -87,13 +91,39 @@ def check_statement(name, signed, seq, phase, binding):
         if not ok: die(f"{name}: execution self-report rejected: {why}")
     return signed
 
+def check_trigger(signed, seq):
+    """A cadence trigger is a statement by the TIME host (p550) that its i210-disciplined clock reached the scheduled
+    instant (hosts/beacon-cadence.py). Embedded in the commit, it makes the instant that started the hour attested by
+    the clock that measured it. Verified like a host statement; a bad one is RECORDED and ignored, never fatal."""
+    try:
+        st, sig = signed["statement"], signed["signature"]
+        if (st.get("v") != S.VERSION or st.get("role") != "time_attester" or st.get("host") != "p550"
+                or st.get("kind") != "cadence-trigger" or st.get("chain_hash") != S.CHAIN_HASH): return False, "wrong v/role/host/kind/chain"
+        if sig.get("alg") != "ed25519" or hashlib.sha256(base64.b64decode(sig["public_key_b64"])).hexdigest()[:16] != sig["key_id"]: return False, "bad key_id"
+        if not key_allowed("time_attester", sig["public_key_b64"], seq): return False, f"key not valid for time_attester at seq {seq}"
+        Ed25519PublicKey.from_public_bytes(base64.b64decode(sig["public_key_b64"])).verify(base64.b64decode(sig["sig_b64"]), A.canon(st))
+        t0 = st.get("scheduled_unix_s")
+        if not isinstance(t0, int) or (t0 - S.GENESIS) % S.PERIOD != 0: return False, "scheduled instant is not a drand round boundary"
+        if not (0 <= time.time() - t0 <= 900): return False, "scheduled instant is not within the last 15 minutes"
+        return True, "ok"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
 def collect(seq, phase, binding, names):
-    out = {}
-    for n in names:
-        if n == "entropy": continue
+    """Gather the attest hosts' statements CONCURRENTLY (2026-09-13: they used to be queried one after another, which put the
+    sum of the probe windows on the critical path). Each host still runs its own forced command and signs its own facts;
+    the aggregator only assembles. Any failure aborts the phase exactly as before."""
+    from concurrent.futures import ThreadPoolExecutor
+    wanted = [n for n in names if n != "entropy"]
+    def one(n):
         role, host = S.STATEMENTS[n]
         raw = ssh(host, f"attest {phase} {seq} {binding} {S.CHAIN_HASH}")          # forced command; host decides role+probe
-        out[n] = check_statement(n, json.loads(raw), seq, phase, binding)
+        return n, host, json.loads(raw)
+    out = {}
+    with ThreadPoolExecutor(max_workers=max(1, len(wanted))) as ex:
+        results = list(ex.map(one, wanted))                                          # exceptions propagate here, in order
+    for n, host, j in results:
+        out[n] = check_statement(n, j, seq, phase, binding)
         if n in ("time", "witness"):                      # a REQUIRED clock statement must report a healthy clock
             g = out[n]["statement"]["measurement"].get("epoch_guard", {})
             if g.get("epoch_ok") is not True or g.get("chrony_selects_refclock") is not True or g.get("ALERT"):
@@ -141,14 +171,30 @@ def seal(core):
     return final, ph, None
 
 # ---------------------------------------------------------------- commands
-def cmd_commit(lead):
+def cmd_commit(lead, trigger_path=None):
     if lead < MIN_LEAD: die(f"lead {lead} < MIN_LEAD {MIN_LEAD}")
     require_synced()
     seq, prev_hash, hp = head()
     if ptype(hp) == "commit": die(f"pulse {seq} is an unresolved commit; reveal it or record a failure first")
     seq += 1
     now = drand_verified()
-    target = now["round"] + lead; release = S.release_time(target)
+    # Cadence (2026-09-13): normally the time host's clock started this cycle and delivered a signed trigger; then the
+    # target is the round released AT the scheduled instant + lead, so the release lands on a fixed grid (:05:00) instead
+    # of drifting with the aggregator's start-up time. Without a valid trigger the target is drand-latest + lead as before.
+    cadence = {"schedule": "hourly; the time host (p550) triggers the commit at :00:00 UTC by its i210-disciplined clock; "
+                           "target round = the round released at that instant + lead (CADENCE.md)",
+               "source": "think-timer", "targeting": "drand-latest+lead", "aggregator_start_unix_ns": str(START_NS)}
+    target = now["round"] + lead
+    if trigger_path:
+        tj = json.load(open(trigger_path)); signed = tj["trigger"]; ok, why = check_trigger(signed, seq)
+        if ok:
+            t0 = signed["statement"]["scheduled_unix_s"]; r0 = (t0 - S.GENESIS) // S.PERIOD + 1        # the round released AT t0
+            cadence.update({"source": "p550/i210 cadence trigger", "trigger": signed, "received_unix_ns": str(tj.get("received_unix_ns"))})
+            if r0 + lead - now["round"] >= MIN_LEAD: target = r0 + lead; cadence["targeting"] = "scheduled-instant+lead"
+            else: cadence["targeting_note"] = f"trigger too old for scheduled targeting (round {r0}+{lead} vs drand latest {now['round']}); drand-latest+lead used"
+        else:
+            cadence["trigger_rejected"] = why; sys.stderr.write(f"note: cadence trigger rejected ({why}); minting from the aggregator's own start\n")
+    release = S.release_time(target)
     if release - time.time() < S.PUBLISH_MARGIN_S + 60: die("target round is not far enough away to honour the publication margin")
     # The SSH outcome itself is uncertain (timeout after the host created its secret, malformed reply): treat the
     # entropy host as POSSIBLY holding a secret from the moment we ask, and roll back on any exception from here on.
@@ -177,7 +223,7 @@ def cmd_commit(lead):
             "derived": {"entropy_commitment": commitment, "target_round": target, "target_release_unix_s": release,
                         "target_release_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(release)),
                         "anchor_utc_unix_s": str(anchor_s), "anchor_before_release_s": str(D(release) - anchor_s), "lead_rounds": lead},
-            "tooling": tooling(sts), "aggregator_host": "think"}
+            "tooling": tooling(sts), "aggregator_host": "think", "cadence": cadence}
     try:
         path, ph, st = seal(core)
     except SystemExit:
@@ -216,7 +262,9 @@ def cmd_reveal():
                         "round_release_unix_s": dr["round_release_unix_s"], "anchor_utc_unix_s": str(anchor_s),
                         "anchor_after_release_s": str(anchor_s - D(dr["round_release_unix_s"])),
                         "commit_anchor_before_release_s": str(D(dr["round_release_unix_s"]) - D(hp["core"]["derived"]["anchor_utc_unix_s"]))},
-            "tooling": tooling(sts), "aggregator_host": "think"}
+            "tooling": tooling(sts), "aggregator_host": "think",
+            "cadence": {"aggregator_start_unix_ns": str(START_NS), "started_after_release_s": str(D(START_NS) / D(10**9) - D(dr["round_release_unix_s"])),
+                        "meaning": "when the aggregator began the reveal, on its own (NTP) clock; the attested ordering is the GNSS anchor, not this"}}
     path, ph, _ = seal(core)
     print(json.dumps({"minted": path, "type": "reveal", "seq": seq, "reveals_commit": cseq, "attested_value": core["derived"]["attested_value"],
                       "drand_round": target, "commit_before_round_by_s": core["derived"]["commit_anchor_before_release_s"],
@@ -369,7 +417,7 @@ def cmd_status():
 
 if __name__ == "__main__":
     a = sys.argv[1:]; cmd = a[0] if a else "status"
-    if cmd == "commit": cmd_commit(int(a[a.index("--lead") + 1]) if "--lead" in a else DEFAULT_LEAD)
+    if cmd == "commit": cmd_commit(int(a[a.index("--lead") + 1]) if "--lead" in a else DEFAULT_LEAD, a[a.index("--trigger") + 1] if "--trigger" in a else None)
     elif cmd == "reveal": cmd_reveal()
     elif cmd == "fail": cmd_fail(" ".join(a[1:]) or "unspecified")
     elif cmd == "finalize": cmd_finalize()

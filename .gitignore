@@ -13,3 +13,8 @@ cli/*.egg-info/
 
 # wrangler CLI cache (created by any local `wrangler` command; never content)
 .wrangler/
+
+# cadence trigger path (beacon-trigger.py / beacon-cycle.py on the aggregator)
+trigger/
+trigger.log
+.cycle-hour

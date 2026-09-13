@@ -72,3 +72,18 @@ action and should be recorded here when it happens (it happened once: protectli,
   and by the verifier: `user == beacon`, `via_forced_command`, `beacon_cmd_sha256` among the published values, and
   `host_config_sha256` equal to the per-host value in `hosts/EXPECTED.json`. Pulses 0020–0025 are isolated but predate the
   field or its enforcement and are not retroactively required to carry it.
+
+## Cadence trigger edge (2026-09-13)
+
+The time host now initiates one thing: p550's `beacon` user holds an outbound SSH key (`~beacon/.ssh/cadence_ed25519`)
+that is authorised on think as
+`restrict,from="192.168.68.43,192.168.68.44",command="/usr/bin/python3 /home/willy/qrng-beacon/beacon-trigger.py"`.
+Through it, `hosts/beacon-cadence.py` delivers a **signed cadence trigger** at each scheduled instant; `beacon-trigger.py`
+verifies it against `keys/KEYS.json` (p550's active `time_attester` key), requires it to be fresh (≤ 120 s), writes it to
+`trigger/pending.json` and starts `qrng-beacon.service`. That is the whole capability: no shell, no file access, no
+other unit. think's host key is pinned in `~beacon/.ssh/known_hosts` on p550.
+
+What a compromised p550 `beacon` user gains from this edge: it could already forge p550's time statements; it can now
+also start a cycle at an instant of its choosing. That is bounded (one cycle per hour on think, `.cycle-hour`) and
+visible (every commit carries the trigger it was started from, `verify.py` checks the instant is a round boundary and
+that the target round follows from it). The aggregator's keys, the entropy host and the other attest hosts are unchanged.

@@ -272,6 +272,29 @@ def strict_main():
         chk(_D(d.get("anchor_utc_unix_s", "nan")) == anchor, "derived.anchor_utc_unix_s equals the GNSS host's signed anchor")
         eg = sts["time"]["statement"]["measurement"].get("epoch_guard", {})
         # (p550 guard is covered by clock_health above)
+        # ---- cadence trigger (2026-09-13): who said the hour started, and does the target follow from that instant? ----
+        cad = core.get("cadence") or {}
+        if cad.get("trigger"):
+            ts_, tsig = cad["trigger"]["statement"], cad["trigger"]["signature"]
+            chk(ts_.get("v") == S.VERSION and ts_.get("role") == "time_attester" and ts_.get("host") == "p550" and ts_.get("kind") == "cadence-trigger"
+                and ts_.get("chain_hash") == S.CHAIN_HASH, "cadence: trigger is a v0.5 time_attester@p550 cadence-trigger on the pinned chain")
+            kid_ok = tsig.get("alg") == "ed25519" and hashlib.sha256(base64.b64decode(tsig["public_key_b64"])).hexdigest()[:16] == tsig.get("key_id")
+            try: Ed25519PublicKey.from_public_bytes(base64.b64decode(tsig["public_key_b64"])).verify(base64.b64decode(tsig["sig_b64"]), A.canon(ts_)); r = True
+            except Exception: r = False
+            chk(kid_ok and r, "cadence: p550's signature verifies over the trigger — the instant that started the hour was attested by the i210-disciplined host, not by the aggregator")
+            if pin:
+                ok, desc = pin_check(pin, "time_attester", tsig["public_key_b64"], core["seq"])
+                if ok is not None: chk(ok, f"cadence: trigger key pinned for seq {core['seq']} — {desc}")
+            t0 = ts_.get("scheduled_unix_s")
+            chk(isinstance(t0, int) and (t0 - S.GENESIS) % S.PERIOD == 0, "cadence: scheduled instant is a drand round boundary")
+            if cad.get("targeting") == "scheduled-instant+lead":
+                chk(isinstance(t0, int) and rel == t0 + int(d.get("lead_rounds") or 0) * S.PERIOD,
+                    f"cadence: target release == scheduled instant + {d.get('lead_rounds')} rounds ({utc(rel) if isinstance(t0, int) else '?'})")
+            w, ph = ts_.get("wake") or {}, ts_.get("phc") or {}
+            print(f"[INFO] cadence: {cad.get('source')}; p550 woke {int(w.get('late_ns') or 0) / 1000:.1f} us after {utc(t0) if isinstance(t0, int) else t0}; "
+                  f"PHC-REALTIME at wake {ph.get('phc_minus_realtime_ns')} ns; targeting {cad.get('targeting')}")
+        elif cad:
+            print(f"[INFO] cadence: {cad.get('source')} ({cad.get('targeting')})" + (f"; trigger rejected: {cad['trigger_rejected']}" if cad.get("trigger_rejected") else ""))
         if prev is not None:
             chk(prev["core"].get("type", "legacy") in ("legacy", "reveal", "failure", "skip") or "type" not in prev["core"], "state machine: commit follows a reveal, failure, skip or legacy pulse")
     elif typ in ("reveal", "failure"):

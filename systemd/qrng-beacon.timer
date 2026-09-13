@@ -1,11 +1,15 @@
+# qrng-beacon.timer — FALLBACK since 2026-09-13. The hour is normally started at :00:00.000 UTC by the time host's clock
+# (p550: systemd/beacon-cadence.service -> beacon-trigger.py -> `systemctl --user start qrng-beacon.service`). If that
+# trigger does not arrive, this timer starts the same service at :02; the pulse then says cadence.source = "think-timer".
+# beacon-cycle.py runs at most one cycle per hour (.cycle-hour), so both paths firing is harmless.
 [Unit]
-Description=Hourly qrng-beacon cycle
+Description=qrng-beacon cycle — fallback start at :02 when the time host's trigger did not arrive (CADENCE.md)
 
 [Timer]
-OnCalendar=hourly
+OnCalendar=*:02:00
+AccuracySec=1s
 RandomizedDelaySec=0
 Persistent=true
-AccuracySec=30s
 
 [Install]
 WantedBy=timers.target

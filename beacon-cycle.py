@@ -7,6 +7,9 @@ Contract (CADENCE.md):
   * reveal is minted and PUSHED within REVEAL_DEADLINE_S after the round releases
   * any breach writes a pulse-NNNN.FAILED.json into the chain and pushes it. Failures are public.
 Everything fails closed; nothing is retried silently.
+Cadence (2026-09-13): the time host's clock starts the cycle (beacon-cadence.py on p550 -> beacon-trigger.py here ->
+`systemctl --user start qrng-beacon.service`); the systemd timer at :02 is the fallback and a fallback cycle says so in
+the pulse (core.cadence.source = "think-timer"). One cycle per hour either way (.cycle-hour).
 """
 import subprocess, json, sys, os, time, glob, urllib.request
 REPO = os.path.dirname(os.path.abspath(__file__))
@@ -82,6 +85,29 @@ def skip(reason):
     except Exception as e:
         log(f"could not mint/publish skip pulse: {e}")
 
+HOUR = time.strftime("%Y-%m-%dT%H", time.gmtime()); STAMP = os.path.join(REPO, ".cycle-hour")
+def claim_hour():
+    """One cycle per hour. Since 2026-09-13 the time host (p550) starts the cycle at :00:00 by its i210-disciplined clock
+    (hosts/beacon-cadence.py -> beacon-trigger.py); the systemd timer at :02 is only a fallback and must not start a
+    second attempt (a second skip pulse, or a commit racing a live cycle)."""
+    prev = open(STAMP).read().strip() if os.path.exists(STAMP) else ""
+    if prev == HOUR: return False
+    open(STAMP, "w").write(HOUR); return True
+
+def take_trigger():
+    """The signed cadence trigger the time host delivered for THIS cycle (trigger/pending.json), if any. Consumed once."""
+    p = os.path.join(REPO, "trigger", "pending.json")
+    if not os.path.exists(p): return None
+    last = os.path.join(REPO, "trigger", "last.json"); os.replace(p, last)
+    try:
+        j = json.load(open(last)); st = j["trigger"]["statement"]; t0 = st["scheduled_unix_s"]
+        if time.time() - t0 > 300: log(f"trigger for {t0} is stale ({time.time() - t0:.0f} s old); ignoring it"); return None
+        log(f"trigger from {st['host']} for {t0}: p550 woke {st['wake']['late_ns'] / 1000:.1f} us after the instant, think received it "
+            f"{int(j['received_unix_ns']) / 1e9 - t0:.3f} s after, cycle start {time.time() - t0:.3f} s after")
+        return last
+    except Exception as e:
+        log(f"unreadable trigger: {e}"); return None
+
 def catch_up():
     """Anything minted but not pushed (a previous cycle lost connectivity after sealing) is published before we
     reason about the head; otherwise require_synced refuses forever and the beacon stalls on its own unpushed file."""
@@ -91,6 +117,10 @@ def catch_up():
 
 def main():
     log("cycle start")
+    if not claim_hour():
+        log(f"a cycle already started in hour {HOUR}Z (trigger path); this run is the timer fallback and exits"); return
+    trig = take_trigger()
+    if trig is None: log("no host trigger for this cycle: think's timer started it (fallback); the pulse will say so")
     run("git", "pull", "-q", "--ff-only", "origin", "main")
     catch_up()
     # ---- RECOVER: derive state from the published chain before doing anything new ----
@@ -106,7 +136,7 @@ def main():
     else:
         # ---- COMMIT ----
         try:
-            out = json.loads(run("python3", "pulse.py", "commit", "--lead", str(LEAD)))
+            out = json.loads(run("python3", "pulse.py", "commit", "--lead", str(LEAD), *(["--trigger", trig] if trig else [])))
         except Exception as e:
             log(f"commit refused: {e}"); skip(f"commit refused: {e}"); sys.exit(1)      # nothing committed; the refusal itself is published
         seq, target = out["seq"], out["target_round"]
@@ -117,14 +147,16 @@ def main():
         log(f"commit pushed {margin:.0f}s before release")
         if margin < PUBLISH_MARGIN_S:
             fail(seq, "commit-published-late", {"margin_s": round(margin, 1), "required_s": PUBLISH_MARGIN_S})
-    # ---- WAIT for the round, judged by drand itself ----
+    # ---- WAIT for the round: sleep to the known release instant, then let drand itself confirm it ----
+    wait = release + 0.2 - time.time()
+    if wait > 0: time.sleep(wait)
     while True:
         try:
             if drand_latest_round() >= target: break
         except Exception as e: log(f"drand poll error: {e}")
         if time.time() > release + REVEAL_DEADLINE_S - 60:
             fail(seq, "round-never-observed", {"last_check_utc": time.strftime("%H:%M:%SZ", time.gmtime())})
-        time.sleep(3)
+        time.sleep(0.5)
     # ---- REVEAL (only if it can still be published inside the deadline; otherwise a signed failure) ----
     if time.time() > release + REVEAL_DEADLINE_S - 90:
         fail(seq, "reveal-window-missed", {"now_minus_release_s": round(time.time() - release, 1)})

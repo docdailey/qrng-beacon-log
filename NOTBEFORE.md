@@ -245,7 +245,7 @@ A reveal pulse \(N\) is a **NotBefore-eligible** seed if and only if:
 
 **First eligible pair:** 0020/0021.  
 **Preferred floor:** 0026/0027 (execution enforced).  
-**Current cadence:** hourly on the hour, host `think`, timer `qrng-beacon.timer`.
+**Current cadence:** hourly. Since 2026-09-13 the hour is started at :00:00 UTC by the time host's i210-disciplined clock (a signed trigger from p550, embedded in each commit as `core.cadence.trigger`); the aggregator is `think`; the release is at :05:00; think's `qrng-beacon.timer` at :02 is only the fallback (CADENCE.md §2).
 
 If the named hour is ineligible or missing, the consumer MUST take a **later** eligible hour named in advance as the alternate (the next eligible reveal in the log — typically the next cycle; a `failure` pulse shifts numbering, so name it by rule, not by \(N+2\)), never an earlier one, never a “best of three.”
 

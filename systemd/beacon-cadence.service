@@ -1,0 +1,23 @@
+# beacon-cadence.service — on the TIME host (p550). At each scheduled instant, by the i210-disciplined clock, sign a
+# cadence trigger with the time_attester key and start the aggregator's cycle over a forced-command SSH key (CADENCE.md,
+# hosts/beacon-cadence.py). Install: install -m 755 hosts/beacon-cadence.py /usr/local/bin/beacon-cadence.py
+[Unit]
+Description=beacon cadence trigger: wake at the scheduled instant on the i210-disciplined clock and start the aggregator's cycle
+After=network-online.target chrony.service ts2phc-f9t.service beacon-clocklog@time.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=beacon
+Group=beacon
+SupplementaryGroups=ptp
+Environment=HOME=/home/beacon
+RuntimeDirectory=beacon-cadence
+RuntimeDirectoryMode=0755
+ExecStart=/usr/bin/python3 /usr/local/bin/beacon-cadence.py
+Restart=always
+RestartSec=10
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

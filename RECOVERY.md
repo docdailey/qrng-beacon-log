@@ -65,6 +65,14 @@ a `.revealing` below the head is finalized against its published resolver. The o
 the published chain — read `cycle.log`, find whether the pulse was minted but not pushed (`git status` in
 `~/qrng-beacon`), push it if so, else `pulse.py fail`.
 
+### 2d'. The cadence trigger does not arrive (p550's `beacon-cadence.service` down, SSH path to think broken) → **think's :02 fallback runs the hour**
+Since 2026-09-13 the hour is normally started by p550's signed trigger at :00:00 (CADENCE.md §2 "Cadence source"). If it
+does not arrive, `qrng-beacon.timer` (`OnCalendar=*:02:00`) starts the same service two minutes later; the commit then
+targets drand-latest + lead (release ≈ :07 instead of :05) and says `cadence.source = "think-timer"`. Nothing is
+skipped and nothing is hidden: the absence of a trigger is visible in the pulse. (If p550 itself is down, the commit is
+refused anyway — the time statement is REQUIRED — and the hour becomes a `skip` pulse as in 2a.) Diagnose with
+`journalctl -u beacon-cadence` on p550 and `~/qrng-beacon/trigger.log` on think.
+
 ### 2e. Someone pushes to `main` while a cycle runs → **handled (since ERR-010)**
 The cycle fast-forwards when it is merely behind, and a rejected push is rebased and retried. Before 2026-09-12 16:09
 UTC this refused the reveal (ERR-010). Still avoid pushing during :00–:07 when you can — a rebase in the reveal path

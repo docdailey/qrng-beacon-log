@@ -107,7 +107,8 @@ seq inside its validity window.
 { "v":"0.5", "type": commit|reveal|failure, "seq", "prev_hash", "chain_hash",
   "statements": { "entropy", "gnss", "time", "witness" },      # failure: entropy required, others best-effort
   "drand_at_commit" | "drand",                                 # BLS-verified by the aggregator before use
-  "derived": { ... },  "tooling": {...},  "aggregator_host":"think" }
+  "derived": { ... },  "tooling": {...},  "aggregator_host":"think",
+  "cadence": { "source", "targeting", "trigger"?, "received_unix_ns"?, "aggregator_start_unix_ns", ... } }   # since 2026-09-13, see "Cadence trigger"
 pulse = { "core", "pulse_hash" = SHA256(canon(core)), "signatures": { "aggregator" }, "disclosure" }
 ```
 Required statements: commit/reveal → entropy, gnss, time, witness; failure → entropy. The entropy statement's
@@ -118,6 +119,35 @@ Required statements: commit/reveal → entropy, gnss, time, witness; failure →
 reveal or failure must directly follow its commit; `seq` increments by exactly one.
 
 v0.5.1: `skip` joins the resting states: `{legacy, reveal, failure, skip} -> commit | skip`; `commit -> reveal | failure` only. A verifier or CI that does not know `skip` rejects the first commit after a skipped hour with *"state machine: commit follows a reveal, failure or legacy pulse"* — upgrade the verifier (`notbefore` ≥ 0.3.0).
+
+### Cadence trigger (added 2026-09-13; present in commits from the first triggered cycle onward)
+A commit may carry `core.cadence.trigger`: a **statement signed by the time host** (p550, role `time_attester`, `kind:
+"cadence-trigger"`) that its i210-disciplined clock reached the scheduled instant:
+```
+{ "statement": { "v":"0.5", "role":"time_attester", "host":"p550", "kind":"cadence-trigger", "chain_hash",
+                 "scheduled_unix_s": <int, a drand round boundary>, "period_s", "offset_s",
+                 "wake": { "clock":"CLOCK_REALTIME", "unix_ns":"<str>", "late_ns": <int>, "how" },
+                 "phc":  { "device", "unix_ns":"<str>", "realtime_mid_unix_ns":"<str>", "phc_minus_realtime_ns", "bracket_ns", "tai_minus_utc_s" },
+                 "clock_state": { "epoch_ok", "refclock_selected", "ts2phc_state", "ts2phc_offset_ns", ... },
+                 "issued_unix_ns":"<str>", "nonce", "tools":[...], "execution": {...} },
+  "signature": { "alg":"ed25519", "key_id", "public_key_b64", "sig_b64", "over":"canon(statement)" } }
+```
+`core.cadence.source` is `"p550/i210 cadence trigger"` or `"think-timer"` (fallback); `core.cadence.targeting` is
+`"scheduled-instant+lead"` (target round = the round released **at** `scheduled_unix_s` + `derived.lead_rounds`, so
+`target_release_unix_s == scheduled_unix_s + lead_rounds*3`) or `"drand-latest+lead"` (the pre-2026-09-13 rule).
+A trigger the aggregator could not verify is recorded as `cadence.trigger_rejected` and ignored; it is never fatal.
+`received_unix_ns` (think, on receipt) and `aggregator_start_unix_ns` (think, when `pulse.py` started) are on think's
+NTP clock and are latency bookkeeping, not attested quantities.
+
+**Verifier checks** (`verify.py`, only when a trigger is present): the statement is a v0.5 `time_attester@p550`
+`cadence-trigger` on the pinned chain; `key_id == SHA256(pk)[:16]`; the signature verifies over `canon(statement)`;
+with `--pin`, the key is p550's `time_attester` key valid at this seq; `scheduled_unix_s` is a drand round boundary;
+and, when `targeting == "scheduled-instant+lead"`, `target_release == scheduled_unix_s + lead_rounds*3`.
+**What it proves:** which clock declared the hour, and that the target round was derived from that instant rather than
+from when the aggregator happened to start. **What it does not change:** the protocol's ordering claims still rest on
+the GNSS anchor versus the round release, and the trigger's own timestamps are that host's clock reading, not an
+independent measurement of it. A reveal carries `core.cadence.aggregator_start_unix_ns` and `started_after_release_s`
+(think's clock; bookkeeping).
 
 ### Timing contract
 Commit: ≥ **2** RFC 3161 tokens taken at mint over the final bytes, else **nothing is written**; each token time
