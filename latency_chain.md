@@ -110,3 +110,37 @@ of the new reveal path crashed on a missing import that commit-only staging had 
 failure pulse 0097 inside the window, and staging now runs a full pair. A DNS reverse lookup inside `chronyc sources`
 stalled two clock hosts 5.3 s at the same instant (now `-n`). A thread-pool context manager joined the slowest drand relay
 and held a commit 4 s (now first-answer-wins with detached threads). Each is in ERRATA.md or CADENCE.md.
+
+## 8. Progression, pulse by pulse (2026-09-13)
+
+One representative commit from each stage of the day, every figure relative to that hour's instant (the top of the hour;
+0096 is the :02 fallback and its instant is still 15:00:00). Sources: the pulse's `core.cadence` and statement
+`issued_unix_ns` fields, the aggregator's `cycle.log` ("commit pushed N s before release", "pushed N s after release"),
+the anchors branch `INDEX.tsv` (`rekor_integratedTime`, 1 s resolution) and the git commit time of the chain file where
+no log line exists. Sub-second numbers come from the pulse; whole seconds from logs.
+
+| pulse (UTC) | how the hour started | aggregator process start | last host statement | commit pushed | Rekor entry | release after the instant | reveal pushed after the release | randomness usable after the instant |
+|---|---|---|---|---|---|---|---|---|
+| **0088** (12:00) | think's systemd timer at :00:26; target = drand latest + 100 rounds | +26 s (timer) / first statement +33.9 s | +104.1 s | +106 s | +118 s (CI) | +327 s (:05:27) | +83 s | **+410 s** |
+| **0092** (13:00) | p550's clock-timed trigger over SSH to think: p550 woke +114 µs, think received it +0.68 s, cycle start +0.80 s | +4.67 s (pulse.py) | +12.6 s | +15 s | +33 s (CI) | +300 s (:05:00) | +15 s | **+315 s** |
+| **0094** (14:00) | same path: p550 woke +112 µs, received +0.56 s, cycle start +0.70 s | +6.02 s | +12.7 s | +15 s | +32 s (CI) | +300 s | +15 s | **+315 s** |
+| **0096** (15:00) | think's :02 fallback timer (cycle start +120 s); the reveal then crashed on a missing import (ERR-017) | +124.4 s | +132.2 s | +134 s | +149 s (CI) | +423 s (:07:03) | failure pulse 0097 pushed +165 s | none |
+| **0098** (16:00) | k3, tick-started, first live pair: i210 PPS edge +267 µs, p550 woke +317 µs, trigger issued +0.52 ms; k3 started on the datagram +2.87 ms | +0.243 s | +0.767 s | +2.4 s | +14 s (CI) | +300 s | +3.4 s | **+303.4 s** |
+| **0100** (17:00) | k3: edge +274 µs, woke +289 µs, issued +0.44 ms; k3 kernel receive +2.05 ms, userspace +2.11 ms, start +8.07 ms | +0.248 s | +0.652 s | +2.2 s | **+1 s (at mint)** | +300 s | +3.4 s | **+303.4 s** |
+| **0102** (18:00) | k3, lead 20 rounds (60 s) | (to be filled in from the 18:00 cycle) | | | | +60 s (:01:00) | | target ≈ +64 s |
+
+What each column's movement was:
+
+- **Start of the hour → aggregator start:** 26 s (a timer) → 0.8 s (SSH-carried trigger) → 2.9–8.1 ms (hardware edge, UDP,
+  tick-started process). The remaining 6 ms between k3 receiving the datagram and starting is the open item in §5.
+- **Aggregator start → last host statement:** 70 s (think: py_ecc BLS, cold SSH to four hosts) → 8 s (warm SSH) → 0.4–0.5 s
+  (beacon-agentd, concurrent requests, hot processes).
+- **Last statement → commit pushed:** 2 s throughout; the git push itself is the floor now (§5).
+- **Rekor:** 118 s → 32 s (CI ran sooner after the push) → 14 s → 1 s (the aggregator uploads at mint, beside the push).
+- **Release after the instant:** :05:27 (drand latest + lead at commit time) → :05:00 (the instant + lead, a fixed grid) →
+  :01:00 (lead 20 rounds, from 0102).
+- **Reveal pushed after the release:** 83 s (py_ecc 4.7 s, cold SSH, serial hosts, one relay) → 15 s → 3.4 s (blst,
+  relay race from release + 1.0 s, agentd, `--drand` hand-off). The relays themselves serve the round 1.1–1.4 s after
+  release, so ~2 s of the 3.4 s is outside the lab.
+- **Time to usable randomness:** 410 s → 315 s → 303 s, then the lead change: ≈ 64 s from 0102. Everything below the lead
+  is now ~4 s of which ~1.2 s is the relays.
