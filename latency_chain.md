@@ -169,6 +169,9 @@ the other's datagram in the kernel (`SO_TIMESTAMPNS`) and in userspace. Clock st
 | 18:23:00 | normal, `cpu-retentive` disabled on CPU0 only | +6.8 µs | +8.3 µs | +283 µs | 741 µs | 359 µs |
 | 18:25:00 | normal, `cpu-retentive` disabled on all four CPUs | +6.3 µs | +7.4 µs | +298 µs | 329 µs | 341 µs |
 | 18:26:00 | normal, `cpu-retentive` disabled on all four CPUs | +6.5 µs | +2,719 µs | +275 µs | 467 µs | 332 µs |
+| 18:28:00 | normal, PM QoS held, idle states default | +5.7 µs | **+7.9 µs** | +288 µs | 503 µs | 308 µs |
+| 18:29:00 | normal, PM QoS held, idle states default | +5.6 µs | **+7.9 µs** | **+24.9 µs** | 782 µs | 395 µs |
+| 18:30:00 | normal, pinned to CPU0, no QoS | +6.8 µs | +719 µs | +274 µs | 280 µs | 340 µs |
 
 One-way = the peer's send stamp to the receiver's kernel stamp, both software; serializing and the first `sendto` cost
 80–105 µs on either host and are inside these numbers.
@@ -183,15 +186,15 @@ What it shows:
   thread, which the FIFO-50 IRQ threads (all five igb vectors sit on CPU0 at FIFO 50) hold off around the second. The
   cadence service does not sleep on the clock, it waits on the PPS event, which is why the live trigger wakes 15–19 µs
   after the edge regardless.
-- **Disabling the deep idle state does not fix it; the one fast run so far is PM QoS.** p550's `sbi_cpuidle` offers WFI and
-  `cpu-retentive` (advertised exit latency 60 µs); the five i210 hard interrupts land on CPU0, the `irq/178` RT thread
-  (FIFO 50, affinity 0–2) last ran on CPU0; ASPM on the i210 is disabled. Results: `cpu-retentive` disabled on CPU0
-  (18:22, 18:23) or on all four CPUs (18:25, 18:26): stamps +275 to +298 µs, and a 2.7 ms late wake came back at 18:26.
-  FIFO priority: wakes +7.8/+8.0 µs three of three, stamps +26/+294/+276 µs. PM QoS `/dev/cpu_dma_latency` = 0 held
-  (18:19): wake +8.0 µs and stamp +23 µs, one sample. QoS at 0 differs from a state disable in one way: the menu
-  governor then enters WFI *with the tick kept running*, so the candidate is the tick-stopped idle exit on this SoC,
-  not the state itself. Being replicated (18:28, 18:29) with idle states restored, plus a run that keeps CPU0 busy
-  from a normal-priority process (18:30). Nothing is claimed until then; the idle states are back to default.
+- **p550's clock wake is controlled; its PPS interrupt stamp is not.** Thirteen lab minutes, idle states, priority, CPU
+  pinning and PM QoS tried in turn (table). The *timer wake* of a p550 process is +7.4 to +8.3 µs whenever SCHED_FIFO or
+  PM QoS (`/dev/cpu_dma_latency` = 0) is in effect, six of six, and erratic otherwise (360 µs, 719 µs, 2.7 ms, 6.8 ms):
+  a normal-priority sleeper on this PREEMPT_RT kernel wakes late unless the tick is kept running or it outranks the IRQ
+  threads. The *pps1 edge stamp* (the software time at which the `irq/178` thread serviced the i210's second interrupt)
+  was +23 to +26 µs in three runs and +269 to +298 µs in ten, and nothing tried selects between them: not cpu-retentive
+  off (CPU0 or all), not FIFO, not a busy CPU0, not QoS (fast in two of three). The i210's hardware latch of the F9T
+  edge (ts2phc, ±10 ns) is unaffected; this is the service latency of one interrupt and it costs the trigger ~250 µs on
+  most hours. It stays an open item with a measured distribution rather than a fix.
 - **The clocks agree to the resolution of software stamps.** In the 18:14 run the two one-way delays were 415 and
   417 µs: a clock offset d would make them differ by 2d, so |d| ≲ a few µs, consistent with the PHC readings (k3
   16 ns → −101 ns from its PHC across the runs; p550 ~1.7 µs, inside its 8 µs PHC read bracket).
@@ -202,6 +205,8 @@ Design option this opens (not built; Bill's call): k3 starts at its own instant 
 record as it arrives ~2.5 ms later, so the datagram attests the instant instead of causing the start. The pulse would then
 name k3's PTP-disciplined clock as the start and p550's i210 event as the independent witness of the same second. What is
 lost: today the start is *caused* by a hardware event on another host; with this change it is caused by k3's clock and
-*confirmed* by that event. Independent of that decision: if PM QoS replicates, a holder of `/dev/cpu_dma_latency` (permanent, or for the cadence
-service's last 30 ms) would move the edge stamp from ~+275 µs to ~+25 µs and with it the trigger, the datagram and k3's
-start, about 250 µs each. The sysfs idle-state experiments (18:21–18:27Z) were reverted.
+*confirmed* by that event. Three ways to use these numbers, for Bill to choose between (none built): **(A)** as is, k3's start caused by p550's
+hardware-event datagram, +2.5 ms; **(B)** k3 starts on its own clock (+6 µs) and binds p550's hardware record when it
+arrives ~2.5 ms later; **(C)** both fire on their clocks (p550 under PM QoS or FIFO, +8 µs), p550's datagram reaches k3
+~0.4 ms after the instant, and the hardware record follows in a second datagram. Only (A) keeps "caused by a hardware
+event on another host" literally true. All p550 experiments were reverted; the host is in its 17:00 state.
