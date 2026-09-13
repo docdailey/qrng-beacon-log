@@ -165,4 +165,5 @@ cutover), k3's aggregator key (`56c30593534ad116`, valid from 96) vendored, `cor
 relay race, concurrent TSAs. Released BEFORE the first agentd pulse because older verifiers reject those statements.
 Confirmed from a fresh venv against PyPI: `verify 95` passed; PyPI wheel SHA-256 equals the local build (`962e9fec…`).
 
-`notbefore 0.14.1` — re-vendor after the publication margin in `schema.py` went 120 → 20 s (aggregator policy for the 60 s lead from pulse 0102, 2026-09-13 18:00Z; the CLI does not enforce the margin, so this is a PATCH: vendored files changed, contract did not).
+`notbefore 0.14.1` — tag `cli-v0.14.1` on `6b1bd12`, verifier vendored at `000a43a` (content of `c08c7fa`), workflow run 34771752068 (test 3.10 + 3.12, live, Worker conformance, publish), published 2026-09-13 17:35 UTC; wheel `b3be856a…` / sdist `becf0533…` equal a local rebuild of the tagged content; fresh-venv `verify 101` passed. Re-vendor after the publication margin in `schema.py` went 120 → 20 s (aggregator policy for the 60 s lead from pulse 0102, 2026-09-13 18:00Z; the CLI does not enforce the margin, so this is a PATCH: vendored files changed, contract did not).
+Lesson: run `vendor.py` after the LAST commit of the set exists. Here it ran before a `--amend`, so the pin named a sha that never reached origin and a third commit re-pinned it (000a43a → 6b1bd12).
