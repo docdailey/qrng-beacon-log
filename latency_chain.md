@@ -128,6 +128,7 @@ no log line exists. Sub-second numbers come from the pulse; whole seconds from l
 | **0098** (16:00) | k3, tick-started, first live pair: i210 PPS edge +267 µs, p550 woke +317 µs, trigger issued +0.52 ms; k3 started on the datagram +2.87 ms | +0.243 s | +0.767 s | +2.4 s | +14 s (CI) | +300 s | +3.4 s | **+303.4 s** |
 | **0100** (17:00) | k3: edge +274 µs, woke +289 µs, issued +0.44 ms; k3 kernel receive +2.05 ms, userspace +2.11 ms, start +8.07 ms | +0.248 s | +0.652 s | +2.2 s | **+1 s (at mint)** | +300 s | +3.4 s | **+303.4 s** |
 | **0102** (18:00) | k3, **lead 20 rounds**: edge +276 µs, woke +295 µs, issued +0.45 ms; k3 kernel receive +1.59 ms, userspace +1.68 ms, start +2.56 ms | +0.240 s | +0.752 s | +2.3 s | **+1 s (at mint)** | **+60 s (:01:00)** | +3.2 s (round served by the first relay +1.12 s, reveal started +1.35 s) | **+63.2 s** |
+| **0108** (21:00) | k3, lead 20; **GPIO PPS removed, cadence service SCHED_FIFO**: edge **+21 µs**, woke +41 µs, issued +0.20 ms, first copy sent +1.6 ms (sign + serialize 1.4 ms, cold); k3 kernel receive +1.85 ms, start +2.84 ms | | +0.76 s | +2.4 s | +1 s | +60 s | +3.4 s | **+63.4 s** |
 
 What each column's movement was:
 
@@ -231,3 +232,22 @@ hardware-event datagram, +2.5 ms; **(B)** k3 starts on its own clock (+6 µs) an
 arrives ~2.5 ms later; **(C)** both fire on their clocks (p550 under PM QoS or FIFO, +8 µs), p550's datagram reaches k3
 ~0.4 ms after the instant, and the hardware record follows in a second datagram. Only (A) keeps "caused by a hardware
 event on another host" literally true. All p550 experiments were reverted; the host is in its 17:00 state.
+
+### 9b. Userspace budget on the trigger path (measured 2026-09-13 21:05Z, 300 warm iterations, pulse 0108's statement)
+
+| step | p550 (sign side, Python 3.12) | k3 (verify side, Python 3.14) |
+|---|---|---|
+| canonical JSON of the 1,372 B statement | 197 µs (cold 314) | 106 µs |
+| Ed25519 sign / verify (OpenSSL via `cryptography`) | 212 µs (cold 360) | 245 µs (cold **6,144**) |
+| base64 + wrapper + `json.dumps` / `json.loads` | 94 µs | 63 µs |
+| five PHC brackets | 54 µs | |
+| thread hand-over (`Event.set` → `wait` returns) | | 52 µs (5 ms or 0.5 ms switch interval alike) |
+| **total** | **503 µs warm** | **414 µs warm** + 52 µs hand-over |
+
+Against the live 21:00 numbers: p550 spent 1.4 ms between `issued` and the first copy (0.95 ms at 18:00), three times the
+warm figure, because the process has been asleep for an hour and everything is cold; k3 spent 0.94 ms between kernel
+receipt and the start against 0.47 ms warm. The cheap next steps are therefore a pre-instant warm-up on p550 (sign a
+dummy statement at T−50 ms, as k3's listener already warms its verifier) worth ~0.5–0.9 ms, and on k3 sending the
+canonical statement bytes so the verifier does not re-canonicalize (~0.1 ms) and a faster Ed25519 (libsodium, if
+present) for another ~0.1 ms. With the GPIO PPS gone the edge itself is at +21 µs; the remaining 2.8 ms to k3's start is
+now all userspace and wire: 0.2 ms to assemble, 1.4 ms to sign cold, 0.25 ms LAN, 0.9 ms to verify and hand over.

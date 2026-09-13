@@ -90,7 +90,10 @@ fallback found the hour claimed and exited. **19:00Z, 0104/0105:** the same to t
 +2.58 ms, commit pushed +2.2 s (57.8 s before the round), Rekor instant + 1 s, reveal pushed 3.3 s after release, usable
 **+63.3 s**, both verified. **20:00Z, 0106/0107:** the same chain, usable +63.3 s, both verified; p550's trigger process was
 descheduled for 1.2 ms after the edge this hour (k3 start +3.81 ms), the case for SCHED_FIFO on the cadence service
-(latency_chain.md §9). Next step after a day of clean 60 s cycles: 10 rounds (30 s).
+(latency_chain.md §9). **21:00Z, 0108/0109:** first hour with the GPIO PPS removed from p550 and the cadence service at
+SCHED_FIFO: edge stamp **+21 µs** (was +275), process 20 µs after it, trigger issued +0.20 ms; k3 start +2.84 ms (p550's cold
+sign took 1.4 ms this hour - latency_chain.md §9b); usable +63.4 s, both verified. Next step after a day of clean 60 s
+cycles: 10 rounds (30 s).
 
 **Cadence source (since 2026-09-13 13:00Z, pulses 0092–0095 — think era):** the hour is started by the **time host's clock, not by think's timer**.
 `hosts/beacon-cadence.py` runs on p550 (PREEMPT_RT; `CLOCK_REALTIME` disciplined by chrony from the i210 PHC, which
