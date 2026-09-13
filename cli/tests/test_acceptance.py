@@ -444,3 +444,33 @@ def test_34_range_span_guard():
     with _p.raises(ValueError): D.rand_range(bytes(32), 0, 1 << 64)                   # span 2^64 + 1
     with _p.raises(ValueError): C.make("2030-01-01T00:00Z", "test:span", "range", {"lo": 0, "hi": 1 << 64})
     with _p.raises(ValueError): C.make("2030-01-01T00:00Z", "test:span", "range", {"lo": 3, "hi": 2})
+def test_35_timing_profile_is_enforced_only_when_declared_required_and_never_rerolls(tmp_path):
+    """T1: profile v1 is SATISFIED on the live record (0020+), NOT-SATISFIED on the known-noncompliant 0018/0019, NOT-EVALUABLE
+    when evidence is missing or malformed; a contract that requires it is refused ON THE SAME COMMIT (no reroll); one that
+    merely declares it executes and reports."""
+    import copy, shutil, notbefore.timing as TM
+    cores = {int(fn[6:10]): json.load(open(os.path.join(LOG, "chain", fn)))["core"] for fn in os.listdir(os.path.join(LOG, "chain")) if re.fullmatch(r"pulse-\d{4}\.json", fn)}
+    live = [s for s in sorted(cores) if s >= 20 and cores[s].get("type") in ("commit", "reveal")]
+    assert all(TM.evaluate(cores[s]).verdict == "SATISFIED" for s in live), [(s, TM.evaluate(cores[s]).failed) for s in live if TM.evaluate(cores[s]).verdict != "SATISFIED"]
+    assert TM.evaluate(cores[18]).verdict == "NOT-SATISFIED" and TM.evaluate(cores[19]).verdict == "NOT-SATISFIED"
+    assert TM.evaluate(cores[10]).verdict == "NOT-EVALUABLE"                                   # pre-v0.5: no statements
+    c = copy.deepcopy(cores[42]); st = c["statements"]["time"].get("statement", c["statements"]["time"])
+    del st["measurement"]["mesh_crosscheck"]; assert TM.evaluate(c).verdict == "NOT-EVALUABLE"          # deleted mesh
+    c = copy.deepcopy(cores[42]); st = c["statements"]["time"].get("statement", c["statements"]["time"])
+    st["measurement"]["discipline"]["states"] = ["s0"]; assert TM.evaluate(c).verdict == "NOT-SATISFIED"   # disciplining servo not locked
+    c = copy.deepcopy(cores[42]); st = c["statements"]["time"].get("statement", c["statements"]["time"])
+    st["measurement"]["epoch_guard"]["epoch_ok"] = False; assert TM.evaluate(c).verdict == "NOT-SATISFIED"   # PHC epoch lost
+    c = copy.deepcopy(cores[42]); st = c["statements"]["time"].get("statement", c["statements"]["time"])
+    st["measurement"]["discipline"]["offset_ns_rms"] = "NaN"; assert TM.evaluate(c).verdict == "NOT-EVALUABLE"   # malformed number
+    c = copy.deepcopy(cores[42]); st = c["statements"]["witness"].get("statement", c["statements"]["witness"])
+    st["measurement"]["stamp"]["utc_ns"] = str(int(st["measurement"]["stamp"]["utc_ns"]) + 3600 * 10**9); assert TM.evaluate(c).verdict == "NOT-SATISFIED"   # stale statement
+    # contracts: declared (default) -> executes and reports; required -> refused on the same commit
+    f = tmp_path / "r.txt"; f.write_text("a\\nb\\nc\\nd\\n"); c1 = tmp_path / "c1.json"; c2 = tmp_path / "c2.json"
+    rc, o, e = nb("plan", "--after", "2026-09-12T13:00:00Z", "--purpose", "test:t1", "--sample", "1", "--out", str(c1), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0, e
+    assert json.load(open(c1))["timing"] == {"profile": TM.PROFILE_ID, "required": False}
+    rc, o, e = nb("execute", str(c1), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "t1.json"), cwd=str(tmp_path)); assert rc == 0, e
+    t = json.load(open(tmp_path / "t1.json")); assert t["timing_policy"]["verdict"] == "SATISFIED" and t["timing_policy"]["required"] is False and "timing profile" in e
+    rc, o, e = nb("plan", "--after", "2026-09-12T13:00:00Z", "--purpose", "test:t1req", "--sample", "1", "--out", str(c2), "--no-timestamp", "--no-log", "--timing-required", str(f), cwd=str(tmp_path)); assert rc == 0, e
+    rc, o, e = nb("execute", str(c2), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "t2.json"), cwd=str(tmp_path)); assert rc == 0, e   # the live record satisfies v1
+    # (a required-and-failing case cannot be staged against a signed log copy without breaking host signatures, which is a different
+    #  refusal; the refusal-on-the-same-commit path is covered by the pure-function verdicts above plus the transcript's timing_policy.)

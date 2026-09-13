@@ -60,7 +60,9 @@ git tag -a cli-v0.2.1 -m "notbefore 0.2.1" && git push origin cli-v0.2.1
 uv venv /tmp/nbp && VIRTUAL_ENV=/tmp/nbp uv pip install "notbefore==0.2.1" && XDG_CACHE_HOME=$(mktemp -d) /tmp/nbp/bin/notbefore verify <latest reveal seq>
 /tmp/nbp/bin/notbefore --version      # must print the vendored sha from step 2
 
-# 7. GitHub release with the artifacts, then a LEDGER row; ERRATA if the release corrects something
+# 7. GitHub release with the artifacts, then a LEDGER row; ERRATA if the release corrects something.
+#    Documentation checklist for every release: README.md, USAGE.md, WORKFLOW.md, NOTBEFORE.md §8/§16, CLAIMS.md §1, and the
+#    homepage public/index.html (its claims, examples and version references change with the contract and the verifier).
 gh release create cli-v0.2.1 --title "notbefore 0.2.1" --notes "<why>" cli/dist/notbefore-0.2.1*
 ```
 

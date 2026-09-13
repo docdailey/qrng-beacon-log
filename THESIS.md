@@ -3,15 +3,30 @@
 Bill's thesis, 2026-09-11. This file records what the claim means operationally and what the lab
 notebook has already proved about it.
 
-## The claim
+## The claim (restated 2026-09-13, after external review D4)
 
-A signed random value proves only that someone held a key. Pin it to an instant and it becomes
-**attestable**: it existed at T, not before, in an order anyone can check. Entropy answers *what*;
-time answers *when*. Without a trustworthy *when*, the *what* cannot be audited at all — you are
-back to "trust me".
+The system is a **composition**, and each part proves one specific thing:
 
-So the timestamp is **load-bearing**, and it earns the same scrutiny as the entropy: measured,
-bounded, published with its own error terms, and independently checkable.
+| part | what it fixes | what it proves — and only this |
+|---|---|---|
+| commitment (C = H(E) published before round R; the consumer's signed contract registered before R) | a *choice* | that the choice existed, byte for byte, before the randomness did |
+| drand round R (BLS-verified under the pinned group key) | the *randomness* | that nobody, us included, could compute a value depending on ρ_R before R was released — **under drand's own assumptions** (threshold of honest operators; no early access to a round) |
+| host signatures (entropy, GNSS, time, witness) over their own measurements | *observations* | who observed what, bound to which pulse; not that the observation is true of the physical world |
+| the timing mesh (F9T-disciplined i210 measuring the LEA-6T-disciplined BMC; k3 downstream) | *corroboration* of clock operation | that two GNSS-disciplined paths agreed within the published figures over the published window; not absolute UTC accuracy, and today authenticated rather than policy-enforced |
+| external anchors (RFC 3161 tokens, Rekor, OpenTimestamps, C2SP checkpoints, witnesses) | *history* | that a record existed, and was public, no later than a clock nobody here runs said so; and that rewriting it afterwards would be detectable |
+
+"Exact timing is trust" is the thesis about the third and fourth rows: a signed random value proves only that
+someone held a key; pinning it to a measured instant makes it *attestable* — it existed at T, in an order anyone
+can check. Entropy answers *what*; time answers *when*. Without a trustworthy *when*, the *what* cannot be audited
+at all. So the timestamp is **load-bearing** and earns the same scrutiny as the entropy: measured, bounded, published
+with its own error terms, and independently checkable.
+
+What exact timing does **not** do, stated once here and never blurred below: it does not prove *who*, it does not by
+itself prove that a single publisher did not mint several candidates and publish one (that is what commitment,
+publication evidence and the decision log are for), and a nanosecond-class GNSS epoch near an event does not turn
+into a nanosecond bound on *publication* or on an adversary's grinding window — publication is evidenced by RFC 3161
+tokens and Rekor entries at their own, coarser, uncertainty. **Externally anchored existence, observed arrival,
+receiver epoch and original creation are four different facts**; each claim below names which one it is about.
 
 ## What the lab notebook proved about it
 
@@ -30,11 +45,13 @@ carry a perfectly correct timestamp.
 
 The two halves compose, though, and this is the useful part:
 
-> **Precision is the multiplier on an anchor.** Mix in an external value (a drand round, a NIST
-> pulse) and the claim becomes "we could not have known the output before T". Exact, *attestable*
-> time then bounds how long anyone had to grind alternatives between T and publication —
-> milliseconds instead of "sometime that minute". Without an anchor, precise time bounds nothing.
-> Without precise time, an anchor is loose.
+> **Precision is the multiplier on an anchor — for the events our clocks actually capture.** Mix in an external
+> value (a drand round) and the claim becomes "we could not have known the output before T". The hardware-captured
+> GNSS epoch then bounds, to the clock's stated uncertainty, *when the host assembled and signed the pulse* relative
+> to T. It does **not** bound when the pulse became public: publication is evidenced by the RFC 3161 tokens and the
+> Rekor entry, each at its own accuracy (a TSA states an accuracy interval around `genTime`; Rekor's `integratedTime`
+> is one second granular), and local nanoseconds do not narrow those. A grinding window is bounded by the coarsest
+> evidence in the chain, not the finest.
 
 So: **time is the ordering-and-freshness half of trust; distributed verification is the
 non-selection half.** We have built the first to an unusually high standard.
@@ -89,25 +106,29 @@ REVEAL  (pulse N+1)  after drand releases R: disclose E; mix with R exactly as b
                      attested_value = SHA256(mix_domain || E || drand_R || chain || R)
 ```
 
-**What a stranger can now check, with nothing but the public repo and api.drand.sh:** that `C` was
-published before `R` existed (git history + GitHub's timestamp), that the revealed `E` hashes to `C`,
+**What a stranger can now check, with nothing but the public repo, Rekor and api.drand.sh:** that `C` existed
+and was public before `R` (two RFC 3161 tokens at mint and the Rekor anchor's signed time — never a git or GitHub
+commit date, which the committer controls), that the revealed `E` hashes to `C`,
 that the mixed round is exactly the committed `R`, and that `R`'s randomness is what the League of
 Entropy served. Therefore the attested value was **unknowable to anyone — the publisher included —
 before R released, and the publisher could not have chosen E after seeing R.**
 
-First real instance: pulse 0010 anchored 23:56:45Z, pushed 23:58:57Z (GitHub committer.date
-23:58:46Z), round 32122604 released 23:59:39Z, reveal 0011 anchored 46 s later. `E` was fixed
-**174 s** before its round existed.
+First real instance: pulse 0010 anchored 23:56:45Z, pushed 23:58:57Z, round 32122604 released
+23:59:39Z, reveal 0011 anchored 46 s later. `E` was fixed **174 s** before its round existed (by the host's own
+GNSS clock; 0010 predates the RFC 3161 tokens that give third-party evidence from 0018 on, and its Rekor anchor is
+retroactive).
 
-**This is where "exact timing is trust" stops being a slogan.** Both edges of the window —
-commit-before-round and reveal-after-round — are hardware-anchored GNSS epochs, published with their
-measured uncertainty. A vague clock would make the ordering claim an assertion; ours makes it a
-measurement anyone can re-derive.
+**This is where "exact timing is trust" stops being a slogan — with its scope named.** Both edges of the window —
+commit-before-round and reveal-after-round — carry hardware-anchored GNSS epochs with measured uncertainty, so the
+*host's* ordering of its own work relative to the round is a measurement anyone can re-derive. The *public*
+ordering (that the commit was out before the round) rests on the RFC 3161 tokens and the Rekor anchor, which are
+what the verifier enforces; the GNSS epochs corroborate, they do not replace them.
 
 ### What is still assumed — say it every time
 
-1. **The commit was published before R.** The signature cannot prove that; the public log's history
-   does. Trust assumptions for that log are in `PUBLICATION.md`.
+1. **The commit was public before R.** The signature cannot prove that; the RFC 3161 tokens (existence) and the
+   Rekor anchor's signed time (publication under our key, on a clock we do not run) do, and contract/3 consumers
+   require both before the round. Git history is corroboration, not evidence.
 2. **drand is honest** — the League of Entropy's threshold of independent operators.
 3. **We reveal every commit.** A commit without a following reveal is a visible hole in the chain,
    and `pulse.py reveal` refuses to skip. Consumers must treat an unrevealed commit as a failed pulse.
@@ -156,3 +177,11 @@ provides randomness; almost nobody provides *that*. It is worth keeping and not 
 number. What changes that is not more pulses — it is an independent timestamp on each commit (now
 RFC 3161, two TSAs), a stated cadence, and a second party who will attest a reveal we failed to publish.
 See `CADENCE.md`.
+
+## Where this stands (2026-09-13)
+
+Since the paragraph above: cadence and RFC 3161 tokens on every commit (v0.5), signed failures and skips, checkpoints
+and a same-sponsor witness, the decision log (the consumer's commitment, write-once), and the commit-bound value
+(the operator can fail a consumer but cannot steer one). The two things still missing are an operator we do not
+control cosigning the checkpoints, and a verifier that *enforces* the timing evidence it authenticates (`T1` in
+`reviews/`). Until the second exists, the mesh is corroboration we publish, not a property we check.

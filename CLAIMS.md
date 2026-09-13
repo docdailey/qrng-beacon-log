@@ -1,5 +1,60 @@
 # CLAIMS.md — binding on all copy, both agents
 
+**How to read this file (restructured 2026-09-13 after external review D2).** §1 is the *current* rule set: one row per claim
+with the evidence it rests on, when it became true, what the verifier does about it and what must be said beside it. §2 is
+the consolidated list of phrasings that are never allowed. §3 records conflicts that accumulated while this file grew by
+appendix and states the ruling. §4 is the history: every dated section as it was written, retained verbatim because
+corrections to a claim are themselves evidence — **quote §1, never §4**. When §1 and §4 disagree, §1 wins and §3 says why.
+
+## 1. Current claims
+
+| Claim (what we MAY say) | Evidence it rests on | Since | Verifier behaviour | Say alongside / assumptions |
+|---|---|---|---|---|
+| **Entropy source:** "ID Quantique Quantis USB", vendor certifications quoted as the vendor's with a URL | vendor documentation | always | none | never "certified/validated" of *our* service; no NIST/FIPS/CC/AIS-31 claims for us |
+| **Archive:** "root `4e93d4be…95c4` over the recomputed bytes of all 42,935 blocks (4.50 TB); 41,718 match their 2025 capture-time sidecar, 1,217 (2.835 %) do not and carry 2026-09-12 provenance only" | `merkle/manifest-rehashed.json`, CI recomputes both roots | 2026-09-12 (ERR-006 final) | CI fails on root mismatch | never `c88c4320…` as the root; never "verified archive" without both counts; archive bytes are never "unpredictable" without the commitment construction |
+| **Corpus labels:** `quantum_cache/raw` is Quantis output; `dev_random_raw` is a Linux `/dev/random` control corpus | capture provenance | 2026-09-11 | none | the control corpus is never quantum, never sold, never blended; device rate is the sustained 500 KB/s |
+| **Time base:** "an Intel i210 hardware PHC on p550 disciplined to a u-blox ZED-F9T PPS by `ts2phc`; the F9T TP1 edge is captured in hardware (EXTTS)" | `time_attester` statement: servo state, RMS, window; `epoch_guard` | pulses ≥ 0003 (f9t stamped 0001–0002, superseded) | v0.5: epoch health + chrony reference selection are REQUIRED; a pulse fails closed without them | always quote the sampling window with any RMS; software `CLOCK_REALTIME` fields are freshness only (ERR-012) |
+| **Precision vs accuracy:** "~8–10 ns RMS discipline over the stated window" | the statement's measured figures | per pulse | authenticated; checked against `notbefore/timing/v1` when a contract declares it (0.13.0) | **never** a nanosecond figure as accuracy vs UTC; absolute budget is uncalibrated except the **measured** 69 ns antenna delay; L1-only today (ionospheric term uncorrected); dual-band is roadmap |
+| **Two GNSS paths, one mesh:** "the i210 (F9T-disciplined) continuously measures the BMC grandmaster (LEA-6T-disciplined); k3 is disciplined by that BMC and signs its own clock observations" | `mesh_crosscheck` in the time statement; `time_witness` statement | statements signed from 0018; mesh field per `stamp_probe.py` | authenticated (signature, pulse binding); enforced against `notbefore/timing/v1` when a contract declares it (0.13.0), reported otherwise | describe as **measure and trim** (the i210 monitor is `free_running`; the BMC carries the `ptptgt` trim); k3 is a **same-sponsor downstream participant**, not an independent reference; both paths start at GPS |
+| **Receiver telemetry:** "F9T qErr sd ≈ 2.26 ns (n≈358k), logged, not applied; LEA-6T core sd 6.02 ns with 3 excursions > 1 µs in 468,631 samples" | timehat DB `qerr_stream` | 2026-09-11 | none | qErr is quantisation jitter, never accuracy; quote both LEA-6T numbers or neither; sawtooth is autocorrelated (lag-1 +0.839) — **no quadrature argument**; sign: corrected = raw + qErr |
+| **Public randomness anchor:** "the attested value is a hash over drand quicknet round R, so it could not have been computed before R's release; the drand signature is BLS-verified under the pinned group key" | `drand` block; `bls_drand.py` | 0003+ (anchor), full BLS 2026-09-12 | verify.py fails closed without the round; BLS required in CI | the pin and the ≥t-honest-operators assumption remain; never "drand is verified" without them |
+| **Commit-then-reveal:** "E's hash was published before round R, E revealed after: unknowable before, not choosable after" | commit/reveal pair, RFC 3161 tokens at mint, publication in git, Rekor | pairs from 0010/0011; v0.5 from 0018; first compliant 0020/0021 | verify.py: C = H(D‖E), timing contract, tokens ≥ 2 (v0.5) | a commit with no reveal is a failed pulse; "provably fair"/"unbiased" never; not for gambling |
+| **Host attestation & isolation:** "each host signs its own statement; a compromised aggregator cannot fabricate a host's facts (confined OS user, fixed-role forced command)" | v0.5 statements; `hosts/ISOLATION.md`; `execution` self-reports enforced | statements 0018; isolation 0020; enforced self-reports 0026 | verify.py strict path | the *operator* (all machines) is out of scope of this property; 0018/0019 are KNOWN-NONCOMPLIANT (ERR-007) |
+| **Failures and skips are chain events** | signed `failure` / `skip` pulses | v0.5 / v0.5.1 | state machine enforced | a skip records the operator's stated cause, it does not prove it |
+| **Single-writer transparency log:** "hash-linked, append-only, tamper-evident; not a blockchain; equivocation is *detectable*, not prevented" | five pinned-key signatures per pulse; Rekor entries under `keys/anchor.pub`; OTS; watchers | anchors 2026-09-12 (0001–0041 retroactive) | `verify_anchors.py` enumerates every Rekor entry under the key | never "immutable"; name the independent records; 0001–0041 Rekor times are not commit times; no cryptocurrency is held or used |
+| **Checkpoints:** "an RFC 6962 tree head as a C2SP checkpoint signed under `notbefore.net/log`, published with each pulse; consistency checkable against any earlier head" | `checkpoint`, `checkpoints/NNNNNN`, site cross-check | 2026-09-12 16:21Z (size 49) | CLI verifies signature, recomputes root, proves inclusion, keeps a cached head; a missing checkpoint FAILS for pulses ≥ 49 | proves membership and non-rewrite relative to a held head, not honesty |
+| **Cosignatures:** "checkpoints are cosigned by `notbefore.net/witness/ryzen`, a witness we operate (same sponsor, second system)" | cosignature lines | 2026-09-12 | `--witness-quorum N` counts only independent witnesses | never "witnessed" or "independently witnessed" until an operator we do not control has cosigned; then name them |
+| **RFC 3161 trust:** "tokens verify only against roots pinned in `keys/tsa/`" | `PINS.json` | 0.7.1 (ERR-014) | fail closed without the pin | never "publicly trusted"; a TSA chain rotation is a release |
+| **Decision log:** "the first statement per (key_id, decision_id) is the authoritative preregistration; live at notbefore.net/decisions since 2026-09-12 23:29Z" | Worker + D1, mirror `decisions/`, cosigned + Rekor-anchored checkpoints | 0.8.1 | `execute` fails closed without a confirmed registration (0.10.0); superseded → refuse | idempotent per namespace; aliases across ids or keys are a naming problem the log makes visible; entries 0–9 are release/smoke tests; "registered" ≠ "timestamped" |
+| **Commit-bound value:** "for a contract/3 decision the operator can fail you but cannot steer you: V* is fixed by the commit and the drand round; a withheld reveal changes nothing; eligibility (tokens + Rekor anchor before the round) is a pre-round fact taken from Rekor's signed entries; a verifier that cannot establish it halts" | `commitbound.py`; Rekor-direct evidence; test 32/33 | spec 0.9 / `notbefore` ≥ 0.12.0 (**not** 0.11.0, ERR-015) | halts on unavailable evidence; never advances on absence | the operator can still stall and withhold provenance (COMMITMENT-FALLBACK); unpredictability rests on drand's; not for contract/1–2 or the beacon's own V |
+| **Verdicts:** "VERIFIED / DEGRADED / INVALID (exit 0/2/1); a DEGRADED receipt or bundle is a dry run" | `policy.py` | 0.12.0 | one result type behind every verifier | never present a DEGRADED transcript as preregistered |
+| **The name:** NotBefore is the product contract ("fixed before round R, not selected after") | `NOTBEFORE.md` | 2026-09-12 | — | never "NotBefore-certified"; never "PulseTrain"; the CLI verifies, it does not certify |
+
+## 2. Never
+
+certified · accredited · validated (of our service) · NIST / FIPS 140 / SP 800-90B / Common Criteria / AIS-31 validation ·
+ISO 17025 / "calibration" / "NIST-traceable" (except "traceable to a GPS-disciplined stratum-1 reference, with uncertainty") ·
+anything implying fitness for gambling or lottery · generating or holding a customer's keys · "unpredictable" of archive
+bytes without the commitment construction · nanosecond accuracy vs UTC · "accurate to 2 ns" · "2 ns system" · a hardcoded
+leap-second offset · "independent reference" for k3 · "independent witness" for a same-sponsor witness · "witnessed" until an
+outside operator cosigns · "immutable" · "prevents equivocation" · "provably fair" / "unbiased" · "prevents p-hacking" ·
+"the operator cannot stall" · "registered" when only timestamped · a package version in the normative spec · `c88c4320…` as
+the archive root · the quadrature argument · Git or GitHub commit dates as publication evidence.
+
+## 3. Conflicts in the history, and the ruling
+
+| Conflict | Ruling (current) |
+|---|---|
+| Antenna delay "unmeasured" vs "69 ns measured" | **Measured** (notebook 213/215); it is a calibrated term. The rest of the absolute budget is uncalibrated. |
+| Sawtooth "removed in quadrature" vs its retraction | **Retracted.** The sawtooth is autocorrelated; it is logged, not applied; corrected = raw + qErr. |
+| k3 "independent witness" vs "monitored peer / downstream participant" | **Downstream, same-sponsor participant** disciplined by the BMC that the i210 measures; both paths start at GPS. Its value is corroboration inside one measured mesh, not independence. |
+| i210 monitor "read-only" vs the BMC `ptptgt` trim | **Measure and trim.** The i210 never steers; the loop closes through the BMC trim, which is a separate control path and must be drawn as one. |
+| "Until commit-then-reveal ships" / "until a decision log exists" | **Shipped.** Commit-then-reveal from 0010/0011 (v0.5 from 0018); the decision log live since 2026-09-12 23:29Z; commit-bound contracts from 0.12.0. |
+| Archive root `c88c4320…` vs `4e93d4be…` | **`4e93d4be…95c4`** with the concordant/discordant counts (ERR-006 final). |
+| "Every pulse carries …" | Scope every property to its activation: statements 0018, isolation 0020, enforced self-reports 0026, checkpoints 49, anchors live from 0042 (0001–0041 retroactive). |
+
+## 4. History — dated sections as written (retained; do not quote)
+
 ## We MAY say
 - "Quantum entropy source: **ID Quantique Quantis USB**" — with a link to the vendor's own spec.
 - Vendor certifications, quoted **as the vendor's, with a source URL**, never as ours.

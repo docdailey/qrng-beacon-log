@@ -96,7 +96,7 @@ accuracy versus UTC(k) is **uncalibrated**: antenna cable delay (69 ns is config
 unverified by us), the PPS coax run to SDP0, i210 SDP0 input latency, and the receiver's own UTC
 error. We claim precision and a traceable discipline chain — not calibrated absolute accuracy.
 
-Other services on the box: `bmc-phc-monitor` is active but **free-running, read-only** (an instrument,
+Other services on the box: `bmc-phc-monitor` is active but **free-running** — it observes the BMC and never steers the i210; the loop is nonetheless closed through the BMC's `ptptgt` trim, so say "measure and trim" (an instrument,
 not a servo). `extts-f9t` and `iphc-f9t-servo` are disabled and must stay disabled — any other EXTTS
 opener steals events from ts2phc.
 
@@ -407,29 +407,32 @@ Worth correcting on the box; I have not touched a production config.
 The i210 continuously cross-checks the BMC PHC, so the witness chain is watched, not foreign.
 
 ```
-                      GPS constellation
-                             |
-        +--------------------+---------------------+
-        |                                          |
-   u-blox ZED-F9T                             u-blox LEA-6T
-   qErr sd 2.255 ns                           qErr core sd 6.02 ns
-   (the "~2 ns source")                       3 excursions >1us / 21 d
-        |                                          |
-   TP1 PPS (falling)                            PPS -> PD3
-        |                                          |
-        v                                          v
-   i210 SDP0 --ts2phc--> i210 PHC /dev/ptp0   P550-BMC PHC (PTP GM, domain 44)
-   [8.3 ns RMS]              |                      |
-                             |                      +--PTP dom44--> k3 stmmac PHC
-                             |                                      [41.4 ns RMS]
-                             |                                           |
-                             +== bmc-phc-monitor ========================+
-                                ptp4l free_running=1, slaveOnly=1
-                                READ-ONLY: measures, never steers
-                                measured 24.8 ns RMS (n=22, 75 s)
-                                         29.2 ns RMS (n=5, 20 s)
-                                path delay ~442-446 ns
+                          GPS constellation (one sky, one antenna feed: the two paths are NOT independent against a GNSS-common failure)
+                                   |
+             +---------------------+----------------------+
+             |                                            |
+      u-blox ZED-F9T (L1-only today)                u-blox LEA-6T
+      qErr sd 2.26 ns, logged not applied           qErr core sd 6.02 ns; 3 excursions > 1 us / 21 d
+             |                                            |
+      TP1 PPS, FALLING edge                          PPS -> STM32 PD3 (EXTI interrupt, CPU read)
+             |  HARDWARE capture: i210 SDP0 EXTTS            |  software-latched capture inside the BMC
+             v  (~8-10 ns RMS servo residual)                 v
+   ts2phc ==disciplines==> i210 PHC /dev/ptp0        P550-BMC PHC == PTP grandmaster, domain 44 ==disciplines==> k3 stmmac PHC
+                              |                            ^   ^                                           (~41 ns RMS, 60 s)
+                              |   bmc-phc-monitor          |   |
+                              +-- OBSERVES (ptp4l          |   |  ptptgt trim (RAM-only; re-asserted by bmc-tai-seed.py)
+                                  free_running=1,          |   +---- a separate CONTROL path: the operator trims the BMC's
+                                  slaveOnly=1) ------------+         phase target so the GM reads ~0 against the i210.
+                                  measures the BMC PHC;              The i210 itself is never steered by anything but ts2phc.
+                                  ~8-30 ns RMS per pulse window, path delay ~442 ns
 ```
+
+Read the arrows literally. **Discipline** flows F9T→i210 (hardware EXTTS, ts2phc) and LEA-6T→BMC→k3 (PTP). **Observation**
+flows i210→BMC only: the monitor's endpoint is the **BMC grandmaster**, not k3; k3 is downstream of the BMC and signs its own
+discipline figures. **Trim** is a third, human-configured path (`ptptgt`) on the BMC — so the honest phrase for the pair is
+"measure and trim", not "read-only" and not "independent". The F9T edge is captured in hardware by the i210 timestamping unit;
+the BMC's edge is latched by an interrupt and a CPU read, which is why its target needed the ~900 ns trim.
+
 
 **`bmc-phc-monitor.service`** on p550 runs `ptp4l -f /run/bmc-monitor.runtime.conf -i enp1s0 -m -q`
 with `free_running 1` + `slaveOnly 1`. Those two settings are the whole point: it **measures the BMC

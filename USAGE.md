@@ -180,7 +180,12 @@ transcript written: notbefore-executed-3551….json
 (verified, both TSA tokens and its Rekor anchor before its round) and the value is V* = SHA-256("notbefore/commit-bound/v1"
 ‖ C ‖ ρ ‖ chain ‖ R) — fixed the moment the drand round exists. If the operator revealed, the hour is **FULL-ATTESTED**
 (QRNG provenance shown); if not, **COMMITMENT-FALLBACK** — same V*, same output, provenance not demonstrated. The
-transcript says which. `execute` exits 3 while a reveal window is still open (run it again after the deadline), and refuses — never silently
+transcript says which. Contracts also declare a **timing profile** (`notbefore/timing/v1`): the selected commit's signed clock evidence —
+servo lock, PHC epoch guard, the i210's observation of the BMC grandmaster, k3's discipline, receiver qErr and
+coverage, statement freshness — is checked against stated limits and reported in a separate section of the receipt.
+Add `--timing-required` at plan time to make a shortfall a refusal (on the same commit; never a reroll).
+
+`execute` exits 3 while a reveal window is still open (run it again after the deadline), and refuses — never silently
 moves to a later hour — when a candidate commit's eligibility cannot be established (no Rekor answer, unauthenticated
 copy). `receipt`, `bundle` and `check-bundle` end with a verdict: **VERIFIED** (exit 0), **DEGRADED** (exit 2: nothing
 failed but required evidence is missing — a dry run made with `--allow-unregistered`, no input to re-execute) or

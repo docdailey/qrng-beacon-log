@@ -23,69 +23,99 @@
 </style>
 <main>
   <h1>NotBefore</h1>
-  <p class="sub">An hourly, commit-then-reveal, host-attested randomness log.</p>
+  <p class="sub">Commit the decision. Randomize later. Verify the result.</p>
 
-  <p>Each pulse fixes a 32-byte value <em>before</em> a given
-  <a href="https://drand.love/">drand</a> round exists, and publishes it after — so a
-  third party can check that a value was neither predicted in advance nor selected
-  after the fact: <strong>not before, and not after</strong>.</p>
+  <p>Register the input digest, the decision rule and its parameters <em>before</em> the randomness you will use
+  exists. NotBefore then derives the result deterministically from a public, hourly, host-attested randomness log
+  and packages the evidence an auditor needs to check the registration, the selection, the randomness and the
+  execution — without trusting this site.</p>
 
-  <p class="note">Anchoring, precisely: two independent RFC&nbsp;3161 timestamp tokens
-  are published beside every pulse. Rekor entries with inclusion proofs, and
-  OpenTimestamps submissions, live on the repository's <code>anchors</code> branch and
-  are checked by the CLI from git — <em>this site does not serve them.</em>
-  OpenTimestamps proofs complete once their calendar transaction has six Bitcoin confirmations (a few hours);
-  at any moment the newest few are still pending. The live count is in every <code>verify-chain</code> run
-  (<code>ots_complete</code> / <code>ots_pending</code>).</p>
+  <p class="note">What is fixed, and when. Each hour the operator publishes a commitment
+  <code>C&nbsp;=&nbsp;SHA-256(E)</code> to 32 bytes of hardware entropy <code>E</code> it already holds, bound to a
+  <a href="https://drand.love/">drand</a> round about five minutes in the future; after the round it reveals
+  <code>E</code>. A consumer's value is <code>V*&nbsp;=&nbsp;SHA-256(domain ‖ C ‖ ρ<sub>R</sub> ‖ chain ‖ R)</code>:
+  fixed the instant round <code>R</code> exists, by data committed before it. The producer knows <code>E</code>; nobody
+  knows <code>ρ<sub>R</sub></code> before drand releases it, under drand's threshold assumptions. A withheld reveal
+  changes nothing about <code>V*</code> — it only removes the QRNG provenance for that hour. Publication before the
+  round is evidenced by two RFC&nbsp;3161 tokens and a Rekor entry, never by a git date.</p>
+
+  <h2>The registered decision, end to end</h2>
+  <pre>pip install notbefore
+notbefore keygen                                                        # once: your Ed25519 identity
+notbefore plan --after 2026-10-01T00:00Z --purpose chart-audit-2026-q4 \
+               --decision-id NCT01234567/protocol-3/randomization-1 --sample 50 eligible.txt
+#   ... wait for the hour ...
+notbefore execute notbefore-plan-chart-audit-2026-q4.json               # no choices; halts rather than rerolls
+notbefore receipt notbefore-plan-chart-audit-2026-q4.json               # one page, every line re-verified
+notbefore bundle  notbefore-plan-chart-audit-2026-q4.json --out r1.zip   # attach to the paper or workpaper
+notbefore check-bundle r1.zip                                           # what the reviewer runs, offline</pre>
+  <p><code>plan</code> signs the contract with your key, timestamps its bytes with FreeTSA and DigiCert, and registers
+  the signed statement in the write-once <a href="/DECISION-LOG.md">decision log</a>: the first statement per
+  key and decision id is the authoritative preregistration. <code>execute</code> selects the first eligible commit
+  released at or after your instant — eligible means verified, both tokens and its Rekor anchor before its round —
+  and refuses if the log did not confirm your registration, if a superseded contract is presented, or if a
+  candidate's eligibility cannot be established. It never silently moves to another value. Verdicts are
+  <strong>VERIFIED</strong>, <strong>DEGRADED</strong> (a dry run) or <strong>INVALID</strong>. One page for the person
+  who has to defend the randomization: <a href="/WORKFLOW.md">WORKFLOW.md</a>. Every command: <a href="/USAGE.md">USAGE.md</a>.</p>
+  <p class="note">Direct derivations — <code>notbefore split 45 --purpose … --frac 0.8 roster.txt</code> — reproduce a
+  result from an already published pulse. They demonstrate reproducibility; on their own they do not establish
+  preregistration. Legacy reveal-based contracts (versions 1–2) still execute, labelled.</p>
+
+  <h2>The timing record</h2>
+  <p>Every pulse carries signed measurements from the clocks that anchor it. The primary time base is an Intel i210
+  hardware clock on the p550 host, disciplined to a u-blox ZED-F9T PPS captured in hardware; that same i210
+  continuously <em>measures</em> a BMC grandmaster disciplined by a separate LEA-6T receiver, and a third host (k3)
+  disciplined by that grandmaster signs its own observations. Two GNSS-disciplined paths, one measured relationship —
+  both start at GPS, so they corroborate clock operation; they are not independent against a GNSS-common failure.</p>
+  <pre>F9T TP1 PPS ──> i210 SDP0 (hardware capture) ──> ts2phc ──> i210 PHC ──── measures ────┐
+                                                                                            ▼
+LEA-6T PPS ──> P550-BMC grandmaster (trimmed via ptptgt) ──> PTP domain 44 ──> k3 PHC   BMC PHC</pre>
+  <p class="note">One dated record, <a href="/chain/pulse-0067.json">pulse 0067</a> (2026-09-13 01:05 UTC), as signed
+  by each host: F9T→i210 discipline 9.95&nbsp;ns RMS, −16 to +17&nbsp;ns, 12 samples over 12&nbsp;s, servo locked;
+  i210's observation of the BMC grandmaster 7.9&nbsp;ns RMS, −13 to +4&nbsp;ns, 4 samples over 20&nbsp;s, path delay
+  442&nbsp;ns (an estimate, not a symmetry proof); BMC→k3 discipline 41.4&nbsp;ns RMS over 60 samples; F9T qErr for the
+  anchoring epoch −2.166&nbsp;ns, logged and not applied; PHC epoch guard intact on both hosts. These are windowed
+  precision figures. They are not absolute UTC accuracy: the antenna delay (69&nbsp;ns) is measured, the rest of the
+  absolute budget is not, and the receiver is L1-only today. The verifier <em>authenticates</em> these statements
+  (host signatures, pulse binding); a versioned quality policy over them is being added
+  (<a href="/PROTOCOL.md">timing profile</a>). Details and every correction: <a href="/HARDWARE.md">HARDWARE.md</a>,
+  <a href="/CLAIMS.md">CLAIMS.md</a>.</p>
 
   <h2>Log checkpoint</h2>
   <p>The log is an RFC&nbsp;6962 Merkle tree over every pulse, published as a
   <a href="https://c2sp.org/tlog-checkpoint">C2SP checkpoint</a> in
   <a href="https://c2sp.org/signed-note">signed-note</a> form:</p>
   <pre><a href="/checkpoint">/checkpoint</a>            current signed head
-<a href="/checkpoints/000049">/checkpoints/NNNNNN</a>    per-size history</pre>
-  <p class="note">Origin <code>notbefore.net/log</code>. Anyone can recompute the root
-  from the published pulses and check it against the head — the leaf is
-  <code>canonical(pulse record)</code>, the tree is RFC&nbsp;6962 with no variations.
-  See <a href="/TLOG.md">TLOG.md</a>. Witness cosignatures are not yet collected, so
-  a split view is presently detectable by a client comparing heads over time rather
-  than by a third party.</p>
+<a href="/checkpoints/000049">/checkpoints/NNNNNN</a>    per-size history
+<a href="/decisions">/decisions</a>             the decision log (origin notbefore.net/decisions)</pre>
+  <p class="note">Origin <code>notbefore.net/log</code>. Anyone can recompute the root from the published pulses and
+  check consistency with any earlier head. Checkpoints are cosigned by <code>notbefore.net/witness/ryzen</code> — a
+  witness we operate ourselves (same sponsor, second system), which proves the witness path works, not independence;
+  independent witnessing is requested and not yet in place. A split view is detected by consistency proofs against a
+  head a client already holds, by comparing observers' copies, and by the Rekor and OpenTimestamps anchors of every
+  checkpoint — not by any single client alone. See <a href="/TLOG.md">TLOG.md</a>.</p>
 
   <h2>Verify it yourself</h2>
-  <pre>pip install notbefore py_ecc
-notbefore verify 49</pre>
-  <p class="note">Also needs <code>git</code> and <code>openssl</code> on PATH.
-  Without <code>py_ecc</code> the drand BLS check cannot run and the CLI
-  <strong>fails closed</strong> — it will not print a value it could not fully verify.</p>
-  <p class="note">The verifier is pinned and vendored, reads the log from git as data,
-  and emits a reproducible JSON transcript. It does not require trusting this site.</p>
+  <pre>pip install notbefore
+notbefore verify 67        # host signatures, drand BLS offline, RFC 3161, Rekor anchors, checkpoint inclusion
+notbefore checkpoint       # the current signed head against the vendored identity and your cached head</pre>
+  <p class="note">The verifier, every key, the drand group key and both RFC&nbsp;3161 trust chains are inside the
+  package, pinned to a named log commit. Needs <code>git</code> and <code>openssl</code> on PATH. Without the BLS
+  library the CLI <strong>fails closed</strong>. Timestamp tokens: every v0.5 commit since pulse 0018 carries two,
+  taken at mint; skip pulses carry them when a TSA answered; pulses 0001–0009 predate them. Publication anchors: live
+  from pulse 0042; 0001–0041 were anchored retroactively and their Rekor times are not commit times.</p>
 
-  <h2>Use it</h2>
-<p>Commit the pulse and a purpose string before the hour exists (<code>notbefore plan</code> timestamps that commitment), wait, then derive. A reviewer runs the same
-command and gets byte-identical output; the transcript JSON is the artifact to keep.</p>
-<pre>notbefore split  45 --purpose cohort-allocation-2026-09 --frac 0.8 cohort.txt   # cohort.txt.A / .B
-notbefore sample 45 --purpose chart-audit-2026-09 --k 12 cohort.txt
-notbefore assign 45 --purpose pilot-arms-2026-09 --arms 2 cohort.txt
-notbefore id     45 --purpose blind-ids-2026-09 --from cohort.txt
-notbefore explain 45          # a methods-section paragraph
-notbefore plan --after 2026-10-01T00:00Z --purpose chart-audit-2026-q4 --sample 50 eligible.txt   # commit the decision first (RFC 3161-timestamped)
-notbefore execute notbefore-plan-chart-audit-2026-q4.json   # later: no choices, rule-selected pulse</pre>
-<p>Walkthrough, transcript schema and flags: <a href="USAGE.md">USAGE.md</a>. Contract: <a href="NOTBEFORE.md">NOTBEFORE.md</a>
-(draft 0.6; one-page workflow: <a href="WORKFLOW.md">WORKFLOW.md</a>). The hour has no value if its reveal failed — take the next eligible hour, never an earlier one.</p>
-
-<h2>Published data</h2>
+  <h2>Published data</h2>
   <ul>
-    <li><code>/chain/pulse-NNNN.json</code> — every pulse record, signed.
-        e.g. <a href="/chain/pulse-0001.json">pulse-0001</a>;
-        full listing on <a href="https://github.com/docdailey/qrng-beacon-log/tree/main/chain">GitHub</a>.
-        <span class="note">A signed, machine-readable index is published as the log
-        checkpoint — see <a href="/TLOG.md">TLOG.md</a>. An unsigned directory listing
-        would carry no guarantee, so there isn't one.</span></li>
-    <li><a href="/PROTOCOL.md">PROTOCOL.md</a> — pulse format and verification, normative</li>
-    <li><a href="/NOTBEFORE.md">NOTBEFORE.md</a> — what the guarantee is, and is not</li>
-    <li><a href="/CLAIMS.md">CLAIMS.md</a> · <a href="/ERRATA.md">ERRATA.md</a> —
-        what is claimed, and every correction to it</li>
-    <li><a href="/HARDWARE.md">HARDWARE.md</a> — the attesting hosts and their clocks</li>
+    <li><code>/chain/pulse-NNNN.json</code> — every pulse record, signed; full listing on
+        <a href="https://github.com/docdailey/qrng-beacon-log/tree/main/chain">GitHub</a>. The signed index is the
+        checkpoint (<a href="/TLOG.md">TLOG.md</a>); an unsigned directory listing would carry no guarantee, so there isn't one.</li>
+    <li><a href="/PROTOCOL.md">PROTOCOL.md</a> — pulse format, verification, the commit-bound value; normative</li>
+    <li><a href="/NOTBEFORE.md">NOTBEFORE.md</a> — the product contract (draft 0.9): what the guarantee is, and is not</li>
+    <li><a href="/DECISION-LOG.md">DECISION-LOG.md</a> · <a href="/FALLBACK.md">FALLBACK.md</a> — the write-once log and why the operator cannot steer</li>
+    <li><a href="/CLAIMS.md">CLAIMS.md</a> · <a href="/ERRATA.md">ERRATA.md</a> · <a href="/reviews/">reviews/</a> —
+        what is claimed, every correction, and the external reviews verbatim</li>
+    <li><a href="/HARDWARE.md">HARDWARE.md</a> · <a href="/THESIS.md">THESIS.md</a> — the attesting hosts, their clocks, and what exact timing does and does not prove</li>
   </ul>
 
   <h2>Source</h2>

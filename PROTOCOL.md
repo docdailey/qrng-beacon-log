@@ -249,3 +249,28 @@ proves ineligibility. That makes eligibility a pre-round, irrevocable fact: noth
 can make an eligible commit ineligible or vice versa (ERR-015). The operator retains only pre-round, blind choices (skip, delay publication — visible in the log and in CI),
 which cannot bias a decision; it can still withhold provenance and stall the cadence. Rationale and residuals:
 `FALLBACK.md`.
+
+## Timing profile (consumer-facing verification policy; defined 2026-09-13)
+
+A pulse's timing statements (`time`, `witness`, `gnss`) are **authenticated** by their host signatures and pulse binding.
+Since `notbefore` 0.13.0 a consumer may also declare, in its contract and before the round, a **timing profile** the
+selected commit's evidence must satisfy — a versioned, testable acceptance policy evaluated identically online, in
+receipts and in offline bundles, and reported **separately** from cryptographic integrity and from the application result.
+
+`notbefore/timing/v1` requires, on the selected commit (and on its reveal when one verifies):
+
+| role | required observations | limits |
+|---|---|---|
+| time (p550) | `epoch_guard.epoch_ok`, `chrony_selects_iphc`; `discipline`: servo `ts2phc`, states `["s2"]`; `mesh_crosscheck` present | discipline: ≥ 3 samples, RMS ≤ 100 ns, \|min\|,\|max\| ≤ 250 ns; mesh: ≥ 3 samples, RMS ≤ 250 ns, \|min\|,\|max\| ≤ 1000 ns, monitor states `["s0"]` (a free-running monitor is expected in s0), 0 < path_delay ≤ 10 000 ns, BMC Announce mentions clockClass 6 (an observation, not authentication) |
+| witness (k3) | `epoch_guard.epoch_ok`, `chrony_selects_refclock`; `discipline` states `["s2"]` | ≥ 10 samples, RMS ≤ 250 ns, \|min\|,\|max\| ≤ 1000 ns |
+| gnss (f9t) | `anchor.utc_available_flag`; leapS + 19 == TAI−UTC | sawtooth-log coverage ≥ 95 % over the window, sawtooth sd ≤ 10 ns, \|qErr\| ≤ 50 ns for the epoch, ≥ 8 raw measurements in the fix |
+| cross-statement | every statement's TAI−UTC equal (37) | every `CLOCK_REALTIME` stamp within 600 s of the GNSS anchor epoch (freshness, never accuracy); the pulse's own anchor within 600 s of the GNSS epoch |
+
+Verdicts: **SATISFIED**, **NOT-SATISFIED** (an observation outside its limit), **NOT-EVALUABLE** (required evidence
+missing or malformed — non-finite numbers, wrong types, no statements; pulses before 0018 are NOT-EVALUABLE by
+construction). Missing optional evidence never grants a timing claim. **The profile never changes which commit a
+contract consumes:** with `timing.required = false` the verdict is reported in the transcript; with `required = true`
+a verdict other than SATISFIED refuses execution *on the selected commit* — no other value is tried (no timing-triggered
+reroll; this extends the R2/R5 rule). Calibration: every healthy v0.5 commit and reveal in the record (0020–0071)
+satisfies v1; 0018/0019 (KNOWN-NONCOMPLIANT, witness guard misfired) do not. Minting still gates only on epoch health
+and reference selection; a profile failure at mint is published, not hidden. Implementation: `cli/notbefore/timing.py`.

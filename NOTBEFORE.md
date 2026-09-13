@@ -1,6 +1,6 @@
 # NotBefore — specification
 
-**Status:** draft 0.9, 2026-09-13 — 0.8 with the commit-bound rule's evidence and verdict semantics fixed after an adversarial review (ERR-015: publication evidence from Rekor's signed entries, halt when it cannot be established; VERIFIED / DEGRADED / INVALID verdicts); 0.8 added the **commit-bound value** (§4.6, §7.13: contracts consume V* fixed by the commit and the drand round, so a withheld reveal cannot change or void a decision); 0.7 made execution fail closed on the decision log (§7.12: an unconfirmed registration is a refusal, not a warning); 0.6 added signed contracts and the write-once decision log (§7.12: a consumer identity, `contract/2`, and a second transparency log in which the first statement per decision wins); 0.5 added decision contracts (§7.11: the consumer's commitment, timestamped before the pulse); 0.4 added the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
+**Status:** draft 0.10, 2026-09-13 — 0.9 plus the **timing profile** (§7.14: a contract may declare `notbefore/timing/v1`; the selected commit's signed timing evidence is checked against it and reported separately; never a reroll); 0.9 fixed the commit-bound rule's evidence and verdict semantics after an adversarial review (ERR-015: publication evidence from Rekor's signed entries, halt when it cannot be established; VERIFIED / DEGRADED / INVALID verdicts); 0.8 added the **commit-bound value** (§4.6, §7.13: contracts consume V* fixed by the commit and the drand round, so a withheld reveal cannot change or void a decision); 0.7 made execution fail closed on the decision log (§7.12: an unconfirmed registration is a refusal, not a warning); 0.6 added signed contracts and the write-once decision log (§7.12: a consumer identity, `contract/2`, and a second transparency log in which the first statement per decision wins); 0.5 added decision contracts (§7.11: the consumer's commitment, timestamped before the pulse); 0.4 added the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
 **Implements over:** `qrng-beacon-log` protocol v0.5 (live log)  
 **Normative language:** MUST / MUST NOT / SHOULD / MAY
 
@@ -349,6 +349,18 @@ after seeing the thing that mattered. **What it does not prove:** that the *only
 A user can still timestamp several and publish one; §7.12 closes that with the write-once decision log. (Before 0.6
 the defence was the same as for any preregistration — publish the hash where it cannot be quietly withdrawn.)
 
+### 7.14 Timing profile — enforcing the evidence the pulse already carries (spec 0.10)
+A `contract/3` MAY declare `timing: {profile: "notbefore/timing/v1", required: bool}` (the CLI declares it by default,
+`required: false`; `--timing-required`; `--no-timing`). `execute` evaluates the profile on the selected commit and on
+its reveal when FULL-ATTESTED, records `timing_policy {profile, required, verdict, per_pulse}` in the transcript, and —
+only when `required` — refuses a verdict other than SATISFIED **on that commit**; it never advances to another value.
+`receipt`, `bundle` and `check-bundle` re-evaluate the profile from the pulses at hand and print the clock section
+separately from the cryptographic checks; a required profile that is not satisfied makes the artifact INVALID, a
+reported one makes it DEGRADED. The profile's limits, verdict semantics and calibration are normative in `PROTOCOL.md`
+§"Timing profile". What it establishes: that the hosts' signed measurements met stated limits over stated windows.
+What it does not: absolute UTC accuracy, or that the measurements were true of the physical world (host signatures
+attest observations; the acquisition boundary is T6 in `reviews/`).
+
 ### 7.13 Commit-bound contracts — the operator cannot steer (spec 0.8)
 Since 0.8 a signed contract is `notbefore/contract/3`: contract/2 plus `value: {rule: "commit-bound", domain:
 "notbefore/commit-bound/v1"}` and the selection rule `first-eligible-commit-released-at-or-after(after_utc)`.
@@ -465,6 +477,7 @@ notbefore keygen                                           # once: the consumer 
 notbefore plan --after <UTC> --purpose <P> --sample 12 <file>   # signed decision contract: two RFC 3161 tokens + write-once decision-log entry (also --split/--assign/--id/--range/--bytes/--seed; --decision-id, --disclose, --no-log)
 notbefore register <contract.json>                         # (re)submit a signed contract's statement to the decision log, idempotently
 notbefore execute <contract.json>                          # no choices: rule-selected COMMIT (contract/3: value V*, FULL-ATTESTED / COMMITMENT-FALLBACK; exit 3 = reveal window still open), latest token before the round, FIRST entry for its decision_id, committed input only
+notbefore plan ... --timing-required                       # require the selected commit's signed timing evidence to satisfy notbefore/timing/v1 (default: evaluate and report)
 notbefore receipt <contract.json>                          # one-page human-readable receipt; every line re-derived and re-verified (WORKFLOW.md)
 notbefore bundle <contract.json> --out b.zip               # self-contained verification bundle: contract+sidecars, transcript, pulse pair+tokens+checkpoint+proofs+anchors, decision-log leaf/proof, keys, README, MANIFEST
 notbefore check-bundle b.zip                               # OFFLINE re-verification of a bundle with this installation's pinned keys and roots
@@ -596,6 +609,8 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 ## 16. Changelog
 
 **0.5.1 (2026-09-12, later).** §7.11 hardened after code review (ERR-013): both TSAs required, no failing token tolerated, gate on the LATEST token, no candidate cutoff in the rule, JCS/no-float canonical form, "timestamping" not "registration". Package and spec versions decoupled (§12). `DECISION-LOG.md` sketches the write-once decision log that would turn timestamping into registration.
+
+**0.10 (2026-09-13).** Timing profile `notbefore/timing/v1` (§7.14, PROTOCOL §"Timing profile"): a declared, versioned acceptance policy over the signed timing statements, evaluated identically online and offline, reported separately, refusing only when required and never rerolling (review 2 T1). CLAIMS: the mesh is now "authenticated and, when declared, enforced". `notbefore` 0.13.0.
 
 **0.9 (2026-09-13).** After the second adversarial review (ERR-015): §7.13 publication evidence comes from Rekor's signed entries, never a record wrapper, and a verifier halts rather than advancing when it cannot establish a candidate's eligibility; receipts, bundles and `check-bundle` return VERIFIED / DEGRADED / INVALID (exit 0 / 2 / 1), bind the transcript to the signed contract and re-run the operation when the input is bundled; a missing checkpoint fails for checkpointed pulses; range spans > 2^64 are refused. `notbefore` 0.12.0.
 

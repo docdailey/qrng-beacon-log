@@ -54,7 +54,10 @@ Established, independently checkable: who committed (signature), what (contract 
 receipt time fixed by anchored checkpoints), that it was the authoritative preregistration (first entry in a write-once
 namespace), that the value was not yet knowable (a future drand round; the beacon's own entropy committed before it),
 how the result was computed (deterministic derivation, transcript), and that none of it was silently rewritten
-(checkpoints, witnesses, repository mirror, Rekor). Also established since 0.11.0 (commit-bound contracts): that the beacon operator could not have steered the value —
+(checkpoints, witnesses, repository mirror, Rekor). Also established since 0.13.0 (timing profile): that the hosts' signed clock measurements for the selected commit met
+the declared limits over their stated windows — reported separately from the cryptography, required only if you say so.
+
+Also established since 0.11.0 (commit-bound contracts): that the beacon operator could not have steered the value —
 it is fixed by the commit and the drand round, a withheld reveal changes nothing (the hour is labelled
 COMMITMENT-FALLBACK and carries no QRNG provenance), and a commit only counts if it was Rekor-anchored before its
 round. Not established: that two decision ids or two keys are not the same experiment — that is what the
