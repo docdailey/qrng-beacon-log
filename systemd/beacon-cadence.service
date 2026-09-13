@@ -18,6 +18,10 @@ ExecStart=/usr/bin/python3 /usr/local/bin/beacon-cadence.py
 Restart=always
 RestartSec=10
 Nice=-5
+# SCHED_FIFO below the RT IRQ threads (50) and ts2phc (55): the poll loop can no longer be descheduled around the instant
+# (2026-09-13 20:00Z: woke 1.2 ms after the edge; lab: FIFO wakes +8 us six of six - latency_chain.md §9). 30 ms busy per hour.
+CPUSchedulingPolicy=fifo
+CPUSchedulingPriority=30
 
 [Install]
 WantedBy=multi-user.target
