@@ -73,7 +73,11 @@ RING_DIR="/run/beacon-clocklog"; RING_WINDOW_S=int(os.environ.get("BEACON_RING_W
 def ring_rows(name, window_s=RING_WINDOW_S):
     """Rows of the last window_s seconds of a ring, newest last; [] if absent or stale."""
     try:
-        now=time.time(); rows=[json.loads(l) for l in open(os.path.join(RING_DIR,name+".jsonl")) if l.strip()]
+        now=time.time(); rows=[]
+        for l in open(os.path.join(RING_DIR,name+".jsonl")):
+            if not l.strip(): continue
+            try: rows.append(json.loads(l))
+            except Exception: pass                    # a line still being written (or damaged) is skipped, not fatal for the ring
         rows=[r for r in rows if now-r.get("t",0)<=window_s]
         if not rows or now-rows[-1]["t"]>RING_STALE_S: return []
         return rows

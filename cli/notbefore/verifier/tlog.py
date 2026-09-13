@@ -189,7 +189,7 @@ def gather_cosignatures(note, leaves, root_dir=HERE, log=None):
     for w in witnesses(root_dir):
         if not w.get("url") or not w.get("enabled", True): continue
         try:
-            lines = witness_submit(w["url"], note, leaves, timeout=int(w.get("timeout_s", 8)))
+            lines = witness_submit(w["url"], note, leaves, timeout=min(int(w.get("timeout_s", 8)), 3))   # a slow witness must not hold publication (cap 3 s)
             good = verify_cosignatures(note.rstrip("\n") + "\n" + lines, cos)
             names = {n for n, _ in good}
             for l in lines.splitlines():

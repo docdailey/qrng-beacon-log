@@ -245,7 +245,7 @@ A reveal pulse \(N\) is a **NotBefore-eligible** seed if and only if:
 
 **First eligible pair:** 0020/0021.  
 **Preferred floor:** 0026/0027 (execution enforced).  
-**Current cadence:** hourly. Since 2026-09-13 15:00Z the aggregator is `k3`; the cycle starts at :00:00.000 UTC on k3's own PTP-disciplined clock (`core.cadence.self_trigger`) and the time host p550 attests the same instant with a signed trigger sent by UDP (`core.cadence.trigger`); the release is at :05:00; k3's :02 timer is only the fallback (CADENCE.md §2). think aggregated 0018–0095.
+**Current cadence:** hourly. Since 2026-09-13 16:00Z the aggregator is `k3`; the cycle starts at :00:00.000 UTC on k3's own PTP-disciplined clock (`core.cadence.self_trigger`) and the time host p550 attests the same instant with a signed trigger sent by UDP (`core.cadence.trigger`); the release is at :05:00; k3's :02 timer is only the fallback (CADENCE.md §2). think aggregated 0018–0097.
 
 If the named hour is ineligible or missing, the consumer MUST take a **later** eligible hour named in advance as the alternate (the next eligible reveal in the log — typically the next cycle; a `failure` pulse shifts numbering, so name it by rule, not by \(N+2\)), never an earlier one, never a “best of three.”
 

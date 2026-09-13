@@ -6,6 +6,29 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-017 — commit 0096 failed at the reveal: the new reveal path crashed on a missing import, and the first failure pulse could not mint (2026-09-13)
+
+**What was wrong.** The fast-chain commit (`01e17d6`, 14:20Z) restructured `pulse.py reveal` so the cycle driver could
+hand over the drand round it had already fetched (`--drand FILE`). In that branch the thread-pool class used a few lines
+later was never imported (the import sat in the other branch). Every staging run before the cutover had been commit-only,
+so the reveal path was never executed; an external latency review found the defect by static probing at about 15:00Z,
+and think's 15:00 cycle hit it live at 15:07:04Z — think's checkout had been pulled to the new code by its decisions-mirror
+job at 14:50, and its :02 fallback ran the new driver. `pulse.py reveal` raised, the driver tried to mint a failure pulse,
+and that failed too: the failure reason it passed to the entropy host contained characters the host's command sanitizer
+strips (quotes, newlines, a traceback), so the host signed a *different* reason string and the aggregator refused to mint
+("entropy host signed a different failure reason"). The cycle exited with commit 0096 published and unresolved, and the
+entropy host holding 0096 in the `abandoning` state (E retired unrevealed, awaiting finalization).
+
+**Fix.** At 15:09:38Z, inside the reveal window, the operator minted **failure pulse 0097** for commit 0096 from think with a
+reason that survives the sanitizer, published it with checkpoint 000097, and finalized the abandonment (E erased). The
+chain records the commit, its failure and the stated cause; nothing was rewritten. Code: the executor is imported at module
+level and inside the function (`pulse.py`); the failure path now sanitizes the reason exactly as the hosts do before
+sending and comparing it, so a failure pulse can always mint; the staging procedure now runs a full pair (commit **and**
+reveal, 60-round lead, no finalize, secret retired afterwards) before any cutover. The other findings of the same review
+were verified and fixed in the same commit (exact-round hand-off, DNS-free probes, locked ring writes, bounded warm-up,
+honest start labels, the lead gate). No consumer decision is known to have selected 0096: a failed commit is ineligible
+by rule and the commit-bound value of a later commit is unaffected.
+
 ## ERR-016 — an unscheduled cycle at 12:26:57Z when the fallback timer's schedule was changed (2026-09-13)
 
 **What was wrong.** While moving the hour's start from think's timer to the time host's clock (CADENCE.md §2 "Cadence

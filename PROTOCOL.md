@@ -114,7 +114,7 @@ seq inside its validity window.
 { "v":"0.5", "type": commit|reveal|failure, "seq", "prev_hash", "chain_hash",
   "statements": { "entropy", "gnss", "time", "witness" },      # failure: entropy required, others best-effort
   "drand_at_commit" | "drand",                                 # BLS-verified by the aggregator before use
-  "derived": { ... },  "tooling": {...},  "aggregator_host": "k3" (0096+) | "think" (0018-0095),
+  "derived": { ... },  "tooling": {...},  "aggregator_host": "k3" (0098+) | "think" (0018-0097),
   "cadence": { "source", "targeting", "trigger"?, "received_unix_ns"?, "aggregator_start_unix_ns", ... } }   # since 2026-09-13, see "Cadence trigger"
 pulse = { "core", "pulse_hash" = SHA256(canon(core)), "signatures": { "aggregator" }, "disclosure" }
 ```
@@ -139,7 +139,7 @@ A commit may carry `core.cadence.trigger`: a **statement signed by the time host
                  "issued_unix_ns":"<str>", "nonce", "tools":[...], "execution": {...} },
   "signature": { "alg":"ed25519", "key_id", "public_key_b64", "sig_b64", "over":"canon(statement)" } }
 ```
-`core.cadence.self_trigger` (from pulse 0096) is the aggregator's OWN wake record for the instant — `{host, scheduled_unix_s,
+`core.cadence.self_trigger` (from pulse 0098) is the aggregator's OWN wake record for the instant — `{host, scheduled_unix_s,
 start_source: "hw-datagram" | "clock", datagram_rx_unix_ns?, time_host_event?, wake:{unix_ns, late_ns}, phc:{...}}` — covered by
 the aggregator signature only (it is not a host statement). The time host's trigger statement may carry `hw_event`
 `{source, assert_unix_ns, sequence, edge_after_instant_ns, woke_after_edge_ns}`: the PHC's own second-boundary interrupt the

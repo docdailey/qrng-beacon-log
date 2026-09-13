@@ -88,7 +88,7 @@ also start a cycle at an instant of its choosing. That is bounded (one cycle per
 visible (every commit carries the trigger it was started from, `verify.py` checks the instant is a round boundary and
 that the target round follows from it). The aggregator's keys, the entropy host and the other attest hosts are unchanged.
 
-## Aggregator on k3 (2026-09-13, from pulse 0096) — what changed in the trust picture
+## Aggregator on k3 (2026-09-13, from pulse 0098) — what changed in the trust picture
 
 - The aggregator is the `aggregator` user on k3 (`~aggregator/beacon/aggregator.key`, the log's checkpoint key, a repo-scoped
   deploy key). Its SSH key is authorised on every role host's `beacon` user with the same `restrict,command="beacon-cmd"` line

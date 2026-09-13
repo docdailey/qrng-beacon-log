@@ -20,19 +20,29 @@ PHC = os.environ.get("PHC_DEV", "/dev/ptp0" if ROLE == "time" else "/dev/ptp1");
 os.makedirs(RING_DIR, exist_ok=True)
 
 def now_ms(): return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+import fcntl
+def _locked(name):
+    """One lock file per ring: appends and the trim rewrite exclude each other (an append during the rewrite was lost)."""
+    f = open(os.path.join(RING_DIR, "." + name + ".lock"), "a"); fcntl.flock(f, fcntl.LOCK_EX); return f
 def ring_append(name, row):
-    p = os.path.join(RING_DIR, name + ".jsonl")
-    with open(p, "a") as f: f.write(json.dumps(row, separators=(",", ":")) + "\n")
-    try: os.chmod(p, 0o644)
-    except Exception: pass
-def ring_trim(name):
-    p = os.path.join(RING_DIR, name + ".jsonl")
+    p = os.path.join(RING_DIR, name + ".jsonl"); lk = _locked(name)
     try:
-        lines = open(p).read().splitlines(); cutoff = time.time() - RING_S
-        keep = [l for l in lines if json.loads(l).get("t", 0) >= cutoff]
+        with open(p, "a") as f: f.write(json.dumps(row, separators=(",", ":")) + "\n")
+        try: os.chmod(p, 0o644)
+        except Exception: pass
+    finally: lk.close()
+def ring_trim(name):
+    p = os.path.join(RING_DIR, name + ".jsonl"); lk = _locked(name)
+    try:
+        lines = open(p).read().splitlines(); cutoff = time.time() - RING_S; keep = []
+        for l in lines:
+            try:
+                if json.loads(l).get("t", 0) >= cutoff: keep.append(l)
+            except Exception: pass                                            # a damaged line is dropped, never propagated
         if len(keep) != len(lines): open(p + ".tmp", "w").write("\n".join(keep) + ("\n" if keep else "")); os.replace(p + ".tmp", p); os.chmod(p, 0o644)
     except FileNotFoundError: pass
     except Exception as e: print("trim", name, e, flush=True)
+    finally: lk.close()
 
 class DB:
     """Best-effort MySQL sink. Rows are QUEUED and ONE writer thread owns the connection: pymysql connections are not

@@ -21,6 +21,7 @@ At most one pending commit. The chain is append-only. Only a checkout equal to t
 Canonical form: hosts/attest_lib.canon — no floats, no integers beyond 2^53; violations abort.
 """
 import json, base64, hashlib, subprocess, sys, time, os, glob, re, decimal
+from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "hosts"))
 import attest_lib as A, drand_anchor, tsa, bls_drand, schema as S
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -61,10 +62,15 @@ def head():
 def ptype(p): return (p or {}).get("core", {}).get("type", "legacy")
 def D(x): return decimal.Decimal(str(x))
 
-def require_synced(allow_offline=False):
-    """Returns True when the published head could NOT be confirmed but allow_offline let us proceed (skip pulses)."""
+def require_synced(allow_offline=False, assume=False):
+    """Returns True when the published head could NOT be confirmed but allow_offline let us proceed (skip pulses).
+    assume=True (beacon-cycle --at fetched origin/main seconds before the tick and found HEAD == origin/main): skip
+    the network fetch here - the local origin/main ref is at most a few seconds old - but keep every other check."""
     if git("rev-parse", "--is-inside-work-tree")[0] != 0: return False
-    rc, _, err = git("fetch", "-q", "origin", "main")
+    if assume and git("rev-parse", "HEAD")[1].strip() == git("rev-parse", "origin/main")[1].strip():
+        rc = 0
+    else:
+        rc, _, err = git("fetch", "-q", "origin", "main")
     if rc != 0:
         if allow_offline: sys.stderr.write("warning: cannot fetch origin; proceeding on the local head\n"); return True
         die("cannot fetch origin - " + err[:120])
@@ -124,7 +130,6 @@ def collect(seq, phase, binding, names):
     """Gather the attest hosts' statements CONCURRENTLY (2026-09-13: they used to be queried one after another, which put the
     sum of the probe windows on the critical path). Each host still runs its own forced command and signs its own facts;
     the aggregator only assembles. Any failure aborts the phase exactly as before."""
-    from concurrent.futures import ThreadPoolExecutor
     wanted = [n for n in names if n != "entropy"]
     def one(n):
         role, host = S.STATEMENTS[n]
@@ -143,9 +148,13 @@ def collect(seq, phase, binding, names):
 
 def drand_verified(rnd=None, doc_file=None):
     """BLS-verified drand round: `latest`, a specific round, or (doc_file) a document the cycle driver already fetched."""
+    d = None
     if doc_file:
-        j = json.load(open(doc_file)); d = drand_anchor.fetch(rnd, doc=j["doc"], base=j.get("base"), fetched_at=j.get("fetched_unix_s"))
-    else: d = drand_anchor.fetch(rnd)
+        j = json.load(open(doc_file))
+        if rnd is None or int(j["doc"].get("round", -1)) == int(rnd):
+            d = drand_anchor.fetch(rnd, doc=j["doc"], base=j.get("base"), fetched_at=j.get("fetched_unix_s"))
+        else: sys.stderr.write(f"note: handed-over drand document is round {j['doc'].get('round')}, need {rnd}; fetching the round itself\n")
+    if d is None: d = drand_anchor.fetch(rnd)
     if not d["randomness_equals_sha256_signature"]: die("drand randomness != sha256(signature)")
     ok, why = bls_drand.verify_pinned(d["round"], d["signature"], d["chain_hash"])
     if not ok: die("drand BLS verification failed: " + why)
@@ -192,11 +201,12 @@ def _load_trigger(path, seq):
     signed = tj.get("trigger") or {}; ok, why = check_trigger(signed, seq)
     return signed, tj.get("received_unix_ns"), ok, why
 
-def cmd_commit(lead, trigger_path=None, self_trigger_path=None, trigger_dir=None):
+def cmd_commit(lead, trigger_path=None, self_trigger_path=None, trigger_dir=None, assume_synced=False):
     """--self-trigger: the aggregator's own wake record for the scheduled instant (beacon-cycle.py --at); --trigger /
-    --trigger-dir: the time host's signed cadence trigger, delivered up front or arriving by UDP while this runs."""
+    --trigger-dir: the time host's signed cadence trigger, delivered up front or arriving by UDP while this runs;
+    --assume-synced: the cycle driver fetched origin seconds ago (see require_synced)."""
     if lead < MIN_LEAD: die(f"lead {lead} < MIN_LEAD {MIN_LEAD}")
-    require_synced()
+    require_synced(assume=assume_synced)
     seq, prev_hash, hp = head()
     if ptype(hp) == "commit": die(f"pulse {seq} is an unresolved commit; reveal it or record a failure first")
     seq += 1
@@ -222,7 +232,6 @@ def cmd_commit(lead, trigger_path=None, self_trigger_path=None, trigger_dir=None
             t0 = signed["statement"]["scheduled_unix_s"]; cadence.update({"trigger": signed, "received_unix_ns": str(rx)})
             cadence["source"] = f"{AGG_HOST} clock + p550/i210 trigger" if "self_trigger" in cadence else "p550/i210 cadence trigger"
         else: cadence["trigger_rejected"] = why if not ok else "trigger instant differs from the aggregator's scheduled instant"
-    from concurrent.futures import ThreadPoolExecutor
     ex = ThreadPoolExecutor(max_workers=1); fut = ex.submit(drand_verified)          # fetch + BLS in the background
     if t0 is not None:
         r0 = (t0 - S.GENESIS) // S.PERIOD + 1                                          # the round released AT t0
@@ -230,7 +239,7 @@ def cmd_commit(lead, trigger_path=None, self_trigger_path=None, trigger_dir=None
     else:
         now = fut.result(); target = now["round"] + lead
     release = S.release_time(target)
-    if release - time.time() < S.PUBLISH_MARGIN_S + 60: die("target round is not far enough away to honour the publication margin")
+    if release - time.time() < S.PUBLISH_MARGIN_S + 30: die("target round is not far enough away to honour the publication margin")   # 30 s: the chain mints in 1-3 s; MIN_LEAD (60 rounds = 180 s) must pass this gate at the tick
     # The SSH outcome itself is uncertain (timeout after the host created its secret, malformed reply): treat the
     # entropy host as POSSIBLY holding a secret from the moment we ask, and roll back on any exception from here on.
     def rollback(why):
@@ -284,6 +293,7 @@ def cmd_commit(lead, trigger_path=None, self_trigger_path=None, trigger_dir=None
                       "reveal_after_s": round(release - time.time(), 1)}, indent=2))
 
 def cmd_reveal(drand_file=None):
+    from concurrent.futures import ThreadPoolExecutor      # also at module level; repeated here so an extracted function still runs (review probe)
     require_synced()
     seq, prev_hash, hp = head()
     if ptype(hp) != "commit": die("head is not a commit; nothing to reveal")
@@ -293,7 +303,6 @@ def cmd_reveal(drand_file=None):
     if drand_file:
         dr = drand_verified(target, doc_file=drand_file)                               # the round the cycle driver already fetched; BLS-verified here
     else:
-        from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=2) as ex:                                    # latest + target: two fetches, two BLS checks, at once
             f_latest, f_target = ex.submit(drand_verified), ex.submit(drand_verified, target)
             latest = f_latest.result()
@@ -309,6 +318,10 @@ def cmd_reveal(drand_file=None):
     if hashlib.sha256(S.COMMIT_DOMAIN + E).hexdigest() != hp["core"]["derived"]["entropy_commitment"]: die("revealed E does not match the published commitment")
     sts = {"entropy": ent, **rest}
     anchor_s = D(sts["gnss"]["statement"]["measurement"]["anchor"]["utc_unix_s"])
+    for attempt in range(3):                                   # the chain now reveals ~1.5 s after the round; the GNSS host's anchor is a whole
+        if anchor_s >= dr["round_release_unix_s"]: break       # second and can lag the release by one: ask again instead of failing the pulse
+        sys.stderr.write(f"note: GNSS anchor {anchor_s} precedes the release {dr['round_release_unix_s']}; asking f9t again ({attempt + 1}/3)\n")
+        time.sleep(0.7); sts.update(collect(seq, "reveal", cph, ("gnss",))); anchor_s = D(sts["gnss"]["statement"]["measurement"]["anchor"]["utc_unix_s"])
     if anchor_s < dr["round_release_unix_s"]: die("reveal anchored before the round released")
     buf = S.MIX_DOMAIN + E + bytes.fromhex(dr["randomness"]) + bytes.fromhex(dr["chain_hash"]) + int(target).to_bytes(8, "big")
     core = {"v": S.VERSION, "type": "reveal", "seq": seq, "prev_hash": prev_hash, "chain_hash": S.CHAIN_HASH,
@@ -327,7 +340,11 @@ def cmd_reveal(drand_file=None):
                       "drand_round": target, "commit_before_round_by_s": core["derived"]["commit_anchor_before_release_s"],
                       "reveal_after_round_by_s": core["derived"]["anchor_after_release_s"]}, indent=2))
 
+HOST_REASON_CHARS = re.compile(r"[^A-Za-z0-9 ._:{}\",=-]")     # what beacon-cmd / beacon-agentd keep of a failure reason
 def cmd_fail(reason):
+    """The entropy host signs the reason it RECEIVED, after its sanitizer; send exactly what it will sign (ERR-017: a
+    traceback in the reason made the host's string differ and the failure pulse could not mint)."""
+    reason = HOST_REASON_CHARS.sub("", " ".join(str(reason).split()))[:200].strip() or "unspecified"
     require_synced()
     seq, prev_hash, hp = head()
     if ptype(hp) != "commit": die("head is not a commit; nothing to fail")
@@ -476,7 +493,7 @@ if __name__ == "__main__":
     a = sys.argv[1:]; cmd = a[0] if a else "status"
     if cmd == "commit":
         opt = lambda k: a[a.index(k) + 1] if k in a else None
-        cmd_commit(int(opt("--lead") or DEFAULT_LEAD), opt("--trigger"), opt("--self-trigger"), opt("--trigger-dir"))
+        cmd_commit(int(opt("--lead") or DEFAULT_LEAD), opt("--trigger"), opt("--self-trigger"), opt("--trigger-dir"), "--assume-synced" in a)
     elif cmd == "reveal": cmd_reveal(a[a.index("--drand") + 1] if "--drand" in a else None)
     elif cmd == "fail": cmd_fail(" ".join(a[1:]) or "unspecified")
     elif cmd == "finalize": cmd_finalize()

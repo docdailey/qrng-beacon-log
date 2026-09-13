@@ -79,7 +79,7 @@ refused anyway — the time statement is REQUIRED — and the hour becomes a `sk
 
 ### 2f. k3 (the aggregator since 0096) is down → **no cycle; fail back to think deliberately**
 think is a cold standby: its checkout, deploy key and checkpoint-key copy remain, its timers are disabled, and its aggregator
-key is **retired in `keys/KEYS.json` at seq 95**. To fail back: append a new validity window for think's key (or a new key) in
+key is **retired in `keys/KEYS.json` at seq 97**. To fail back: append a new validity window for think's key (or a new key) in
 `KEYS.json` from the next seq, commit and push that first, then `systemctl --user enable --now qrng-beacon.timer` on think
 (fallback path; it has no tick-start). That is a public act by design — a key that could silently mint from two hosts would be
 a weaker log. When k3 returns, retire think's window again before re-enabling k3's timers. Never let both timers be enabled.

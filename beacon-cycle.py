@@ -15,7 +15,7 @@ core.cadence.trigger). A plain `beacon-cycle.py` (the :02 fallback timer) runs t
 """
 import subprocess, json, sys, os, time, glob, urllib.request
 REPO = os.path.dirname(os.path.abspath(__file__))
-LEAD, PUBLISH_MARGIN_S, REVEAL_DEADLINE_S = 100, 120, 600
+LEAD, PUBLISH_MARGIN_S, REVEAL_DEADLINE_S = int(os.environ.get("BEACON_LEAD", "100")), 120, 600
 LOG = os.path.join(REPO, "cycle.log")
 CHAIN_HASH = "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
 
@@ -141,8 +141,10 @@ def self_trigger(t0):
     while not ev.is_set() and time.clock_gettime_ns(time.CLOCK_REALTIME) < deadline: ev.wait(0.0002)
     wake = time.clock_gettime_ns(time.CLOCK_REALTIME)
     if ev.is_set():
-        src = {"start_source": "hw-datagram", "datagram_rx_unix_ns": str(ev.rx_ns), "time_host_event": (ev.statement or {}).get("hw_event"),
-               "meaning": "started on the time host's signed datagram, itself fired by the i210 PHC's second interrupt; the aggregator's clock was not consulted for the start"}
+        hw = (ev.statement or {}).get("hw_event")
+        src = {"start_source": "hw-datagram" if hw else "datagram-clock-fallback", "datagram_rx_unix_ns": str(ev.rx_ns), "time_host_event": hw,
+               "meaning": ("started on the time host's signed datagram, itself fired by the i210 PHC's second interrupt; the aggregator's clock was not consulted for the start"
+                           if hw else "started on the time host's signed datagram, but the time host itself fired on its clock fallback (no hardware event in its statement)")}
     else:
         src = {"start_source": "clock", "meaning": f"no hardware-originated datagram within {HW_WAIT_MS:g} ms; started on CLOCK_REALTIME"}
     rec = {"host": HOST, "scheduled_unix_s": t0, **src,
@@ -213,14 +215,22 @@ def prepare():
     return None
 
 def warm_connections():
-    """Open the multiplexed SSH connections to the role hosts before the instant (ControlMaster in ~/.ssh/config), so the
-    calls made after it cost ~0.1 s each instead of 0.5-2 s (E2, 2026-09-13). The attest hosts answer `noop` with a usage
-    error; the entropy host answers `pending` - neither signs anything."""
+    """Warm the path to each role host before the instant, in parallel and bounded (6 s total): with BEACON_RPC=agentd a
+    signed `pending`/`noop` request (the daemons import their host scripts on first use; nothing is signed by them), else
+    the multiplexed SSH connections (ControlMaster). A host that does not answer costs nothing here - the cycle reports it."""
+    import threading
     hosts = {"protectli": "pending", "p550": "noop", "k3": "noop", "f9t": "noop"}
-    import pulse
-    for n, op in hosts.items():
-        try: subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", pulse.SSH[n], op], capture_output=True, timeout=20)
-        except Exception as e: log(f"warm-up {n}: {e}")
+    def one(n, op):
+        try:
+            if os.environ.get("BEACON_RPC", "ssh") == "agentd":
+                sys.path.insert(0, os.path.join(REPO, "hosts")); import rpc
+                try: rpc.call(n, op, timeout=5)
+                except RuntimeError: pass                                   # the allow-list refusing `noop` IS the warm-up
+            else:
+                import pulse; subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", pulse.SSH[n], op], capture_output=True, timeout=8)
+        except Exception as e: log(f"warm-up {n}: {type(e).__name__}: {str(e)[:60]}")
+    ts = [threading.Thread(target=one, args=(n, op), daemon=True) for n, op in hosts.items()]; [t.start() for t in ts]
+    for t in ts: t.join(timeout=6)
 
 def commit_phase(extra):
     try:
@@ -265,7 +275,12 @@ def await_round(target, release, seq):
         if time.time() > release + REVEAL_DEADLINE_S - 60:
             stop.set(); fail(seq, "round-never-observed", {"last_check_utc": time.strftime("%H:%M:%SZ", time.gmtime(time.time()))})
         stop.wait(0.05)
-    doc, h, at = found["doc"]; path = os.path.join(REPO, "trigger", f"drand-{seq:04d}.json"); os.makedirs(os.path.dirname(path), exist_ok=True)
+    doc, h, at = found["doc"]
+    if doc.get("round") != target:                                           # late poll (a resumed cycle): fetch the committed round itself
+        try:
+            c = conns[h]; c.request("GET", f"/{CHAIN_HASH}/public/{target}", headers={"Connection": "keep-alive", "User-Agent": "qrng-beacon-log/beacon-cycle"}); doc = _json.loads(c.getresponse().read())
+        except Exception as e: log(f"exact round fetch failed ({e}); pulse.py will fetch it")
+    path = os.path.join(REPO, "trigger", f"drand-{seq:04d}.json"); os.makedirs(os.path.dirname(path), exist_ok=True)
     _json.dump({"doc": doc, "base": f"https://{h}", "fetched_unix_s": round(at, 3)}, open(path, "w"))
     log(f"round {doc['round']} first served by {h} {at - release:.3f} s after release")
     for c in conns.values():
@@ -273,7 +288,7 @@ def await_round(target, release, seq):
         except Exception: pass
     return path
 
-def reveal_phase(seq, target, release):
+def reveal_phase(seq, target, release, finalize=True):
     # ---- WAIT for the round: pre-open connections, sleep to release+1.0 s, race the relays ----
     drand_file = await_round(target, release, seq)
     # ---- REVEAL (only if it can still be published inside the deadline; otherwise a signed failure) ----
@@ -286,8 +301,10 @@ def reveal_phase(seq, target, release):
     pushed = publish(f"REVEAL pulse {rout['seq']} (commit {seq}, drand round {target})")
     late = pushed - release
     log(f"revealed seq {rout['seq']} value {rout['attested_value'][:16]}..., pushed {late:.1f}s after release")
-    try: log("finalize: " + run("python3", "pulse.py", "finalize").strip()[:120])
-    except Exception as e: log(f"finalize deferred (E stays recoverable on the entropy host): {e}")
+    if finalize:
+        try: log("finalize: " + run("python3", "pulse.py", "finalize").strip()[:120])
+        except Exception as e: log(f"finalize deferred (E stays recoverable on the entropy host): {e}")
+    else: log("staging: finalize skipped (the entropy host keeps the seq in .revealing; abort-unpublished retires it)")
     log("cycle complete")
 
 def main():
@@ -309,13 +326,23 @@ def precise_main(t0, commit_only=False):
         return
     import threading; globals()["TRIGGER_ARRIVED"] = threading.Event(); TRIGGER_ARRIVED.rx_ns = None; TRIGGER_ARRIVED.statement = None
     warm_connections(); udp_listener(t0, until=t0 + 240)
-    if time.time() > t0: log(f"instant {utc(t0)} already passed during preparation ({time.time() - t0:.1f} s); minting now"); 
+    # the last look at origin/main happens BEFORE the tick (10 s), so pulse.py can skip its own fetch on the timed path
+    assume = []
+    if t0 - 10 - time.time() > 0: sleep_until(int((t0 - 10) * 10**9), spin_ns=0)
+    try:
+        run("git", "fetch", "-q", "origin", "main", timeout=8)
+        if run("git", "rev-parse", "HEAD") == run("git", "rev-parse", "origin/main"): assume = ["--assume-synced"]
+        else:
+            run("git", "merge", "-q", "--ff-only", "origin/main", check=False); assume = ["--assume-synced"] if run("git", "rev-parse", "HEAD") == run("git", "rev-parse", "origin/main") else []
+            log("origin/main moved after prepare; fast-forwarded" if assume else "origin/main moved and could not be fast-forwarded; pulse.py will fetch and decide")
+    except Exception as e: log(f"pre-tick fetch failed ({str(e)[:80]}); pulse.py will fetch itself")
+    if time.time() > t0: log(f"instant {utc(t0)} already passed during preparation ({time.time() - t0:.1f} s); minting now")
     path, rec = self_trigger(t0)
     log(f"instant {utc(t0)}: started on {rec['start_source']} {rec['wake']['late_ns'] / 1000:.1f} us after the instant" + (f"; PHC-REALTIME {rec['phc']['phc_minus_realtime_ns']} ns" if "phc" in rec else ""))
     if not claim_hour(hour_of(t0)): log("this hour was already claimed (a cycle is running); exiting"); return
-    seq, target, release = commit_phase(["--self-trigger", path, "--trigger-dir", "trigger"])
+    seq, target, release = commit_phase(["--self-trigger", path, "--trigger-dir", "trigger", *assume])
     if commit_only: log("commit-only mode: stopping before the reveal (staging)"); return
-    reveal_phase(seq, target, release)
+    reveal_phase(seq, target, release, finalize="--no-finalize" not in sys.argv)
 
 if __name__ == "__main__":
     a = sys.argv[1:]

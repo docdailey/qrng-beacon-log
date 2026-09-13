@@ -53,9 +53,9 @@
    "key_id": "18f105dbcc140768",
    "public_key_b64": "oj1mho4AyCyafHFZg/yHeh7hdlceJ/mdGkeAPWCsC+A=",
    "valid_from_seq": 18,
-   "valid_to_seq": null,
-   "status": "active",
-   "note": "v0.5: signs the assembled pulse digest only; host facts are attested by host signatures inside core.statements | 2026-09-13: k3 takes over at the 16:00Z cycle; this key is retired at its last seq once known (RECOVERY.md 2f)."
+   "valid_to_seq": 97,
+   "status": "retired",
+   "note": "v0.5: signs the assembled pulse digest only; host facts are attested by host signatures inside core.statements | 2026-09-13: k3 takes over at the 16:00Z cycle; this key is retired at its last seq once known (RECOVERY.md 2f). | retired at seq 97 (2026-09-13 15:xxZ): its last pulse is failure 0097; the aggregator is k3 from 0098; think is the cold standby (RECOVERY.md 2f)"
   },
   {
    "role": "aggregator",
@@ -65,7 +65,7 @@
    "valid_from_seq": 96,
    "valid_to_seq": null,
    "status": "active",
-   "note": "2026-09-13: the aggregator moves from think to k3 (tick-started cycle on k3's PTP-disciplined clock, machine-to-machine hosts; CADENCE.md section 2). Valid from 96 so the window covers the cutover hour whatever think mints at 15:00; think's key is retired in a later edit at its exact last seq. Signs the assembled pulse digest only."
+   "note": "2026-09-13: aggregator moved from think to k3 (tick-started cycle on k3's PTP-disciplined clock, machine-to-machine hosts; CADENCE.md section 2). Window opens at 96 (before its first pulse, 0098) so the cutover hour is covered whatever think minted. Signs the assembled pulse digest only."
   }
  ],
  "anchors": {
