@@ -129,11 +129,12 @@ no log line exists. Sub-second numbers come from the pulse; whole seconds from l
 | **0100** (17:00) | k3: edge +274 µs, woke +289 µs, issued +0.44 ms; k3 kernel receive +2.05 ms, userspace +2.11 ms, start +8.07 ms | +0.248 s | +0.652 s | +2.2 s | **+1 s (at mint)** | +300 s | +3.4 s | **+303.4 s** |
 | **0102** (18:00) | k3, **lead 20 rounds**: edge +276 µs, woke +295 µs, issued +0.45 ms; k3 kernel receive +1.59 ms, userspace +1.68 ms, start +2.56 ms | +0.240 s | +0.752 s | +2.3 s | **+1 s (at mint)** | **+60 s (:01:00)** | +3.2 s (round served by the first relay +1.12 s, reveal started +1.35 s) | **+63.2 s** |
 | **0108** (21:00) | k3, lead 20; **GPIO PPS removed, cadence service SCHED_FIFO**: edge **+21 µs**, woke +41 µs, issued +0.20 ms, first copy sent +1.6 ms (sign + serialize 1.4 ms, cold); k3 kernel receive +1.85 ms, start +2.84 ms | | +0.76 s | +2.4 s | +1 s | +60 s | +3.4 s | **+63.4 s** |
+| **0110** (22:00) | k3, **start mode B (own clock)**: k3 woke **+18.9 µs** and started; p550 edge +37 µs, woke +39 µs after it, issued +0.27 ms, first copy +1.15 ms (warm sign); datagram at k3's kernel +1.33 ms, bound to the commit as attestation | +0.238 s | +0.637 s | +2.3 s | +1 s | +60 s | +3.2 s (reveal started +1.35 s) | **+63.2 s** |
 
 What each column's movement was:
 
 - **Start of the hour → aggregator start:** 26 s (a timer) → 0.8 s (SSH-carried trigger) → 2.6–8.1 ms (hardware edge, UDP,
-  tick-started process). Live samples: 2.87, 8.07, 2.56 ms. At 17:00 the start came 6 ms after the datagram; at 18:00
+  tick-started process) → **18.9 µs** (own clock, mode B, from 0110). Live samples: 2.87, 8.07, 2.56 ms. At 17:00 the start came 6 ms after the datagram; at 18:00
   0.88 ms after it (staging's figure), with the new gate record showing the main thread waiting at the instant
   (`main_thread_at_gate_unix_ns` = the instant, pre-tick git work 0.27 s, done 9.7 s early). The 17:00 outlier is
   unexplained and is being watched, not fixed.
