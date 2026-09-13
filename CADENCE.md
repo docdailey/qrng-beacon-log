@@ -82,6 +82,12 @@ trim), statements in by +0.67 s, TSA tokens within the same second, **commit pus
 pushed +2.4 s, reveal pushed +3.4 s after the round; both verify; the fallback timer fired at :02 and exited on the lock.
 Full figures in `latency_chain.md`.
 
+**First 60 s pair, 0102/0103 (18:00:00Z, lead 20 rounds):** p550's edge +276 µs, k3 started on the datagram 2.56 ms after the
+instant (0.88 ms after receiving it), host statements +0.36 to +0.75 s, commit pushed **+2.3 s** (57.7 s before its round,
+margin 20 s), Rekor integratedTime instant + 1 s, round served by the first relay 1.12 s after release, reveal pushed
+**3.2 s after release** - randomness usable **63.2 s after the instant** (303 s at 0100). Both pulses verify; the :02
+fallback found the hour claimed and exited. Next step after a day of clean 60 s cycles: 10 rounds (30 s).
+
 **Cadence source (since 2026-09-13 13:00Z, pulses 0092–0095 — think era):** the hour is started by the **time host's clock, not by think's timer**.
 `hosts/beacon-cadence.py` runs on p550 (PREEMPT_RT; `CLOCK_REALTIME` disciplined by chrony from the i210 PHC, which
 `ts2phc` locks to the ZED-F9T PPS) as the confined `beacon` user. At **:00:00.000 UTC** it wakes with
