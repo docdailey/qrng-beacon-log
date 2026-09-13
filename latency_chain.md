@@ -232,8 +232,13 @@ lost: today the start is *caused* by a hardware event on another host; with this
 their clocks. **Bill chose B (21:2xZ).** Built as `BEACON_START=own-clock` (the default) in beacon-cycle.py: the main thread
 does not wait for the datagram, the listener writes it to `trigger/pending.json` on arrival and pulse.py binds it with its
 userspace and kernel receive stamps; the verifier's checks are unchanged (same instant, signature under the pinned key,
-target from the instant), so no CLI release is needed. Staged as a full pair on a lab instant before going live at 22:00Z
-(pulse 0110). What changes in the claim: the start is caused by k3's PTP-disciplined clock and *confirmed* by a hardware
+target from the instant), so no CLI release is needed for the mode itself. Staged twice as full pairs on lab instants
+(21:27:39Z and 21:33:45Z, `--no-finalize`, secrets retired): k3 started **+20.1 and +22.5 µs** after the instant on its own
+clock; in the second run p550's datagram (edge +31 µs, issued +0.22 ms) reached k3's kernel at **+1.19 ms** and userspace at
++1.34 ms and was bound to the commit with those stamps; commit pushed +1.3 s, reveal pushed 2.0 s after release, both
+pulses verified. Live from 22:00Z (pulse 0110). The first staging run also exposed a verifier crash for a commit with the
+aggregator's wake record but no time-host trigger (`UnboundLocalError` in an informational line, present in every CLI
+since 0.13.x, never hit by a published pulse): fixed in verify.py and released as 0.14.2. What changes in the claim: the start is caused by k3's PTP-disciplined clock and *confirmed* by a hardware
 event on another host, no longer caused by it.
 
 ### 9b. Userspace budget on the trigger path (measured 2026-09-13 21:05Z, 300 warm iterations, pulse 0108's statement)
