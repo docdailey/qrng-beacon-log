@@ -96,7 +96,9 @@ descheduled for 1.2 ms after the edge this hour (k3 start +3.81 ms), the case fo
 SCHED_FIFO: edge stamp **+21 µs** (was +275), process 20 µs after it, trigger issued +0.20 ms; k3 start +2.84 ms (p550's cold
 sign took 1.4 ms this hour - latency_chain.md §9b); usable +63.4 s, both verified. **22:00Z, 0110/0111, first live own-clock start (mode B):** k3 started **18.9 µs** after the
 instant on its own PTP clock; p550's edge +37 µs, its datagram at k3's kernel +1.33 ms and bound to the commit; pushed +2.3 s,
-Rekor +1 s, reveal 3.2 s after release, usable +63.2 s, both verified. Next step after a day of clean 60 s cycles: 10 rounds (30 s).
+Rekor +1 s, reveal 3.2 s after release, usable +63.2 s, both verified. **23:00Z, 0112/0113:** own-clock start +19.5 µs, edge +27 µs, datagram at k3's kernel +1.18 ms,
+pushed +2.5 s, Rekor +1 s, reveal 3.3 s after release, usable +63.3 s, both verified - seven clean 60 s cycles (0102–0113).
+Next step after a day of clean 60 s cycles: 10 rounds (30 s).
 
 **Cadence source (since 2026-09-13 13:00Z, pulses 0092–0095 — think era):** the hour is started by the **time host's clock, not by think's timer**.
 `hosts/beacon-cadence.py` runs on p550 (PREEMPT_RT; `CLOCK_REALTIME` disciplined by chrony from the i210 PHC, which

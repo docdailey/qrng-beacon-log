@@ -130,6 +130,7 @@ no log line exists. Sub-second numbers come from the pulse; whole seconds from l
 | **0102** (18:00) | k3, **lead 20 rounds**: edge +276 µs, woke +295 µs, issued +0.45 ms; k3 kernel receive +1.59 ms, userspace +1.68 ms, start +2.56 ms | +0.240 s | +0.752 s | +2.3 s | **+1 s (at mint)** | **+60 s (:01:00)** | +3.2 s (round served by the first relay +1.12 s, reveal started +1.35 s) | **+63.2 s** |
 | **0108** (21:00) | k3, lead 20; **GPIO PPS removed, cadence service SCHED_FIFO**: edge **+21 µs**, woke +41 µs, issued +0.20 ms, first copy sent +1.6 ms (sign + serialize 1.4 ms, cold); k3 kernel receive +1.85 ms, start +2.84 ms | | +0.76 s | +2.4 s | +1 s | +60 s | +3.4 s | **+63.4 s** |
 | **0110** (22:00) | k3, **start mode B (own clock)**: k3 woke **+18.9 µs** and started; p550 edge +37 µs, woke +39 µs after it, issued +0.27 ms, first copy +1.15 ms (warm sign); datagram at k3's kernel +1.33 ms, bound to the commit as attestation | +0.238 s | +0.637 s | +2.3 s | +1 s | +60 s | +3.2 s (reveal started +1.35 s) | **+63.2 s** |
+| **0112** (23:00) | k3, own clock: woke **+19.5 µs**; p550 edge +27 µs, issued +0.26 ms; datagram at k3's kernel +1.18 ms, bound | +0.24 s | +0.68 s | +2.5 s | +1 s | +60 s | +3.3 s (relay served +1.11 s) | **+63.3 s** |
 
 What each column's movement was:
 
