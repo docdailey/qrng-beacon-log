@@ -48,7 +48,9 @@ def parse_utc(s):
     if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
     return int(dt.timestamp())
 
-def make(after_utc, purpose, operation, params, input_path=None, note=None, signer=None, decision_id=None):
+TIMING_PROFILE = "notbefore/timing/v1"
+
+def make(after_utc, purpose, operation, params, input_path=None, note=None, signer=None, decision_id=None, timing_required=False, timing_profile=TIMING_PROFILE):
     """signer = (key_id, public_key_b64) from identity.load(); decision_id defaults to the purpose string (the namespace the
     write-once rule applies to). signer=None writes a legacy unsigned contract/1 (discouraged; execute labels it)."""
     if operation not in OPS: raise ValueError(f"operation must be one of {sorted(OPS)}")
@@ -66,6 +68,7 @@ def make(after_utc, purpose, operation, params, input_path=None, note=None, sign
         c["signer"] = {"alg": "ed25519", "key_id": signer[0], "public_key_b64": signer[1]}
         c["decision_id"] = DL.validate_decision_id(decision_id or P)
         c["value"] = dict(VALUE_RULE)
+        if timing_profile: c["timing"] = {"profile": timing_profile, "required": bool(timing_required)}     # bound before the round; never changes selection
         c["selection"]["rule"] = RULE3
         c["selection"]["eligibility"] = f"commit, protocol v0.5, seq >= {FIRST_ELIGIBLE_REVEAL - 1}, not KNOWN-NONCOMPLIANT, verifies under the pinned verifier, both RFC 3161 tokens strictly before its round, Rekor-anchored before its round; the value is V* = SHA256(commit-bound domain || C || rho_R || chain_hash || R) whether or not the operator reveals (FULL-ATTESTED / COMMITMENT-FALLBACK)"
     else: c["spec"] = "notbefore/contract/1"

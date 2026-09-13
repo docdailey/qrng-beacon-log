@@ -150,6 +150,7 @@ def gather(contract_path, transcript=None, src=None, verify_pair=True, refetch=T
             if L.get("received_unix") is not None: F.say(L["received_unix"] < P["release_unix"], f"decision-log registration {L['received_utc']} is {P['release_unix'] - L['received_unix']} s before the round release" if L["received_unix"] < P["release_unix"] else "decision-log registration is AT/AFTER the round release")
             try: P["seed_recomputes"] = D.seed(X.get("commit_bound_value"), c["purpose"]).hex() == X.get("derived_seed"); F.say(P["seed_recomputes"], "derived seed recomputes from V* and the contract's purpose")
             except Exception as e: F.say(True, f"seed recomputation skipped: {e}", "WARN")
+            _timing_facts(F, c, [com["core"]] + ([src.pulse(int(X["reveal_seq"]))["core"]] if X.get("reveal_seq") and src.pulse(int(X["reveal_seq"])) else []), X)
     elif tp and X.get("bound") and src is not None:
         seq = int(X["seq"]); rev = src.pulse(seq)
         if rev is None: F.say(False, f"pulse {seq:04d} is not in the log this receipt was generated against")
@@ -171,6 +172,19 @@ def gather(contract_path, transcript=None, src=None, verify_pair=True, refetch=T
     return F
 
 # ---------------------------------------------------------------- render
+def _timing_facts(F, c, cores, X):
+    """T1: re-evaluate the declared timing profile from the pulses at hand; report separately; INVALID only if the contract requires it."""
+    decl = (c.get("timing") or {}); F["timing"] = None
+    if not decl.get("profile"): return
+    from . import timing as TM
+    if decl["profile"] != TM.PROFILE_ID: F.say(False, f"unknown timing profile {decl['profile']!r}"); return
+    res, verdict = TM.evaluate_pulses(*cores); F["timing"] = {"profile": TM.PROFILE_ID, "required": bool(decl.get("required")), "verdict": verdict, "facts": (res[0].facts if res else {}), "failed": (res[0].failed if res else []), "missing": (res[0].missing if res else [])}
+    tx = (X.get("obj") or {}).get("timing_policy") or {}
+    if tx and tx.get("verdict") != verdict: F.say(False, f"timing profile re-evaluates to {verdict}, the transcript claimed {tx.get('verdict')}")
+    if verdict == "SATISFIED": F.say(True, f"timing profile {TM.PROFILE_ID}: SATISFIED on the signed statements ({'required' if decl.get('required') else 'reported'})")
+    elif decl.get("required"): F.say(False, f"timing profile {TM.PROFILE_ID} required by the contract: {verdict}")
+    else: F.say(True, f"timing profile {TM.PROFILE_ID}: {verdict} — reported, not required by this contract", "WARN")
+
 def _result_line(X):
     op = X.get("operation"); o = X.get("obj") or {}
     if op == "split": return f"split A {X['A']['count']} / B {X['B']['count']} (A sha256 {X['A']['sha256'][:16]}…, B sha256 {X['B']['sha256'][:16]}…)"
@@ -220,6 +234,16 @@ def render(F):
         if Tk.get("latest_unix") is not None and P.get("release_unix"): out.append(f"- Latest consumer timestamp precedes the round release by **{P['release_unix'] - Tk['latest_unix']} s**" + (f"; decision-log registration precedes it by **{P['release_unix'] - L['received_unix']} s**." if L.get("received_unix") is not None else "."))
         if P.get("verified") is not None: out.append(f"- Pair re-verified while writing this receipt: **{'PASS' if P['verified'] else 'FAIL'}** (host signatures, BLS offline, {P.get('tsa_pass')} TSA tokens on the commit, anchors {P.get('anchors')}, transparency log {P.get('tlog')}" + (f", cosigned by {', '.join(P['cosignatures'])}" if P.get("cosignatures") else "") + f") at log commit `{_sha12(P.get('log_git_sha'))}`.")
     else: out.append(f"- Not yet: the pulse is the first eligible reveal released at or after {sel.get('after_utc')}. Run `notbefore execute {F['contract']['name']}` after that hour.")
+    if F.get("timing"):
+        t_ = F["timing"]; fx = t_.get("facts") or {}
+        out += ["", "## The clocks (timing profile, evaluated separately from the cryptography)", "",
+                f"- Profile `{t_['profile']}`: **{t_['verdict']}** ({'required by the contract' if t_['required'] else 'reported; not required by this contract'})."]
+        if fx.get("time_discipline"): td = fx["time_discipline"]; out.append(f"- F9T→i210 discipline {td['rms_ns']:g} ns RMS over {td['samples']} samples ({td.get('window_s')} s), min {td['min_ns']:g} / max {td['max_ns']:g} ns.")
+        if fx.get("mesh"): m = fx["mesh"]; out.append(f"- i210's observation of the BMC grandmaster: {m['rms_ns']:g} ns RMS over {m['samples']} samples ({m.get('window_s')} s), min {m['min_ns']:g} / max {m['max_ns']:g} ns, path delay {m['path_delay_ns']:g} ns.")
+        if fx.get("witness_discipline"): w = fx["witness_discipline"]; out.append(f"- BMC→k3 discipline {w['rms_ns']:g} ns RMS over {w['samples']} samples, min {w['min_ns']:g} / max {w['max_ns']:g} ns.")
+        if fx.get("gnss"): g = fx["gnss"]; out.append(f"- F9T qErr {g['qerr_ns']:g} ns this epoch (sd {g['sawtooth_sd_ns']:g} ns, coverage {g['coverage_pct']:g} %), {g['measurements']} raw measurements in the fix.")
+        if t_.get("failed") or t_.get("missing"): out.append("- Not met: " + "; ".join(t_.get("failed", []) + t_.get("missing", [])))
+        out.append("- These are windowed precision figures authenticated by host signatures and now checked against the profile's limits; they are not absolute UTC accuracy.")
     out += ["", "## The result", ""]
     if F["status"] == "executed" and X.get("bound"):
         out.append(f"- {_result_line(X)}")
@@ -493,6 +517,15 @@ def _check_bundle_commit_bound(R, root, bs, t, c, latest, received, verify_pulse
     else: R.say(False, "no Rekor anchor record for the commit in the bundle: a commit-bound result needs its publication evidence")
     rev = bs.pulse(n + 1) if os.path.exists(os.path.join(root, "log", "chain", f"pulse-{n+1:04d}.json")) else None
     prov = t.get("provenance")
+    if (c.get("timing") or {}).get("profile"):
+        from . import timing as TM
+        if c["timing"]["profile"] != TM.PROFILE_ID: R.say(False, f"unknown timing profile {c['timing']['profile']!r}")
+        else:
+            res, verdict = TM.evaluate_pulses(*([com["core"]] + ([rev["core"]] if rev and rev["core"].get("type") == "reveal" else [])))
+            tx = (t.get("timing_policy") or {}).get("verdict")
+            R.say(tx == verdict, f"timing profile {TM.PROFILE_ID} re-evaluated from the bundled pulses: {verdict} (transcript said {tx})")
+            if verdict != "SATISFIED" and c["timing"].get("required"): R.say(False, "the contract requires the timing profile and it is not satisfied")
+            elif verdict != "SATISFIED": degrade(f"timing profile {verdict} (reported, not required by this contract): " + "; ".join((res[0].failed + res[0].missing)[:3]))
     if prov == "FULL-ATTESTED":
         R.say(bool(rev) and rev["core"].get("type") == "reveal" and rev["core"]["derived"]["attested_value"] == t.get("attested_value"), f"reveal {n+1:04d} bundled and carries the transcript's attested value (FULL-ATTESTED)")
     else: R.say(True, f"provenance {prov}: no verifying reveal for commit {n:04d}; V* stands regardless", "INFO")
