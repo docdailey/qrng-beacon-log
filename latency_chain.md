@@ -327,3 +327,24 @@ push is rejected and retried, and Rekor stays at instant + 1 s. If any cycle sho
 look at the push, not the lead. The margin stays at 20 s: with a 2.4 s push it is the number that protects against the
 one thing the record has never shown, a GitHub stall, and it is what turns a stall into a visible failure rather than a
 late commit.
+
+### 10b. The same numbers from the timehat DB (2026-09-13 21:40Z)
+
+Bill: "can we not just pull stats from timehat db on nas?" Now yes. `hosts/cyclelog.py` writes one row per cycle into
+`timehat.beacon_cycle_stream` on nas1 (the database the clock streams already use), detached after `cycle complete` or a
+failure pulse, from the pulse files, `trigger/anchor-NNNN.json` and `cycle.log`; it never runs before the mint and a DB
+outage changes nothing. Back-filled for 0098–0108. Columns are every stamp in §8: the p550 edge and wake, the datagram's
+kernel and userspace receive on k3, k3's wake and gate, pulse.py start, the four statements, commit push, Rekor, relay serve
+delay, reveal start and push, and `usable_after_instant_ms`. The 60 s era today, one query:
+
+```sql
+SELECT seq, instant_utc, start_source, p550_edge_after_instant_ns, datagram_kernel_rx_after_instant_ns, k3_wake_after_instant_ns,
+       commit_pushed_after_instant_ms, rekor_integrated_after_instant_s, reveal_pushed_after_release_ms, usable_after_instant_ms
+FROM beacon_cycle_stream WHERE lead_rounds = 20 ORDER BY seq;
+-- 0102..0108: push 2200-2400 ms, Rekor +1 s, reveal 3200-3400 ms after release, usable 63200-63400 ms
+SELECT MAX(commit_pushed_after_instant_ms), AVG(commit_pushed_after_instant_ms) FROM beacon_cycle_stream WHERE lead_rounds = 20;   -- 2400, 2300
+```
+
+The 10-round test in §10 is then `SELECT COUNT(*) FROM beacon_cycle_stream WHERE lead_rounds = 20 AND commit_pushed_after_instant_ms > 5000`
+over the 24 cycles: zero means go. The credentials the aggregator uses are a mode-600 copy of the clock logger's file under
+`~aggregator/beacon/` (write access to the `timehat` schema only; the DB holds no key material).

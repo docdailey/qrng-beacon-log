@@ -131,3 +131,8 @@ and are removed once the aggregator has run on the daemon for a day.
 
 `beacon` on p550 additionally has read/write access to `/dev/pps1` (the i210 PHC's PPS event source; ACL + udev rule) so the
 cadence trigger can block on the hardware clock's own event. That grants the ability to observe second boundaries, nothing else.
+
+**timehat DB credentials on the aggregator (2026-09-13):** `~aggregator/beacon/timehat-db.env` (mode 600) is a copy of the clock logger's
+credentials so `hosts/cyclelog.py` can write `timehat.beacon_cycle_stream` after each cycle. It grants writes to the `timehat` schema on
+nas1 and nothing else; the DB carries measurements, no keys or secrets. A compromised aggregator could falsify rows in that table; the
+pulses and logs remain the record the rows are derived from.

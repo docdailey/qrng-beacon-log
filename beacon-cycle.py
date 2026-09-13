@@ -76,6 +76,7 @@ def fail(seq, reason, extra=None):
         publish(f"FAILURE pulse for commit {seq}: {reason}")
         log("finalize: " + run("python3", "pulse.py", "finalize", check=False).strip()[:120])
     except Exception as e: log(f"could not publish failure pulse: {e}")
+    cyclelog(seq)
     sys.exit(1)
 
 def skip(reason):
@@ -381,6 +382,15 @@ def reveal_phase(seq, target, release, finalize=True):
         except Exception as e: log(f"finalize deferred (E stays recoverable on the entropy host): {e}")
     else: log("staging: finalize skipped (the entropy host keeps the seq in .revealing; abort-unpublished retires it)")
     log("cycle complete")
+    cyclelog(seq)
+
+def cyclelog(seq):
+    """One row for this cycle into the timehat DB (hosts/cyclelog.py), detached: it reads the pulse files, trigger/anchor-*.json
+    and cycle.log after the fact and can neither delay nor fail the beacon (Bill, 2026-09-13: stats from the timehat DB)."""
+    try:
+        subprocess.Popen([sys.executable, os.path.join(REPO, "hosts", "cyclelog.py"), "--seq", str(seq)], cwd=REPO,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, start_new_session=True)
+    except Exception as e: log(f"cyclelog not started: {type(e).__name__}: {str(e)[:80]}")
 
 def main():
     """Fallback / plain path (a timer started this process): claim the hour, prepare, then commit and reveal."""
