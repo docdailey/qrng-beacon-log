@@ -126,3 +126,11 @@ anchor before the round as eligibility). Confirmed from a fresh venv against PyP
 (no FAIL), `bundle`, `check-bundle` (BUNDLE VERIFIED, V* recomputed offline from the bundled commit + drand signature);
 `verify 67` passed. Test 32 (same V* with the reveal removed) ran green in CI.
 
+`notbefore 0.12.0` — tag `cli-v0.12.0` on `41f1b14`, verifier vendored at `4fd56cc`, workflow run 34735160037 (test +
+Worker conformance + publish), published 2026-09-13 03:29 UTC; spec 0.9, ERR-015 (second adversarial review, `reviews/`).
+Confirmed from a fresh venv against PyPI: contract/3 `execute` selected commit 0042 with publication evidence
+`rekor-live` (Rekor's signed time, 129 s before the round); `receipt`, `bundle`, `check-bundle` all report DEGRADED for
+the dry run (exit 2); `verify 71` passed. Live Worker (deployed 03:20:57Z by the Git integration after migrate-001):
+two keys registering one hash got entries 8 and 9, an identical retry returned the existing entry, oversized bodies
+were refused with and without Content-Length, a malformed `created_utc` was rejected.
+

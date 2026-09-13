@@ -98,6 +98,7 @@ note's root; a receipt that fails is an error, not a warning.
 4. ✅ Live since 2026-09-12 23:29 UTC at `https://notbefore.net/decisions` (Worker `qrng-beacon-log`, D1
    `notbefore-decisions`); `keys/DECISIONS.json` `enabled: true` from `notbefore` 0.8.1. Entries 0–2 are the release's
    own live test (throwaway keys, decision ids `trial:abc@v1` and `test:live:…`) and entry 3 is the 0.8.1
-   release confirmation (`release:0.8.1`) and are labelled as such here rather
+   release confirmation (`release:0.8.1`), entries 4–6 the 0.10.0 confirmation and live test, entries 7–9 the 0.12.0 Worker
+   smoke test (two keys registering one hash under `smoke:r7:…`: namespace-scoped idempotency, review R7) and are labelled as such here rather
    than removed — nothing is ever removed. The first mirror commit was `DECISIONS mirror: size 0`; the mirror runs at
    :20 and :50 and its checkpoints are anchored like the pulse log's.
