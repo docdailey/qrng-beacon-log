@@ -138,12 +138,18 @@ def check_authoritative(st, offline=False, src=None):
     ok, why = verify_receipt(rc, None)
     if not ok: R.update(status="unreachable", why="log answered but the answer does not verify: " + why); return R
     leaf, _ = parse_leaf(rc["leaf"]); _, size, root = verify_note(rc["checkpoint"])
+    # Explicit binding: the inclusion proof shows THIS leaf is in the tree; it does not show the leaf belongs to the namespace we
+    # asked about. Require the leaf itself to name the queried key and decision id (and to be the first in that namespace) before
+    # believing anything about authority — never the server's relational claim.
+    ls = leaf["statement"]
+    if ls.get("key_id") != key_id or ls.get("decision_id") != did or ls.get("public_key_b64") != st["public_key_b64"]:
+        R.update(status="unreachable", why=f"log answered with a leaf for a different namespace ({ls.get('key_id')}, {ls.get('decision_id')!r}) — refusing to trust this answer"); return R
     R.update(index=first["index"], received_unix=parse_utc(leaf["received_utc"]), size=size, root_b64=base64.b64encode(root).decode(), seq_in_namespace=leaf["seq_in_namespace"], verified=True, entries=len(ents))
-    if leaf["seq_in_namespace"] != 1: R.update(status="unreachable", why="log's 'first' entry is not seq_in_namespace 1 — refusing to trust this answer"); return R
-    if leaf["statement"]["contract_sha256"] == st["contract_sha256"] and leaf["statement"]["key_id"] == key_id:
+    if leaf["seq_in_namespace"] != 1 or int(first.get("seq_in_namespace", 1)) != 1: R.update(status="unreachable", why="log's 'first' entry is not seq_in_namespace 1 — refusing to trust this answer"); return R
+    if ls["contract_sha256"] == st["contract_sha256"]:
         R.update(status="authoritative", why=f"first entry for ({key_id}, {did}) is this contract: index {first['index']}, received {leaf['received_utc']}, tree size {size}")
     else:
-        R.update(status="superseded", why=f"a DIFFERENT contract ({leaf['statement']['contract_sha256'][:16]}…) was registered first for ({key_id}, {did}) at {leaf['received_utc']} (index {first['index']}); this one is at best an amendment")
+        R.update(status="superseded", why=f"a DIFFERENT contract ({ls['contract_sha256'][:16]}…) was registered first for ({key_id}, {did}) at {leaf['received_utc']} (index {first['index']}); this one is at best an amendment")
     return R
 
 def _check_mirror(st, src, R):
@@ -158,6 +164,15 @@ def _check_mirror(st, src, R):
         first = int(lst[0]); leaf_b = src._read_bytes(f"decisions/entries/{first:08d}.json"); leaf, lb = parse_leaf(leaf_b)
         sok, why = verify_statement(leaf["statement"], leaf["signature_b64"])
         if not sok or first >= size: R.update(status="unreachable", why="mirror leaf does not verify: " + why); return R
+        ls = leaf["statement"]   # INDEX.json is a convenience map, not authenticated by the checkpoint: the LEAF must name the namespace
+        if ls["key_id"] != st["key_id"] or ls["decision_id"] != st["decision_id"] or ls["public_key_b64"] != st["public_key_b64"] or leaf["seq_in_namespace"] != 1:
+            R.update(status="unreachable", why=f"mirror index points at a leaf that does not name this namespace as its first entry (leaf {first}: {ls['key_id']}, {ls['decision_id']!r}, seq {leaf['seq_in_namespace']})"); return R
+        # and no EARLIER leaf may carry this namespace (the index could omit one): scan the mirrored tree
+        for i in range(first):
+            lj = json.loads(src._read_bytes(f"decisions/entries/{i:08d}.json") or b"{}")
+            s_ = lj.get("statement") or {}
+            if s_.get("key_id") == st["key_id"] and s_.get("decision_id") == st["decision_id"]:
+                R.update(status="unreachable", why=f"mirror index says first = {first} but leaf {i} already carries this namespace — index untrusted"); return R
         leaves = [src._read_bytes(f"decisions/entries/{i:08d}.json") for i in range(size)]
         if any(l is None for l in leaves) or T.mth(leaves) != root: R.update(status="unreachable", why="mirror tree does not recompute to the mirrored checkpoint"); return R
         R.update(index=first, received_unix=parse_utc(leaf["received_utc"]), size=size, root_b64=base64.b64encode(root).decode(), seq_in_namespace=leaf["seq_in_namespace"], verified=True, source="mirror")

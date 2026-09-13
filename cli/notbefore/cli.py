@@ -83,8 +83,8 @@ def build_parser():
     ts = sub.add_parser("timestamp", help="(re)request RFC 3161 tokens for an existing contract from any expected TSA that has not answered yet"); ts.add_argument("contract")
     ex = sub.add_parser("execute", help="run a timestamped decision contract: no choices are accepted here")
     ex.add_argument("contract"); ex.add_argument("--input", help="path of the committed input file if it moved (its sha256 must still match)")
-    ex.add_argument("--allow-unregistered", action="store_true", help="run a contract whose timestamps are missing or incomplete (no third-party evidence it predates the pulse; the transcript says so). Never overrides a token that is AFTER the round.")
-    ex.add_argument("--require-log", action="store_true", help="refuse unless the decision log confirms this contract is the FIRST entry for its (key_id, decision_id) and was received before the round (default: report, and refuse only a superseded or late entry)")
+    ex.add_argument("--allow-unregistered", action="store_true", help="DEGRADED run: accept a contract whose timestamps are missing/incomplete or whose decision-log registration cannot be confirmed (unregistered, log unreachable, or a legacy contract/1). No third party then vouches that this was THE preregistration; the transcript says so loudly. Never overrides a token AFTER the round, a superseded contract, or a registration at/after the round.")
+    ex.add_argument("--require-log", action="store_true", help=argparse.SUPPRESS)   # since 0.10.0 this is the default; accepted for old scripts
     ex.add_argument("--transcript", help="transcript path (default notbefore-executed-<contract sha>.json; '-' stdout; 'none')")
     for fl in (("--json",), ("--offline",), ("-q", "--quiet"), ("--no-anchors",)): ex.add_argument(*fl, action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     rcpt = sub.add_parser("receipt", help="one-page human-readable decision receipt for a contract (re-verifies every line; Markdown to stdout or --out)")
@@ -196,12 +196,21 @@ def _execute(a, src):
     if legacy:
         # contract/1 (0.6.0–0.7.x): unsigned and outside any decision-log namespace. Fully timestamped, it is exactly what those
         # releases promised, so it runs with a WARN (refused under --require-log); with tokens missing it needs --allow-unregistered.
-        if a.require_log: _err("refusing (--require-log): legacy unsigned contract/1 has no signer and no decision-log entry"); return 1
-        if not pre_ok and not a.allow_unregistered: _err(f"refusing: legacy unsigned contract/1 and {pre_why}; pass --allow-unregistered to run it labelled as such"); return 1
-        lines.append("[WARN] legacy unsigned contract/1: no signer identity and no decision-log entry (timestamps bound WHEN it existed, not that it was the only one); labelled in the transcript")
+        if not a.allow_unregistered: _err("refusing: legacy unsigned contract/1 has no signer and no decision-log entry (0.10.0 fails closed); pass --allow-unregistered for a labelled DEGRADED run"); return 1
+        lines.append("[WARN] DEGRADED: legacy unsigned contract/1 — no signer identity and no decision-log entry (timestamps bound WHEN it existed, not that it was the only one); labelled in the transcript")
     if not pre_ok:
         if bad or not a.allow_unregistered: _err(f"refusing: {pre_why}" + ("" if bad else " (pass --allow-unregistered for a labelled dry run)")); return 1
         lines.append(f"[WARN] {pre_why} — running because --allow-unregistered; the transcript records that no third party vouches for when this decision existed")
+    # ---- the decision log, part 1 (before any pulse work): is this THE preregistration for (key_id, decision_id)? FAIL CLOSED.
+    if st is not None:
+        dl = DL.check_authoritative(st, offline=a.offline, src=src)
+        if dl["status"] == "superseded":
+            lines.append(f"[FAIL] decision log {dl['origin']}: {dl['why']}"); [_err(l) for l in lines]; _err("refusing: this contract is not the first registered for its decision_id"); return 1
+        if dl["status"] == "authoritative": lines.append(f"[PASS] decision log {dl['origin']}: {dl['why']}")
+        elif not a.allow_unregistered:
+            lines.append(f"[FAIL] decision log: {dl['why']}"); [_err(l) for l in lines]
+            _err("refusing: the decision log did not confirm this contract as the authoritative preregistration (" + dl["status"] + "). A DEGRADED run is possible with --allow-unregistered; the transcript will say no third party vouches for which contract was registered."); return 1
+        else: lines.append(f"[WARN] DEGRADED (--allow-unregistered): decision log {dl['status']} — {dl['why']}. Timestamps alone bound WHEN this contract existed, not that it was the only one.")
     after = int(c["selection"]["after_unix_s"])
     seq, rel, R = C.select_pulse(src, after, refetch=not a.offline, anchors=not a.no_anchors, R_lines=lines)
     if seq is None: _err("\n".join(lines)); _err(f"no eligible reveal released at or after {c['selection']['after_utc']} yet (or the next five failed) — wait for the hour"); return 1
@@ -210,20 +219,11 @@ def _execute(a, src):
     if toks or not ok_t:
         lines.append(f"[{'PASS' if ok_t else 'FAIL'}] {why_t}" + (f" (latest token {_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime(latest))}, {rel-latest} s before release)" if ok_t and latest else ""))
         if not ok_t: [_err(l) for l in lines]; _err("refusing: " + why_t); return 1
-    # ---- the decision log: is this THE preregistration for (key_id, decision_id), and was it received before the round?
-    if st is not None:
-        dl = DL.check_authoritative(st, offline=a.offline, src=src)
-        if dl["status"] == "authoritative":
-            early = dl["received_unix"] < rel
-            lines.append(f"[{'PASS' if early else 'FAIL'}] decision log {dl['origin']}: {dl['why']}" + ("" if early else " — but received AT/AFTER the round release: the registration does not predate the value"))
-            if not early: [_err(l) for l in lines]; _err("refusing: decision-log entry is not before the round release"); return 1
-            lines.append(f"[PASS] decision-log inclusion verified (leaf {dl['index']} of {dl['size']}, log signature under the vendored key); {rel - dl['received_unix']} s before release")
-        elif dl["status"] == "superseded":
-            lines.append(f"[FAIL] decision log {dl['origin']}: {dl['why']}"); [_err(l) for l in lines]; _err("refusing: this contract is not the first registered for its decision_id"); return 1
-        else:
-            lvl = "FAIL" if a.require_log else "WARN"
-            lines.append(f"[{lvl}] decision log: {dl['why']}" + ("" if a.require_log else " (timestamps alone bound WHEN this contract existed, not that it was the only one; pass --require-log to refuse)"))
-            if a.require_log: [_err(l) for l in lines]; _err("refusing (--require-log): " + dl["why"]); return 1
+    # ---- the decision log, part 2: the authoritative registration must predate the round
+    if st is not None and dl["status"] == "authoritative":
+        early = dl["received_unix"] < rel
+        if not early: lines.append(f"[FAIL] decision-log registration was received AT/AFTER the round release: the registration does not predate the value"); [_err(l) for l in lines]; _err("refusing: decision-log entry is not before the round release"); return 1
+        lines.append(f"[PASS] decision-log inclusion verified (leaf {dl['index']} of {dl['size']}, log signature under the vendored key); registered {rel - dl['received_unix']} s before release")
     if a.allow_unregistered and not C.timestamp_verdict(toks, bad, rel)[0]: lines.append("[WARN] timestamping INCOMPLETE: this run is labelled as such in the transcript")
     P = c["purpose"]; S = D.seed(R.attested_value, P)
     try: body, extra = C.run_operation(c, S, a.input or (c.get("input", {}).get("file")))
