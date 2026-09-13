@@ -133,10 +133,16 @@ A commit may carry `core.cadence.trigger`: a **statement signed by the time host
 ```
 { "statement": { "v":"0.5", "role":"time_attester", "host":"p550", "kind":"cadence-trigger", "chain_hash",
                  "scheduled_unix_s": <int, a drand round boundary>, "period_s", "offset_s",
-                 "wake": { "clock":"CLOCK_REALTIME", "unix_ns":"<str>", "late_ns": <int>, "how" },
+                 "wake": { "clock":"CLOCK_REALTIME", "unix_ns":"<str>", "late_ns": <int>, "how": "pps-event" | "clock-fallback" },
+                 "hw_event": { "source": "i210-pps", "device", "assert_unix_ns":"<str>", "sequence", "edge_after_instant_ns", "woke_after_edge_ns" } | null,
                  "phc":  { "device", "unix_ns":"<str>", "realtime_mid_unix_ns":"<str>", "phc_minus_realtime_ns", "bracket_ns", "tai_minus_utc_s" },
-                 "clock_state": { "epoch_ok", "refclock_selected", "ts2phc_state", "ts2phc_offset_ns", ... },
-                 "issued_unix_ns":"<str>", "nonce", "tools":[...], "execution": {...} },
+                 "clock_state": { "epoch_ok", "refclock_selected", "epoch_row_age_s", "ts2phc_state", "ts2phc_offset_ns", "ts2phc_row_age_s" },
+                 "issued_unix_ns":"<str>", "nonce", "tools":[...] },
+   # From the 17:00Z cycle the statement is kept under one Ethernet frame (<= 1,400 B): the prose "meaning"/"how" strings
+   # and the execution context were removed from the packet (they are described here); `issued_unix_ns` is stamped
+   # before signing. `wake.how` = "pps-event": the process was blocked in the kernel on the i210 PHC's second event
+   # (/dev/pps1) and `hw_event` carries the handler's CLOCK_REALTIME stamp of that event; "clock-fallback": clock_nanosleep
+   # to T-1.5 ms then a spin, used only when no event arrived by T+50 ms.
   "signature": { "alg":"ed25519", "key_id", "public_key_b64", "sig_b64", "over":"canon(statement)" } }
 ```
 `core.cadence.self_trigger` (from pulse 0098) is the aggregator's OWN wake record for the instant — `{host, scheduled_unix_s,

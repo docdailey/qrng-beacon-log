@@ -112,14 +112,19 @@ def take_lock():
 import ctypes, ctypes.util
 class _TS(ctypes.Structure): _fields_ = [("tv_sec", ctypes.c_long), ("tv_nsec", ctypes.c_long)]
 _libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
-_libc.clock_nanosleep.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.POINTER(_TS), ctypes.POINTER(_TS)]
+try: _libc.clock_nanosleep.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.POINTER(_TS), ctypes.POINTER(_TS)]
+except AttributeError: _libc = None                                        # not Linux (a test host): sleep_until falls back to time.sleep + spin
 def sleep_until(t_ns, spin_ns=1_500_000):
     """Absolute sleep on CLOCK_REALTIME to t_ns - spin_ns, then spin on the clock for the last stretch: 90-100 us of
     scheduler lateness becomes 1-5 us (X3, k3, 2026-09-13). A chrony slew or step moves the wake with the clock."""
-    while True:
-        ts = _TS((t_ns - spin_ns) // 10**9, (t_ns - spin_ns) % 10**9); r = _libc.clock_nanosleep(0, 1, ctypes.byref(ts), None)   # CLOCK_REALTIME, TIMER_ABSTIME
-        if r == 0: break
-        if r != 4: raise OSError(r, os.strerror(r))
+    if _libc is None:
+        d = (t_ns - spin_ns) / 1e9 - time.time()
+        if d > 0: time.sleep(d)
+    else:
+        while True:
+            ts = _TS((t_ns - spin_ns) // 10**9, (t_ns - spin_ns) % 10**9); r = _libc.clock_nanosleep(0, 1, ctypes.byref(ts), None)   # CLOCK_REALTIME, TIMER_ABSTIME
+            if r == 0: break
+            if r != 4: raise OSError(r, os.strerror(r))
     while time.clock_gettime_ns(time.CLOCK_REALTIME) < t_ns: pass
 
 HW_WAIT_MS = float(os.environ.get("BEACON_HW_TRIGGER_WAIT_MS", "25"))   # p550: wake ~0.5 ms + sign ~1 ms + LAN 0.25 ms; 25 ms is margin, not expectation
@@ -138,11 +143,15 @@ def self_trigger(t0):
     ev = TRIGGER_ARRIVED if TRIGGER_ARRIVED is not None else threading.Event()
     sleep_until(t0 * 10**9)                                                  # be awake AT the instant either way
     deadline = t0 * 10**9 + int(HW_WAIT_MS * 1e6)
-    while not ev.is_set() and time.clock_gettime_ns(time.CLOCK_REALTIME) < deadline: ev.wait(0.0002)
+    # ONE blocking wait: a 200 us polling loop here held the interpreter lock for up to its 5 ms switch interval and
+    # starved the listener thread that verifies the datagram (start 0.9-8 ms after arrival in staging runs 4-8)
+    remaining = (deadline - time.clock_gettime_ns(time.CLOCK_REALTIME)) / 1e9
+    if remaining > 0 and not ev.is_set(): ev.wait(remaining)
     wake = time.clock_gettime_ns(time.CLOCK_REALTIME)
     if ev.is_set():
         hw = (ev.statement or {}).get("hw_event")
-        src = {"start_source": "hw-datagram" if hw else "datagram-clock-fallback", "datagram_rx_unix_ns": str(ev.rx_ns), "time_host_event": hw,
+        src = {"start_source": "hw-datagram" if hw else "datagram-clock-fallback", "datagram_rx_unix_ns": str(ev.rx_ns),
+               "datagram_kernel_rx_unix_ns": None if getattr(ev, "kernel_rx_ns", None) is None else str(ev.kernel_rx_ns), "time_host_event": hw,
                "meaning": ("started on the time host's signed datagram, itself fired by the i210 PHC's second interrupt; the aggregator's clock was not consulted for the start"
                            if hw else "started on the time host's signed datagram, but the time host itself fired on its clock fallback (no hardware event in its statement)")}
     else:
@@ -175,20 +184,34 @@ def udp_listener(t0, until):
         if st.get("kind") != "cadence-trigger" or st.get("host") != "p550" or st.get("role") != "time_attester" or st.get("scheduled_unix_s") != t0: return False, "wrong kind/host/instant"
         if not any(k["public_key_b64"] == sig.get("public_key_b64") for k in keys): return False, "not p550's active time_attester key"
         Ed25519PublicKey.from_public_bytes(base64.b64decode(sig["public_key_b64"])).verify(base64.b64decode(sig["sig_b64"]), A.canon(st)); return True, "ok"
+    SO_BUSY_POLL, SO_TIMESTAMPNS, SCM_TIMESTAMPNS = 46, 35, 35
     def run_():
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("0.0.0.0", UDP_PORT)); s.settimeout(1.0)
+        # Blocking receive with a kernel deadline (SO_RCVTIMEO) - Python's timeout mode is a non-blocking socket behind
+        # select() and did not benefit from polling in timing.md's tests; the blocking form did (282 -> 142 us). Busy-poll
+        # 200 us per wake; the kernel's own RX stamp comes back as ancillary data so host delivery delay is visible.
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("0.0.0.0", UDP_PORT))
+        for opt, val in ((SO_BUSY_POLL, 200), (SO_TIMESTAMPNS, 1)):
+            try: s.setsockopt(socket.SOL_SOCKET, opt, val)
+            except OSError: pass
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVTIMEO, (1).to_bytes(8, "little") + (0).to_bytes(8, "little"))      # struct timeval {1 s, 0}
         while time.time() < until:
-            try: data, addr = s.recvfrom(65535)
-            except socket.timeout: continue
-            rx = time.time_ns()
+            try: data, anc, _, addr = s.recvmsg(65535, 1024)
+            except (socket.timeout, BlockingIOError, InterruptedError): continue
+            except OSError as e:
+                if e.errno in (11, 4): continue
+                raise
+            rx = time.time_ns(); krx = None
+            for lvl, typ, cdata in anc:
+                if lvl == socket.SOL_SOCKET and typ == SCM_TIMESTAMPNS and len(cdata) >= 16:
+                    sec, nsec = int.from_bytes(cdata[:8], "little", signed=True), int.from_bytes(cdata[8:16], "little", signed=True); krx = sec * 10**9 + nsec
             if len(data) < 200: continue                                              # ARP warm-up datagram or noise
             try: signed = json.loads(data); good, why = ok(signed)
             except Exception as e: good, why = False, f"{type(e).__name__}"
             if not good: log(f"udp trigger from {addr[0]} rejected: {why}"); continue
             st = signed["statement"]
-            if TRIGGER_ARRIVED is not None: TRIGGER_ARRIVED.rx_ns = rx; TRIGGER_ARRIVED.statement = st; TRIGGER_ARRIVED.set()   # start first, write after
+            if TRIGGER_ARRIVED is not None: TRIGGER_ARRIVED.rx_ns = rx; TRIGGER_ARRIVED.kernel_rx_ns = krx; TRIGGER_ARRIVED.statement = st; TRIGGER_ARRIVED.set()   # start first, write after
             d = os.path.join(REPO, "trigger"); os.makedirs(d, mode=0o700, exist_ok=True); tmp = os.path.join(d, ".pending.tmp")
-            json.dump({"received_unix_ns": str(rx), "from": addr[0], "delivery": "udp", "trigger": signed}, open(tmp, "w")); os.replace(tmp, os.path.join(d, "pending.json"))
+            json.dump({"received_unix_ns": str(rx), "kernel_rx_unix_ns": None if krx is None else str(krx), "from": addr[0], "delivery": "udp", "bytes": len(data), "trigger": signed}, open(tmp, "w")); os.replace(tmp, os.path.join(d, "pending.json"))
             log(f"udp trigger from {addr[0]} for {t0}: p550 {st.get('hw_event', {}).get('source', 'clock')} trigger, p550 woke {st['wake']['late_ns'] / 1000:.1f} us after the instant, received {(rx - t0 * 10**9) / 1e6:.1f} ms after"); return
         log("no udp trigger arrived from the time host (the pulse will carry the aggregator's own wake record only)")
     threading.Thread(target=run_, daemon=True).start()
@@ -224,13 +247,36 @@ def warm_connections():
         try:
             if os.environ.get("BEACON_RPC", "ssh") == "agentd":
                 sys.path.insert(0, os.path.join(REPO, "hosts")); import rpc
-                try: rpc.call(n, op, timeout=5)
-                except RuntimeError: pass                                   # the allow-list refusing `noop` IS the warm-up
+                try: rpc.call(n, op, timeout=5)                             # primes the daemon's imports; the connection is NOT kept across
+                except RuntimeError: pass                                   # processes (pulse.py opens its own), the allow-list refusing `noop` is fine
             else:
                 import pulse; subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", pulse.SSH[n], op], capture_output=True, timeout=8)
         except Exception as e: log(f"warm-up {n}: {type(e).__name__}: {str(e)[:60]}")
     ts = [threading.Thread(target=one, args=(n, op), daemon=True) for n, op in hosts.items()]; [t.start() for t in ts]
     for t in ts: t.join(timeout=6)
+
+def anchor_at_mint(pulse_path, result):
+    """Enter the sealed commit into Rekor from the aggregator, in parallel with the git push, so the external proof of
+    'public before the round' lands seconds after the instant instead of ~30 s later through CI (latency_chain.md §5).
+    Uses the same statement, key and library as ci/anchor_pulses.py; idempotent with it (CI finds the existing entry
+    and writes the anchors-branch record). Never blocks or fails a mint: no key on this host -> skipped; an error -> logged."""
+    import base64
+    key_path = os.path.expanduser("~/beacon/anchor.key")
+    if os.environ.get("BEACON_NO_ANCHOR"): result["status"] = "mint-time anchoring disabled (BEACON_NO_ANCHOR; staging)"; return
+    if not os.path.exists(key_path): result["status"] = "no anchor key on this host; CI anchors later"; return
+    try:
+        sys.path.insert(0, os.path.join(REPO, "ci")); import anchor_lib as L
+        priv = L.load_priv(open(key_path, "rb").read()); pub = priv.public_key(); pub_pem = L.pub_pem(pub)
+        if L.key_id(L.load_pub(open(os.path.join(REPO, "keys", "anchor.pub"), "rb").read())) != L.key_id(pub): result["status"] = "anchor key does not match keys/anchor.pub; not anchoring"; return
+        statement, st = L.statement_for(pulse_path); sig = L.sign(priv, statement); t = time.time()
+        uuid, entry = L.rekor_find_ours(statement, pub_pem); how = "existing"          # as ci/anchor_pulses.py: never a second entry for the same statement
+        if uuid is None: uuid, entry, how = L.rekor_upload(statement, sig, pub_pem)
+        result.update({"status": "ok", "how": how, "uuid": uuid, "logIndex": entry.get("logIndex"), "integratedTime": entry.get("integratedTime"), "upload_s": round(time.time() - t, 3)})
+        d = os.path.join(REPO, "trigger"); os.makedirs(d, exist_ok=True)
+        json.dump({"seq": st["seq"], "statement_sha256": L.sha256(statement), "signature_b64": base64.b64encode(sig).decode(), "rekor": {"server": L.REKOR, "uuid": uuid, "logIndex": entry.get("logIndex"), "integratedTime": entry.get("integratedTime")},
+                   "anchored_by": {"host": HOST, "at": "mint", "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}}, open(os.path.join(d, f"anchor-{st['seq']:04d}.json"), "w"), indent=1)
+    except Exception as e:
+        result["status"] = f"failed: {type(e).__name__}: {str(e)[:120]}"
 
 def commit_phase(extra):
     try:
@@ -238,11 +284,16 @@ def commit_phase(extra):
     except Exception as e:
         log(f"commit refused: {e}"); skip(f"commit refused: {e}"); sys.exit(1)      # nothing committed; the refusal itself is published
     seq, target = out["seq"], out["target_round"]
-    release = json.load(open(os.path.join(REPO, "chain", f"pulse-{seq:04d}.json")))["core"]["derived"]["target_release_unix_s"]
+    pulse_path = os.path.join(REPO, "chain", f"pulse-{seq:04d}.json")
+    release = json.load(open(pulse_path))["core"]["derived"]["target_release_unix_s"]
     log(f"committed seq {seq} -> round {target}, release in {release-time.time():.0f}s, tsa={out.get('tsa_tokens')}")
+    import threading; anchor = {}; at = threading.Thread(target=anchor_at_mint, args=(pulse_path, anchor), daemon=True); at.start()   # Rekor, beside the push
     pushed = publish(f"COMMIT pulse {seq} -> drand round {target}")
     margin = release - pushed
     log(f"commit pushed {margin:.1f}s before release")
+    at.join(timeout=8)
+    if anchor.get("status") == "ok": log(f"anchored in Rekor at mint: logIndex {anchor['logIndex']}, integratedTime {anchor['integratedTime']} ({anchor['integratedTime'] - (release - LEAD * 3):+d} s from the instant), upload {anchor['upload_s']} s, {anchor['how']}")
+    else: log(f"mint-time anchor: {anchor.get('status', 'still uploading (thread left running; CI anchors later)')}")
     if margin < PUBLISH_MARGIN_S:
         fail(seq, "commit-published-late", {"margin_s": round(margin, 1), "required_s": PUBLISH_MARGIN_S})
     return seq, target, release
@@ -324,7 +375,7 @@ def precise_main(t0, commit_only=False):
         log("an unresolved commit is at the head; resuming it now instead of waiting for the instant")
         if claim_hour(hour_of(t0)): reveal_phase(*resume)
         return
-    import threading; globals()["TRIGGER_ARRIVED"] = threading.Event(); TRIGGER_ARRIVED.rx_ns = None; TRIGGER_ARRIVED.statement = None
+    import threading; globals()["TRIGGER_ARRIVED"] = threading.Event(); TRIGGER_ARRIVED.rx_ns = None; TRIGGER_ARRIVED.kernel_rx_ns = None; TRIGGER_ARRIVED.statement = None
     warm_connections(); udp_listener(t0, until=t0 + 240)
     # the last look at origin/main happens BEFORE the tick (10 s), so pulse.py can skip its own fetch on the timed path
     assume = []

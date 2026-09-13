@@ -147,28 +147,36 @@ def recv_msg(sock):
 def send_msg(sock, obj):
     b = json.dumps(obj, separators=(",", ":")).encode(); sock.sendall(len(b).to_bytes(4, "big") + b)
 
+IDLE_S = int(ACFG.get("idle_s", 900))          # a connection with nothing on it for this long is closed
 class Handler(socketserver.BaseRequestHandler):
+    """One connection, many requests (2026-09-13: connection reuse took a small signed exchange from 1.1 ms to 0.38 ms on
+    this LAN, timing.md). Every message is authenticated on its own exactly as before; a connection carries no session
+    state that a request could inherit. The peer closes when it is done; we close after IDLE_S of silence or any framing error."""
     def handle(self):
-        t0 = time.time(); peer = self.client_address[0]; self.request.settimeout(160)
-        try:
-            raw = recv_msg(self.request); msg = json.loads(raw)
-            req, who = authenticate(msg)
-        except Exception as e:
-            log(f"REFUSED from {peer}: {type(e).__name__}: {str(e)[:80]}")
-            try: send_msg(self.request, {"ok": False, "error": f"refused: {type(e).__name__}"})
-            except Exception: pass
-            return
-        try:
-            out = dispatch(req["op"], req["args"], req["nonce"])
-            if req["op"] in SEALED_OPS:
-                resp = {"ok": True, "sealed": seal(out.encode(), req["epk"], A.canon(req))}
-            else: resp = {"ok": True, "stdout": out}
-            send_msg(self.request, resp)
-            log(f"{who}@{peer} {req['op']} {' '.join(req['args'][:2])}: ok in {time.time() - t0:.3f} s")
-        except Exception as e:
-            log(f"{who}@{peer} {req['op']} {' '.join(req['args'][:2])}: {type(e).__name__}: {str(e)[:120]}")
-            try: send_msg(self.request, {"ok": False, "error": f"{type(e).__name__}: {str(e)[:300]}"})
-            except Exception: pass
+        peer = self.client_address[0]
+        self.request.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1); self.request.settimeout(IDLE_S)
+        while True:
+            t0 = time.time()
+            try: raw = recv_msg(self.request)
+            except Exception: return                                        # EOF, idle timeout or a broken frame: the connection is over
+            try:
+                msg = json.loads(raw); req, who = authenticate(msg)
+            except Exception as e:
+                log(f"REFUSED from {peer}: {type(e).__name__}: {str(e)[:80]}")
+                try: send_msg(self.request, {"ok": False, "error": f"refused: {type(e).__name__}"})
+                except Exception: return
+                continue
+            try:
+                out = dispatch(req["op"], req["args"], req["nonce"])
+                if req["op"] in SEALED_OPS:
+                    resp = {"ok": True, "sealed": seal(out.encode(), req["epk"], A.canon(req))}
+                else: resp = {"ok": True, "stdout": out}
+                send_msg(self.request, resp)
+                log(f"{who}@{peer} {req['op']} {' '.join(req['args'][:2])}: ok in {time.time() - t0:.3f} s")
+            except Exception as e:
+                log(f"{who}@{peer} {req['op']} {' '.join(req['args'][:2])}: {type(e).__name__}: {str(e)[:120]}")
+                try: send_msg(self.request, {"ok": False, "error": f"{type(e).__name__}: {str(e)[:300]}"})
+                except Exception: return
 
 class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True; daemon_threads = True

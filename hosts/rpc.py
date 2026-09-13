@@ -28,16 +28,53 @@ def _recv(sock):
         buf += c
     return buf
 
+_CONN = {}; _LOCK = __import__("threading").Lock()
+SEALED_OPS = {"reveal-prepare"}
+def _conn(host):
+    """One kept connection per host in this process (opened on first use or by warm()); dropped on any error. No call is
+    ever repeated automatically after an ambiguous failure: the caller's protocol handles that (pulse.py rollback/recover)."""
+    with _LOCK:
+        s = _CONN.get(host)
+        if s is None:
+            ip, port = AGENTS[host]; s = socket.create_connection((ip, port), timeout=10); s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1); _CONN[host] = s
+        return s
+def _drop(host):
+    with _LOCK:
+        s = _CONN.pop(host, None)
+    if s is not None:
+        try: s.close()
+        except Exception: pass
+def warm(host):
+    """Open (or confirm) the connection before the instant; nothing is sent."""
+    _conn(host)
+
 def call(host, op, *args, timeout=150):
-    ip, port = AGENTS[host]
-    eph = X25519PrivateKey.generate()
-    req = {"v": 1, "to": host, "op": op, "args": [str(x) for x in args], "from": AGG_HOST, "ts": int(time.time()),
-           "nonce": secrets.token_hex(16), "epk": base64.b64encode(eph.public_key().public_bytes_raw()).decode()}
+    # an ephemeral X25519 key only where the protocol seals the response (89-186 us per generation otherwise wasted)
+    eph = X25519PrivateKey.generate() if op in SEALED_OPS else None
+    req = {"v": 1, "to": host, "op": op, "args": [str(x) for x in args], "from": AGG_HOST, "ts": int(time.time()), "nonce": secrets.token_hex(16),
+           "epk": base64.b64encode(eph.public_key().public_bytes_raw()).decode() if eph else ""}
     signed = A.sign_statement("aggregator", req); wire = json.dumps({"req": signed["statement"], "sig": signed["signature"]}, separators=(",", ":")).encode()
-    with socket.create_connection((ip, port), timeout=10) as s:
+    with _LOCK: reused = host in _CONN
+    s = _conn(host)
+    try:
         s.settimeout(timeout); s.sendall(len(wire).to_bytes(4, "big") + wire); resp = json.loads(_recv(s))
+    except RuntimeError as e:
+        # A kept connection the server had already closed (a daemon that serves one request per connection, an idle
+        # timeout) fails with EOF before any response byte; such a request was never read, so ONE fresh attempt is safe.
+        # Anything after a byte of response, or on a fresh connection, propagates: the caller's protocol decides.
+        _drop(host)
+        if reused and str(e) == "short header":
+            s = _conn(host)
+            try:
+                s.settimeout(timeout); s.sendall(len(wire).to_bytes(4, "big") + wire); resp = json.loads(_recv(s))
+            except Exception:
+                _drop(host); raise
+        else: raise
+    except Exception:
+        _drop(host); raise
     if not resp.get("ok"): raise RuntimeError(f"{host} agentd: {resp.get('error', 'refused')}")
     if "sealed" in resp:
+        if eph is None: raise RuntimeError(f"{host} agentd sealed a response to an operation that carries no key")
         sd = resp["sealed"]; shared = eph.exchange(X25519PublicKey.from_public_bytes(base64.b64decode(sd["spk"])))
         key = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"beacon-agentd/v1").derive(shared)
         return ChaCha20Poly1305(key).decrypt(base64.b64decode(sd["nonce"]), base64.b64decode(sd["ct"]), A.canon(signed["statement"])).decode()

@@ -78,6 +78,10 @@ Runs 3–5 added the hardware trigger and k3 starting on its datagram; run 3 exp
 p550 awake +72 µs, datagram on k3 +1.7 ms, k3 started on it at +9.5 ms (signature check before the start; the next
 trim), statements in by +0.67 s, TSA tokens within the same second, **commit pushed +1.2 s after the instant**.
 
+**First live k3 pair, 0098/0099 (16:00:00Z):** k3 started on p550's hardware-triggered datagram 2.9 ms after the instant, commit
+pushed +2.4 s, reveal pushed +3.4 s after the round; both verify; the fallback timer fired at :02 and exited on the lock.
+Full figures in `latency_chain.md`.
+
 **Cadence source (since 2026-09-13 13:00Z, pulses 0092–0095 — think era):** the hour is started by the **time host's clock, not by think's timer**.
 `hosts/beacon-cadence.py` runs on p550 (PREEMPT_RT; `CLOCK_REALTIME` disciplined by chrony from the i210 PHC, which
 `ts2phc` locks to the ZED-F9T PPS) as the confined `beacon` user. At **:00:00.000 UTC** it wakes with
@@ -115,6 +119,13 @@ Measured from k3 unless stated; each row is a method tried, what it cost, and wh
 | probe's chrony calls | `chronyc sources` (resolves source names) | **5.3 s stall on p550 and k3 at the same instant** in staging run 3 (a resolver timeout) | `chronyc -n` everywhere (probe and logger); the probe never touches DNS |
 | the trigger's wake | `clock_nanosleep` + spin on the system clock | 5–7 µs late, but decided by the system clock | **blocked in the kernel on the i210 PHC's own second event** (`/dev/pps1`): edge stamped 21–30 µs after the boundary, process runs 0.1–0.8 ms after the stamp; the clock path is the fallback |
 | signing the trigger | `sign_statement` re-reading the PEM key | 8–143 ms on first use | key preloaded and one warm-up signature before the instant: ~1 ms |
+| signing a host statement | PEM parsed on every signature (`attest_lib.load_private`) | **2.15 ms per parse on p550**, 94 µs on k3 (timing.md) | parsed once per process, re-parsed on rotation (mtime/size) |
+| trigger datagram size | 2,330 B statement, two IP fragments | p99 delivery 0.41 → 1.23 ms across the 1,472 B MTU cliff (timing.md) | prose and execution context out of the packet: statement under 1,400 B |
+| aggregator ↔ host connections | one TCP connection per call | small signed exchange 1.10 ms → 0.38 ms when the connection is kept (timing.md) | client keeps one connection per host with a single safe retry on a stale one; the daemon side that serves many requests per connection is written and **held until a CLI release pins its hash** (`hosts/EXPECTED.json`) |
+| aggregator's trigger listener | Python timeout socket (non-blocking + select) | blocking receive with a kernel deadline + 200 µs busy-poll: 282 → 142 µs in timing.md's tests | adopted; the kernel's own RX stamp is recorded beside the userspace one (`self_trigger.datagram_kernel_rx_unix_ns`) |
+| ephemeral X25519 per call | generated for every request | 90–186 µs each (timing.md) | generated only for the one sealed operation (reveal-prepare) |
+| p550's i210 address for the calls | `.44` (onboard NIC) | small messages faster on `.43`, a 6 KB reply slower unpolled (timing.md) | not adopted; A/B in staging when the reply sizes are instrumented |
+| CPU pinning, global coalescing, AF_XDP / DPDK | — | no gain demonstrated or not tested here (timing.md) | not adopted |
 
 **ZeroMQ benchmark (2026-09-13, `bench/m2m_bench.py`, client on k3, 150 calls, a 700 B Ed25519-signed request and a
 6 000 B signed response, verification on both ends — the same work on every transport; round trip, ms):**

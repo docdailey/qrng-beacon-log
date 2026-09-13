@@ -43,7 +43,14 @@ Round release → reveal public. Times are relative to the drand round's release
 | four reveal statements | +11 / +13 / +49 / +84 s | +8 to +13 s | +1.62 to +1.75 s |
 | **reveal pushed** | **+86 s** | **+15 s** | **+2.0 s** |
 
-Live pair 0098/0099 (16:00Z, the first minted by k3): *to be added from the published pulses.*
+**Live pair 0098/0099 (16:00Z, the first minted by k3, verified from the published pulses):** i210 second event stamped
++267 µs, p550 process +317 µs, first datagram +1.65 ms, received on k3 +2.0 ms, k3 started on it +2.9 ms; statements
++0.30 / +0.64 / +0.65 / +0.77 s; **commit pushed +2.4 s** (297.6 s before release; the live cycle also signs and cosigns a
+checkpoint, which staging did not). Reveal: round served +1.22 s, aggregator started +1.46 s, **reveal pushed +3.4 s**.
+The :02 fallback fired and exited on the lock, as designed. Every verifier check passed, every statement via the daemon.
+Note the edge stamp: 21–30 µs after the boundary when a small C program waits on the PPS device, 267–277 µs when the
+Python trigger process does — the same kernel event, a different wake path; recorded in the trigger either way and on
+the list to explain.
 
 ## 3. Where each gain came from
 
@@ -64,9 +71,13 @@ Live pair 0098/0099 (16:00Z, the first minted by k3): *to be added from the publ
 
 ZeroMQ REQ/REP on a persistent socket equals a persistent plain TCP connection within 0.1 ms; ZeroMQ connect-per-call is
 slower than ours; CurveZMQ costs 0.15–0.4 ms warm and 4–7 ms cold for encryption the protocol does not need (statements
-are public; the one secret is sealed at the application layer); PUB/SUB is 60 µs behind raw UDP one-way. The floor on
-every transport is Ed25519 + JSON in Python (~1.2 ms loopback), not the socket. A pre-opened persistent connection to each
-daemon would save ~1 ms per call; noted, not worth a protocol change.
+are public; the one secret is sealed at the application layer); PUB/SUB is 60 µs behind raw UDP one-way. The ~1.2 ms loopback figure is the cost of *that benchmark's* signed Python/JSON exchange (a 700 B Ed25519-signed
+request, a 6,000 B signed response, verification on both ends), not a transport floor: the same LAN carries a raw
+64-byte TCP exchange in 43–91 µs with both ends polling (`timing.md`, 2026-09-13). That investigation measured the
+pieces below the socket and changed three things here: the client keeps one connection per host (a small signed exchange
+1.10 → 0.38 ms), the trigger statement stays under one Ethernet frame (two IP fragments had put its p99 at 1.2 ms), and
+the aggregator's listener is a blocking socket with a kernel deadline and busy-poll. The persistent-connection daemon
+side is written and waits for a CLI release that pins its hash.
 
 ## 5. Floors that remain, stated as floors
 
