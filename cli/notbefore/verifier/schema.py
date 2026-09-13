@@ -23,7 +23,7 @@ def classify_refusal(text):
         if any(w in t for w in words): return key
     return "unknown"
 AGGREGATOR = ("aggregator", "think")
-PUBLISH_MARGIN_S, REVEAL_DEADLINE_S, MIN_TSA_TOKENS = 120, 600, 2
+PUBLISH_MARGIN_S, REVEAL_DEADLINE_S, MIN_TSA_TOKENS = 20, 600, 2      # margin 120 -> 20 s on 2026-09-13 (the chain mints in ~2 s and anchors at mint); pulses before 0102 were held to 120 s
 HEX64 = 64
 
 # Execution self-report enforcement (review #4): from this seq onward every host statement must carry an `execution`
