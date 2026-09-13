@@ -379,8 +379,11 @@ chrony's **built-in PHC refclock driver** reads `/dev/ptp0` directly. There is *
 | `prefer` | favour it over every other source |
 
 Other refclocks exist for **monitoring only**: `refclock SOCK /run/chrony.6t.sock refid GPS6`
-(6T NMEA, coarse date) and `refclock PPS /dev/pps0 refid PPS ... noselect` (direct PPS, software
-timestamped through a PREEMPT_RT threaded IRQ, sitting ~+16 µs out). `hwtimestamp enp1s0` in
+(6T NMEA, coarse date). The `refclock PPS /dev/pps0 refid PPS ... noselect` line (the 6T's direct PPS on
+GPIO10, software-stamped) **was removed on 2026-09-13**: after entry 189 un-threaded that GPIO IRQ, `pps_event`
+took a sleeping lock in hard-IRQ context on the RT kernel and printed a backtrace every second with interrupts
+off on CPU0, which delayed the i210's own PHC-second stamp (`/dev/pps1`, the cadence trigger) by ~265 µs. The
+driver is now unbound at boot (`no-gpio-pps.service`); `pps1` stamps +21–28 µs (latency_chain.md §9). `hwtimestamp enp1s0` in
 `50-hwts.conf` is for NTP **packet** timestamping when p550 serves time; it is not part of the
 PHC→system path.
 

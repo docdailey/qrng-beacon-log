@@ -202,12 +202,15 @@ What it shows:
   the seconds when the i210 interrupt was serviced first. Interrupt affinity cannot be changed on this SoC (`EINVAL`
   for the i210 vectors, `EIO` for the GPIO line: all on CPU0). The i210's hardware latch of the F9T edge (ts2phc,
   ±10 ns) is untouched; only this software stamp, and everything the cadence service does after it, is late.
-- **Fix options for the 265 µs (Bill's call):** (i) unbind the `pps-gpio` device on p550 (`pps` under
-  `/sys/bus/platform/drivers/pps-gpio`): removes the splat and the LEA-6T PPS source that chrony holds as a non-selected
-  fallback behind the i210 PHC (chrony would need a restart afterwards to drop the dead descriptor); (ii) fix the
-  driver on that RT kernel (a threaded IRQ or a raw lock in `pps_event`), which is a kernel rebuild on the stratum-1
-  host and not casual; (iii) accept it. Separately, the cadence service should run at SCHED_FIFO: at 20:00 it was
-  descheduled twice around the instant (woke 1.2 ms after the edge, send stamp 1.7 ms after k3 had the datagram).
+- **Fix applied (Bill, 2026-09-13 20:26Z): the GPIO PPS is gone from p550.** `pps-gpio` unbound now and at every boot
+  (`no-gpio-pps.service`, before chrony and the cadence service), its `refclock PPS /dev/pps0 ... noselect` line commented
+  out of chrony's `conf.d/gps.conf`, chrony restarted: reference IPHC, stratum 1, RMS 20 ns a few seconds after the
+  restart. Result, read every second: the i210 PHC second (`pps1`) is stamped **+21 to +28 µs** (was +279 to +287), the
+  splat count is zero, `/dev/pps1` is unchanged for the cadence service. What was given up: chrony's non-selected LEA-6T
+  PPS fallback on p550 (the 6T still feeds the BMC's PD3 directly and its NMEA/qErr logging is untouched). HARDWARE.md
+  entry 189 (2026-09-01) records the un-threading of that GPIO IRQ that made the splat; this is its cost, found and
+  removed twelve days later. The trigger, the datagram and k3's start should all move ~250 µs earlier from 21:00Z.
+  Separately the cadence service now runs at SCHED_FIFO 30 (it was descheduled twice around 20:00:00).
 - **k3 cannot trigger on its own PHC today.** The disciplined PHC on `end0` (stmmac) exposes one periodic output pin and
   no alarm, no external timestamp and no PPS source. The idle 10GbE port's PHC (`r8127`) advertises a PPS source, but
   the vendor driver emulates it with an hrtimer (`rtl8127_hrtimer_for_pps`), enabling it raised a kernel WARNING in
