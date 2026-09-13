@@ -45,8 +45,10 @@ $EDITOR cli/notbefore/__init__.py     # __version__ = "0.2.1"
 (cd cli && python3 vendor.py)         # prints: vendored 23 files at <sha>
 
 # 3. build + test locally in a clean venv (same suite CI runs; needs git + openssl; network for drand/Rekor refetch)
-(cd cli && rm -rf dist && uv build && uv venv /tmp/nbv && VIRTUAL_ENV=/tmp/nbv uv pip install "dist/notbefore-0.2.1-py3-none-any.whl[anchors,test]" \
-   && /tmp/nbv/bin/python -m pytest -q tests)          # NOTBEFORE.md §14: the whole suite must pass (28 tests as of 0.7.1)
+(cd cli && rm -rf dist && uv build && uv venv /tmp/nbv && VIRTUAL_ENV=/tmp/nbv uv pip install -r requirements-test.txt && VIRTUAL_ENV=/tmp/nbv uv pip install --no-deps "dist/notbefore-0.2.1-py3-none-any.whl" \
+   && NOTBEFORE_OFFLINE=1 /tmp/nbv/bin/python -m pytest -q --strict-markers tests -m "not network" \
+   && /tmp/nbv/bin/python -m pytest -q --strict-markers tests -m network)   # NOTBEFORE.md §14: offline partition + live partition must both pass (38 tests as of 0.12.1)
+#    Run the suite between :08 and :50 with a freshly pulled checkout: a pulse minted mid-run makes the site cross-check fail on a stale --log-dir.
 
 # 4. commit + push main; wait for the `notbefore-cli` workflow (build, vendored-files check, §14 suite) to go green
 git add cli && git commit -m "notbefore 0.2.1: <what changed and why a release was needed>" && git push origin main

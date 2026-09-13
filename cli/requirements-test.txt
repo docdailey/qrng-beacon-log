@@ -1,0 +1,6 @@
+# Pinned test/CI dependency set (review R9): the package itself keeps ranges in pyproject.toml; CI installs THIS file
+# and then the wheel with --no-deps, so a run is reproducible. Bump deliberately.
+pytest==9.1.1
+cryptography==50.0.1
+py_ecc==8.0.0
+opentimestamps-client==0.7.2

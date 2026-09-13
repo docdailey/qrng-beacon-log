@@ -173,6 +173,7 @@ def test_23_cosignature_reporting_and_quorum():
     rc, out, err = nb("--offline", "checkpoint"); assert rc == 0 and "cosigned by witness notbefore.net/witness/" in err and "same sponsor" in err, err
     rc, out, err = nb("--offline", "--witness-quorum", "1", "verify", "23"); assert rc == 1 and "0 independent cosignature(s) >= quorum 1" in err, err
 
+@pytest.mark.network
 def test_24_decision_contract_plan_execute(tmp_path):
     """The consumer's commitment: a canonical contract registered with two TSAs before the pulse; execute takes no choices,
     selects the pulse by rule, requires the registration to predate the round, and reproduces the allocation."""
@@ -206,6 +207,7 @@ def test_25_timestamp_verdict_is_exhaustive():
     assert not C.timestamp_verdict([A, ("digicert", "t", 1_000_001)], False, rel)[0]        # one before, one after -> refuse (max, not min)
     assert not C.timestamp_verdict([A, B, ("someone.else", "t", 1)], False, rel)[0]         # unexpected identity
     assert not C.timestamp_verdict([], False, rel)[0]
+@pytest.mark.network
 def test_26_contract_negatives(tmp_path):
     """Real files: one token deleted, a token corrupted, a contract byte edited, roster edited — each refused."""
     import shutil
@@ -271,6 +273,7 @@ def test_28_tsa_trust_roots_are_pinned_not_borrowed(tmp_path, monkeypatch):
     ok, res = _tsa.verify(str(p)); by = {r["tsa"]: r for r in res}; assert not ok and "fail closed" in (by["digicert"]["detail"] or ""), res
     empty = tmp_path / "empty"; empty.mkdir(); monkeypatch.setattr(_tsa, "PIN_DIR", str(empty))                            # no pins at all
     ok, res = _tsa.verify(str(p)); assert not ok and len(res) == 2 and not any(r["digest_and_chain_verified"] for r in res), res
+@pytest.mark.network
 def test_29_identity_and_signed_contracts(tmp_path, monkeypatch):
     """§7.12: keygen writes a 0600 Ed25519 key; plan signs a decision statement bound to the contract bytes, signer and
     decision_id; execute verifies it and refuses a tampered statement, a swapped key, or a legacy unsigned contract
@@ -353,6 +356,7 @@ def test_30_decision_log_receipts_verify_only_against_vendored_trust(tmp_path, m
     monkeypatch.setattr(DL, "lookup", boom); assert DL.check_authoritative(sts[3])["status"] == "unreachable"
     monkeypatch.setattr(DL, "lookup", fake_lookup([3])); monkeypatch.setattr(DL, "pub_raw", lambda: other.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw))
     assert DL.check_authoritative(sts[3])["status"] == "unreachable"                          # a log whose note does not verify under OUR key is not believed, whatever it says
+@pytest.mark.network
 def test_31_live_decision_log_roundtrip(tmp_path, monkeypatch):
     """Against the live log when the vendored identity is enabled (skipped otherwise): plan registers, the receipt verifies,
     a second contract under the same decision_id is an amendment, and execute refuses the superseded one."""
@@ -367,6 +371,7 @@ def test_31_live_decision_log_roundtrip(tmp_path, monkeypatch):
     rc, o, e = nb("execute", str(c2), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "not the first registered" in e, e
     rc, o, e = nb("execute", str(c1), "--input", str(f), "--allow-unregistered", "--transcript", "none", "--no-anchors", cwd=str(tmp_path)); assert rc == 1 and "AT/AFTER the round release" in e, e   # registered today, round in the past
     rc, o, e = nb("register", str(c1), cwd=str(tmp_path)); assert rc == 0 and "already present" in e                     # idempotent
+@pytest.mark.network
 def test_32_commit_bound_value_is_unabortable(tmp_path):
     """§4.6 / §7.13 (FALLBACK.md): a signed contract is commit-bound by default. The rule selects the first eligible COMMIT
     (verified, tokens and Rekor anchor before its round); V* = H(D || C || rho || chain || R) is the same whether the

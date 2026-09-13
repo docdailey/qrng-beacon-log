@@ -57,3 +57,15 @@ Pulses 0001–0041 carry retroactive anchors (2026-09-12 12:47 UTC); from 0042 a
 MIT. Data in the log: CC BY 4.0.
 
 **Releasing** (operators): `RELEASING.md` — every change to the verifier or keys needs a new package, and the flow there is the only way one gets made.
+
+## Tests
+
+`cli/tests` is partitioned (review R9): the default suite is deterministic and offline-capable, the `network` marker covers
+RFC 3161 timestamping, Rekor-direct lookups, drand fetches and the live decision log (which additionally needs
+`NOTBEFORE_LIVE_LOG_TEST=1` because it appends real entries).
+
+```bash
+pip install -r cli/requirements-test.txt && pip install --no-deps dist/notbefore-*.whl
+NOTBEFORE_OFFLINE=1 NOTBEFORE_LOG_DIR=<log checkout> python -m pytest -q --strict-markers cli/tests -m "not network"
+NOTBEFORE_LOG_DIR=<log checkout> python -m pytest -q --strict-markers cli/tests -m network
+```

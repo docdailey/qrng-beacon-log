@@ -29,23 +29,40 @@ jobs:
           node worker/test_local.mjs /tmp/k.pem /tmp/vectors.json | tee /tmp/out.txt
           ! grep -q "\[FAIL\]" /tmp/out.txt
   test:
+    # Deterministic, offline-capable suite on the oldest and newest supported Python, with the pinned test dependency set.
+    # fetch-depth 0 brings origin/anchors, which is the offline source of publication evidence for commit-bound contracts.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: { python: ["3.10", "3.12"] }
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ matrix.python }}" }
+      - run: python -m pip install --upgrade pip build && python -m build cli/ --outdir dist/
+      - run: python -m pip install -r cli/requirements-test.txt && python -m pip install --no-deps "$(ls dist/*.whl)"
+      - name: Vendored verifier matches this checkout
+        run: cd cli && python vendor.py && git diff --exit-code --stat -- notbefore/verifier/ ':!notbefore/verifier/VENDORED.json' && echo "vendored files identical to repo root"
+      - name: Acceptance suite, offline partition (NOTBEFORE.md §14; no TSA, Rekor, drand or decision-log calls)
+        run: NOTBEFORE_OFFLINE=1 NOTBEFORE_LOG_DIR="$GITHUB_WORKSPACE" python -m pytest -q --strict-markers cli/tests -m "not network"
+      - uses: actions/upload-artifact@v4
+        if: matrix.python == '3.12'
+        with: { name: dist, path: dist/ }
+  live:
+    # The tests that need live services (RFC 3161 TSAs, Rekor, drand relays). Separate so a third-party outage is attributable.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: python -m pip install --upgrade pip build && python -m build cli/ --outdir dist/
-      - run: python -m pip install "$(ls dist/*.whl)[anchors,test]"
-      - name: Vendored verifier matches this checkout
-        run: cd cli && python vendor.py && git diff --exit-code --stat -- notbefore/verifier/ ':!notbefore/verifier/VENDORED.json' && echo "vendored files identical to repo root"
-      - name: Acceptance suite (NOTBEFORE.md §14) against this checkout of the log
-        run: NOTBEFORE_LOG_DIR="$GITHUB_WORKSPACE" python -m pytest -q cli/tests
-      - uses: actions/upload-artifact@v4
-        with: { name: dist, path: dist/ }
+      - run: python -m pip install --upgrade pip build && python -m build cli/ --outdir dist/ && python -m pip install -r cli/requirements-test.txt && python -m pip install --no-deps "$(ls dist/*.whl)"
+      - name: Acceptance suite, live partition
+        run: NOTBEFORE_LOG_DIR="$GITHUB_WORKSPACE" python -m pytest -q --strict-markers cli/tests -m network
   publish:
     if: startsWith(github.ref, 'refs/tags/cli-v')
-    needs: test
+    needs: [test, live, worker]
     runs-on: ubuntu-latest
     environment: pypi
     permissions: { id-token: write }
