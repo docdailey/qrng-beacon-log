@@ -119,3 +119,10 @@ Confirmed from a fresh venv against PyPI: a signed, timestamped but unregistered
 authoritative preregistration"); `--allow-unregistered` runs DEGRADED and is still refused on the round gate; a live
 registration (entry 6) passes the authority check and is refused only on the round gate; `verify 65` passed.
 
+`notbefore 0.11.0` — tag `cli-v0.11.0` on `b2eec5b`, verifier vendored at `0192e7f`, workflow run 34730690854, published
+2026-09-13 01:39 UTC; spec 0.8: the commit-bound value (contract/3 default, FULL-ATTESTED / COMMITMENT-FALLBACK, Rekor
+anchor before the round as eligibility). Confirmed from a fresh venv against PyPI: `plan` → contract/3 → `execute
+--allow-unregistered` selected commit 0042 (anchored 129 s before its round), FULL-ATTESTED, V* `879c6f72…`; `receipt`
+(no FAIL), `bundle`, `check-bundle` (BUNDLE VERIFIED, V* recomputed offline from the bundled commit + drand signature);
+`verify 67` passed. Test 32 (same V* with the reveal removed) ran green in CI.
+
