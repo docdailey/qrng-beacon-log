@@ -111,9 +111,10 @@ ERR-006 is final: see `ERRATA.md` for the full account (window, sizes, tested hy
 ## Operating it (for operators, and for anyone auditing the operator)
 
 - `beacon-cycle.py` — one hourly commit → TSA-stamp → push → wait → reveal → push cycle; breaches of
-  `CADENCE.md` write a `chain/pulse-NNNN.FAILED.json` and push it. `systemd/` holds the units. Since 2026-09-13 the
-  cycle is started by the time host's clock: `hosts/beacon-cadence.py` (p550) signs a trigger at :00:00 UTC and
-  `beacon-trigger.py` (think) starts the cycle; `hosts/clocklog.py` logs each host's clock evidence at source rate.
+  `CADENCE.md` write a `chain/pulse-NNNN.FAILED.json` and push it. `systemd/aggregator/` holds the units (k3, the
+  aggregator since pulse 0096). Since 2026-09-13 the cycle starts on the aggregator's own PHC-disciplined clock at :00:00.000
+  (`beacon-cycle.py --at next`); `hosts/beacon-cadence.py` (p550) signs a trigger for the same instant and sends it by UDP;
+  `hosts/clocklog.py` logs each host's clock evidence at source rate.
 - `pulse.py` refuses to mint unless the checkout equals the published head (`origin/main`), so two
   operators cannot fork the chain by accident.
 - **`RECOVERY.md`** — what the chain looks like when the timing bench, the aggregator or the entropy host goes down

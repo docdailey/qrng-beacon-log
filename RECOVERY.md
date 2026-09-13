@@ -21,6 +21,10 @@ would be accepted right now, and if not, which dependency is the reason.
 The **timing bench** = f9t, p550, k3, the switch, the BMC. **The failure pulse does not need the bench**: `cmd_fail`
 needs protectli + think + Internet, and collects gnss/time/witness only if they answer (`try/except` per host).
 
+Since 2026-09-13 the aggregator reaches the role hosts through **`beacon-agentd`** (signed requests over TCP 5520, `hosts/agentd.py`),
+not SSH; a host whose daemon is down is a host that cannot attest, exactly as an unreachable sshd was. `systemctl status beacon-agentd`
+on the host; its journal names every refused request. The SSH forced-command lines remain during the transition.
+
 ## 2. What the chain looks like, by scenario
 
 ### 2a. Bench down when the hour starts → **a signed `skip` pulse (since v0.5.1); before 2026-09-12 15:xx UTC, a silent gap**
@@ -65,13 +69,20 @@ a `.revealing` below the head is finalized against its published resolver. The o
 the published chain — read `cycle.log`, find whether the pulse was minted but not pushed (`git status` in
 `~/qrng-beacon`), push it if so, else `pulse.py fail`.
 
-### 2d'. The cadence trigger does not arrive (p550's `beacon-cadence.service` down, SSH path to think broken) → **think's :02 fallback runs the hour**
+### 2d'. The tick-started cycle does not run (prepare failed, k3 rebooted at :59) → **k3's :02 fallback runs the hour**; if p550's UDP trigger does not arrive → **the pulse carries the aggregator's wake record only**
 Since 2026-09-13 the hour is normally started by p550's signed trigger at :00:00 (CADENCE.md §2 "Cadence source"). If it
 does not arrive, `qrng-beacon.timer` (`OnCalendar=*:02:00`) starts the same service two minutes later; the commit then
 targets drand-latest + lead (release ≈ :07 instead of :05) and says `cadence.source = "think-timer"`. Nothing is
 skipped and nothing is hidden: the absence of a trigger is visible in the pulse. (If p550 itself is down, the commit is
 refused anyway — the time statement is REQUIRED — and the hour becomes a `skip` pulse as in 2a.) Diagnose with
 `journalctl -u beacon-cadence` on p550 and `~/qrng-beacon/trigger.log` on think.
+
+### 2f. k3 (the aggregator since 0096) is down → **no cycle; fail back to think deliberately**
+think is a cold standby: its checkout, deploy key and checkpoint-key copy remain, its timers are disabled, and its aggregator
+key is **retired in `keys/KEYS.json` at seq 95**. To fail back: append a new validity window for think's key (or a new key) in
+`KEYS.json` from the next seq, commit and push that first, then `systemctl --user enable --now qrng-beacon.timer` on think
+(fallback path; it has no tick-start). That is a public act by design — a key that could silently mint from two hosts would be
+a weaker log. When k3 returns, retire think's window again before re-enabling k3's timers. Never let both timers be enabled.
 
 ### 2e. Someone pushes to `main` while a cycle runs → **handled (since ERR-010)**
 The cycle fast-forwards when it is merely behind, and a rejected push is rebased and retried. Before 2026-09-12 16:09

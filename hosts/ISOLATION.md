@@ -73,7 +73,7 @@ action and should be recorded here when it happens (it happened once: protectli,
   `host_config_sha256` equal to the per-host value in `hosts/EXPECTED.json`. Pulses 0020–0025 are isolated but predate the
   field or its enforcement and are not retroactively required to carry it.
 
-## Cadence trigger edge (2026-09-13)
+## Cadence trigger edge (2026-09-13 13:00Z–15:00Z; superseded the same day by the UDP delivery described in the next section — kept as history)
 
 The time host now initiates one thing: p550's `beacon` user holds an outbound SSH key (`~beacon/.ssh/cadence_ed25519`)
 that is authorised on think as
@@ -87,3 +87,44 @@ What a compromised p550 `beacon` user gains from this edge: it could already for
 also start a cycle at an instant of its choosing. That is bounded (one cycle per hour on think, `.cycle-hour`) and
 visible (every commit carries the trigger it was started from, `verify.py` checks the instant is a round boundary and
 that the target round follows from it). The aggregator's keys, the entropy host and the other attest hosts are unchanged.
+
+## Aggregator on k3 (2026-09-13, from pulse 0096) — what changed in the trust picture
+
+- The aggregator is the `aggregator` user on k3 (`~aggregator/beacon/aggregator.key`, the log's checkpoint key, a repo-scoped
+  deploy key). Its SSH key is authorised on every role host's `beacon` user with the same `restrict,command="beacon-cmd"` line
+  think's key has; think's line stays (think is the cold standby) but think's **aggregator signing key is retired** in
+  `keys/KEYS.json`, so think cannot mint a pulse the verifier accepts without a public KEYS.json change.
+- k3 now hosts **two roles in two confined users**: `beacon` (the `time_witness` signer, reached over loopback SSH through the
+  forced command exactly as before) and `aggregator`. A host-level compromise of k3 gains both; a compromise of the aggregator
+  user alone still cannot read the witness key or fabricate its statements. CLAIMS.md says so next to the witness claim.
+- The p550 → think SSH edge for the cadence trigger (previous section) is **gone**. The time host now sends its signed trigger
+  as a UDP datagram to the aggregator; there is no login, no forced command, no session. The aggregator accepts a datagram only
+  if it is a `cadence-trigger` statement for the instant it is itself waiting on, signed by p550's active `time_attester` key;
+  everything else is dropped and logged. A forged or replayed datagram cannot start, stop or steer a cycle — the cycle starts on
+  the aggregator's own clock and the target follows from the instant, not from the datagram.
+- Multiplexed SSH connections (`ControlMaster`) are opened ~40 s before the hour by the same forced-command calls a cycle makes
+  (`noop`/`pending`; nothing is signed) so the calls after the instant cost ~0.1 s.
+
+## Machine-to-machine service instead of SSH (2026-09-13, `hosts/agentd.py`)
+
+Bill: *"machine to machine communication… not ssh."* Every role host now runs **`beacon-agentd`** as the same confined
+`beacon` user, listening on TCP 5520 on the LAN. It answers exactly the operations the forced command answered, with
+the same argument validation and the **same per-phase monotonic sequence file** (`~beacon/state.json`), so the two paths
+cannot be played against each other. What changed is the transport and the authentication:
+
+| element | SSH forced command (0018–…) | beacon-agentd |
+|---|---|---|
+| who may ask | holder of a key in `~beacon/.ssh/authorized_keys` | holder of an **aggregator Ed25519 key pinned in `/etc/beacon/agentd.json`** (the keys `keys/KEYS.json` lists) |
+| how a request is authenticated | SSH session (key exchange + user auth), then `SSH_ORIGINAL_COMMAND` | **per message**: an Ed25519-signed statement `{to, op, args, from, ts, nonce, epk}`; refused unless addressed to this host, signed by a pinned key, within ±30 s and with an unseen nonce |
+| what runs | sshd → login shell → `beacon-cmd` → host script | `beacon-agentd` → host script (same script, same user, `BEACON_VIA=agentd`) |
+| attack surface | sshd, the shell, the forced-command parser | one Python process that parses a length-prefixed JSON message and verifies a signature; no shell, no file access, no other operation |
+| secrets on the wire | inside the SSH channel | responses that carry a secret (`reveal-prepare`: E) are **sealed to the requester's ephemeral X25519 key** carried in the signed request (HKDF-SHA256 → ChaCha20-Poly1305, AAD = the request); everything else is a host-signed statement, public by design |
+| cost per call (k3 → host) | 0.4–2.0 s cold, 0.07–0.2 s multiplexed | **7–9 ms** to reach the allow-list; the host script's own run time on top |
+| self-report in the statement | `execution.via_forced_command: true`, `beacon_cmd_sha256` | `execution.via: "agentd"`, `agentd_sha256`, `request_nonce`; `schema.execution_ok` accepts either against `hosts/EXPECTED.json` |
+
+Residual assumptions: the pinned aggregator keys are the only keys that can make a host sign; the LAN is not trusted
+(nothing in the protocol relies on it); the host scripts run as `beacon` and cannot escalate; replay is bounded by the
+nonce cache and the ±30 s window, and by the monotonic sequence for anything that signs. Verified 2026-09-13 from k3:
+an unpinned key, a request addressed to another host, a stale timestamp, a replayed nonce and garbage are all refused;
+a `noop` reaches the allow-list and is refused there. The SSH forced-command lines stay installed during the transition
+and are removed once the aggregator has run on the daemon for a day.

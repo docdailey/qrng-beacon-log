@@ -37,7 +37,11 @@ def execution_ok(ex, host, expected_path):
     h = exp.get("hosts", {}).get(host)
     if not h: return False, f"no expected configuration published for host {host}"
     if ex.get("user") != "beacon": return False, f"user is {ex.get('user')!r}, expected 'beacon'"
-    if ex.get("via_forced_command") is not True: return False, "not executed via the forced command"
-    if ex.get("beacon_cmd_sha256") not in exp.get("beacon_cmd_sha256", []): return False, "beacon-cmd hash not among published values"
     if ex.get("host_config_sha256") != h.get("host_config_sha256"): return False, "host config hash differs from published value"
-    return True, "user=beacon, forced command, beacon-cmd and host config match published hashes"
+    if ex.get("via_forced_command") is True:
+        if ex.get("beacon_cmd_sha256") not in exp.get("beacon_cmd_sha256", []): return False, "beacon-cmd hash not among published values"
+        return True, "user=beacon, SSH forced command, beacon-cmd and host config match published hashes"
+    if ex.get("via") == "agentd":                                   # machine-to-machine service (hosts/agentd.py), 2026-09-13
+        if ex.get("agentd_sha256") not in exp.get("agentd_sha256", []): return False, "beacon-agentd hash not among published values"
+        return True, "user=beacon, beacon-agentd (signed request over TCP), agentd and host config match published hashes"
+    return False, "not executed via the forced command or beacon-agentd"

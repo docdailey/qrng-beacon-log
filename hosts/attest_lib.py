@@ -71,11 +71,16 @@ def execution_context():
     """Signed self-report of HOW this statement was produced. Self-reported, but signed with a key only the confined
     user holds, so a statement claiming user=beacon via the forced command is consistent evidence of confinement."""
     import pwd, getpass
-    ctx = {"user": pwd.getpwuid(os.getuid()).pw_name, "uid": os.getuid(),
+    via = "agentd" if os.environ.get("BEACON_VIA") == "agentd" else ("forced-command" if os.environ.get("SSH_ORIGINAL_COMMAND") else "direct")
+    ctx = {"user": pwd.getpwuid(os.getuid()).pw_name, "uid": os.getuid(), "via": via,
            "via_forced_command": bool(os.environ.get("SSH_ORIGINAL_COMMAND")),
            "ssh_original_command": os.environ.get("SSH_ORIGINAL_COMMAND", "")[:120]}
     bc = "/usr/local/bin/beacon-cmd"
     if os.path.exists(bc): ctx["beacon_cmd_sha256"] = file_sha256(bc)
+    ad = "/usr/local/bin/beacon-agentd"
+    if via == "agentd":                                             # 2026-09-13: machine-to-machine service instead of SSH (hosts/agentd.py)
+        if os.path.exists(ad): ctx["agentd_sha256"] = file_sha256(ad)
+        ctx["request_nonce"] = os.environ.get("BEACON_REQUEST_NONCE", "")[:64]
     try: ctx["host_config_sha256"] = file_sha256("/etc/beacon/host.json")
     except Exception: pass
     return ctx

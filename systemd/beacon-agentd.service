@@ -1,0 +1,21 @@
+# beacon-agentd.service — on EVERY role host (protectli, p550, f9t, k3). Machine-to-machine service that replaces the SSH
+# forced command: signed requests over TCP, same confined user, same allow-list, same monotonic sequence (hosts/agentd.py).
+# Install: install -m 755 -o root hosts/agentd.py /usr/local/bin/beacon-agentd; /etc/beacon/agentd.json pins the aggregator keys.
+[Unit]
+Description=beacon-agentd: signed machine-to-machine requests from the aggregator (replaces the SSH forced command)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=beacon
+Group=beacon
+Environment=HOME=/home/beacon
+Environment=BEACON_VIA=agentd
+ExecStart=/usr/bin/python3 /usr/local/bin/beacon-agentd
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

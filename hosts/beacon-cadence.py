@@ -3,42 +3,45 @@
 disciplined by chrony from the i210 PHC, itself locked to the ZED-F9T PPS) as the confined `beacon` user.
 
 At every scheduled instant (hourly, :00:00 UTC) it wakes with clock_nanosleep(TIMER_ABSTIME), reads the i210 PHC and
-CLOCK_REALTIME, signs a CADENCE TRIGGER with the time_attester key and hands it to the aggregator (think) over SSH with a
-key that can run exactly one forced command there (beacon-trigger.py). The aggregator starts the cycle on receipt and
-embeds the signed trigger in the commit pulse (core.cadence), so the instant that defined the hour is attested by the
-clock that measured it, not by the aggregator. think's own timer is only a fallback (:02) and the pulse says so.
-
-Bill, 2026-09-13: "think is not a precision machine. it should start on a trigger from i210 exactly on the hour."
+CLOCK_REALTIME, signs a CADENCE TRIGGER with the time_attester key and sends it to the aggregator as a UDP DATAGRAM.
+There is no session and no authentication handshake: the datagram IS a signed statement, and the aggregator verifies
+the signature against keys/KEYS.json. The aggregator (k3) does not wait for it - it wakes on its own PHC-disciplined
+clock at the same instant and mints; the datagram arrives within milliseconds and is embedded in the commit
+(core.cadence.trigger) as the i210 host's attestation of the instant. Bill, 2026-09-13: "it should start on a trigger
+from i210 exactly on the hour" / "we need to do it without ssh obviously. signaling outside of auth."
 
   beacon-cadence.py                 run forever (systemd: beacon-cadence.service)
   beacon-cadence.py --once [--at T] [--no-send]   one trigger, at unix second T (default: next scheduled instant);
-                                    --no-send prints the signed trigger instead of delivering it (testing)
+                                    --no-send prints the signed trigger instead of sending it (testing)
+  env CADENCE_UDP=host:port          where the datagram goes (default 192.168.68.24:5510, the aggregator k3)
 """
-import os, sys, json, time, ctypes, ctypes.util, subprocess, secrets
+import os, sys, json, time, ctypes, ctypes.util, subprocess, secrets, socket
 sys.path.insert(0, os.path.expanduser("~/beacon"))
 import attest_lib as A
 
 PERIOD_S = int(os.environ.get("CADENCE_PERIOD_S", "3600")); OFFSET_S = int(os.environ.get("CADENCE_OFFSET_S", "0"))
 PHC_DEV = os.environ.get("PHC_DEV", "/dev/ptp0"); HOSTNAME = "p550"
-AGG = os.environ.get("CADENCE_AGGREGATOR", "willy@192.168.71.34")
-KEY = os.path.expanduser("~/.ssh/cadence_ed25519"); KH = os.path.expanduser("~/.ssh/known_hosts")
+UDP = os.environ.get("CADENCE_UDP", "192.168.68.24:5510")       # aggregator host:port for the signed datagram
 CHAIN_HASH = "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
 RING_DIR = "/run/beacon-clocklog"; STATE_DIR = "/run/beacon-cadence"
 CLOCK_REALTIME, TIMER_ABSTIME, EINTR = 0, 1, 4
+DRY = False
 
 class TS(ctypes.Structure): _fields_ = [("tv_sec", ctypes.c_long), ("tv_nsec", ctypes.c_long)]
 libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
 libc.clock_nanosleep.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.POINTER(TS), ctypes.POINTER(TS)]
 
-def log(m): print(time.strftime("%Y-%m-%dT%H:%M:%SZ ", time.gmtime()) + m, file=sys.stderr, flush=True)   # stdout carries only --no-send output
+def log(m): print(time.strftime("%Y-%m-%dT%H:%M:%SZ ", time.gmtime(time.time())) + m, file=sys.stderr, flush=True)   # stdout carries only --no-send output
 
-def sleep_until(t_ns):
-    """Absolute sleep on CLOCK_REALTIME: a chrony slew or step moves the wake WITH the clock (a relative sleep would not)."""
+def sleep_until(t_ns, spin_ns=1_500_000):
+    """Absolute sleep on CLOCK_REALTIME to t_ns - spin_ns (a chrony slew or step moves the wake WITH the clock; a relative
+    sleep would not), then spin on the clock for the last 1.5 ms: scheduler lateness of 100-500 us becomes a few us."""
     while True:
-        ts = TS(t_ns // 10**9, t_ns % 10**9)
+        ts = TS((t_ns - spin_ns) // 10**9, (t_ns - spin_ns) % 10**9)
         r = libc.clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, ctypes.byref(ts), None)
-        if r == 0: return
+        if r == 0: break
         if r != EINTR: raise OSError(r, os.strerror(r))
+    while time.clock_gettime_ns(CLOCK_REALTIME) < t_ns: pass
 
 def phc_read(fd):
     """Tightest of five REALTIME/PHC/REALTIME brackets."""
@@ -58,53 +61,59 @@ def ring_last(name):
     except Exception: return None
 
 def trigger(t0):
+    """Everything that does not depend on the instant is prepared BEFORE the sleep (tool hashes, execution context, ring
+    reads, the open socket); after the wake only the clock reads, the signature and the send stand between the instant
+    and the datagram on the wire. (First measurement, 2026-09-13: 12 ms to sign, then 157 ms of imports and file writes
+    before the first copy left. Now the send comes first.)"""
     fd = os.open(PHC_DEV, os.O_RDONLY)
+    static = {"v": "0.5", "role": "time_attester", "host": HOSTNAME, "kind": "cadence-trigger", "chain_hash": CHAIN_HASH,
+              "scheduled_unix_s": t0, "period_s": PERIOD_S, "offset_s": OFFSET_S,
+              "tools": A.tool_binding(os.path.abspath(__file__), os.path.join(os.path.expanduser("~/beacon"), "attest_lib.py")),
+              "execution": A.execution_context(),
+              "meaning": "the time host's clock reached the scheduled instant; the aggregator embeds this statement in the commit (PROTOCOL.md 'Cadence trigger')"}
+    priv = A.load_private("time_attester")                                   # key in memory before the instant
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); host, port = UDP.rsplit(":", 1); dest = (host, int(port))
     try:
+        ep, ts2 = ring_last("epoch") or {}, ring_last("ts2phc") or {}       # read a moment before the instant (rows <= 1 s old)
+        if not DRY: sock.sendto(b"cadence-arp-warm", dest)                   # resolves the aggregator's MAC now, not at the instant (E1: 8 ms)
         sleep_until(t0 * 10**9)
         wake = time.clock_gettime_ns(CLOCK_REALTIME); phc = phc_read(fd)
-    finally: os.close(fd)
-    ep, ts2 = ring_last("epoch") or {}, ring_last("ts2phc") or {}
-    st = {"v": "0.5", "role": "time_attester", "host": HOSTNAME, "kind": "cadence-trigger", "chain_hash": CHAIN_HASH,
-          "scheduled_unix_s": t0, "period_s": PERIOD_S, "offset_s": OFFSET_S,
-          "wake": {"clock": "CLOCK_REALTIME", "unix_ns": str(wake), "late_ns": wake - t0 * 10**9,
-                   "how": "clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME) on PREEMPT_RT; CLOCK_REALTIME is chrony-disciplined from the i210 PHC (refid IPHC)"},
-          "phc": {**phc, "tai_minus_utc_s": ep.get("tai_minus_utc_s"),
-                  "meaning": "i210 PHC (TAI) read at wake; phc_minus_realtime_ns minus tai_minus_utc_s*1e9 is how far the system clock sat from the PHC at the trigger"},
-          "clock_state": {"epoch_ok": ep.get("epoch_ok"), "refclock_selected": ep.get("refclock_selected"), "epoch_row_age_s": ep.get("age_s"),
-                          "ts2phc_state": ts2.get("state"), "ts2phc_offset_ns": ts2.get("offset_ns"), "ts2phc_row_age_s": ts2.get("age_s"),
-                          "source": "beacon-clocklog rings (/run/beacon-clocklog)"},
-          "issued_unix_ns": A.now_ns_str(), "nonce": secrets.token_hex(16),
-          "tools": A.tool_binding(os.path.abspath(__file__), os.path.join(os.path.expanduser("~/beacon"), "attest_lib.py")),
-          "execution": A.execution_context(),
-          "meaning": "the time host's clock reached the scheduled instant; the aggregator starts the cycle on receipt and embeds this statement in the commit (PROTOCOL.md 'Cadence trigger')"}
-    return A.sign_statement("time_attester", st), wake
-
-def send(signed):
-    cmd = ["ssh", "-i", KEY, "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=yes",
-           "-o", f"UserKnownHostsFile={KH}", "-o", "IdentitiesOnly=yes", AGG, "trigger"]
-    r = subprocess.run(cmd, input=json.dumps(signed), capture_output=True, text=True, timeout=40)
-    return r.returncode, (r.stdout or r.stderr).strip()[:400]
+        st = dict(static, wake={"clock": "CLOCK_REALTIME", "unix_ns": str(wake), "late_ns": wake - t0 * 10**9,
+                                 "how": "clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME) to T-1.5 ms then a spin on the clock, on PREEMPT_RT; CLOCK_REALTIME is chrony-disciplined from the i210 PHC (refid IPHC)"},
+                  phc={**phc, "tai_minus_utc_s": ep.get("tai_minus_utc_s"),
+                       "meaning": "i210 PHC (TAI) read at wake; phc_minus_realtime_ns minus tai_minus_utc_s*1e9 is how far the system clock sat from the PHC at the trigger"},
+                  clock_state={"epoch_ok": ep.get("epoch_ok"), "refclock_selected": ep.get("refclock_selected"), "epoch_row_age_s": ep.get("age_s"),
+                               "ts2phc_state": ts2.get("state"), "ts2phc_offset_ns": ts2.get("offset_ns"), "ts2phc_row_age_s": ts2.get("age_s"),
+                               "source": "beacon-clocklog rings (/run/beacon-clocklog), read just before the instant"},
+                  issued_unix_ns=A.now_ns_str(), nonce=secrets.token_hex(16))
+        signed = A.sign_statement("time_attester", st)
+        data = json.dumps(signed, separators=(",", ":")).encode(); sent = []
+        for _ in range(3):
+            if not DRY: sock.sendto(data, dest)
+            sent.append(time.clock_gettime_ns(CLOCK_REALTIME))
+            if _ < 2: time.sleep(0.02)
+    finally:
+        os.close(fd); sock.close()
+    return signed, wake, sent, len(data)
 
 def next_instant(now): return ((int(now) - OFFSET_S) // PERIOD_S + 1) * PERIOD_S + OFFSET_S
 
 def main():
     a = sys.argv[1:]; once = "--once" in a; dry = "--no-send" in a
+    global DRY; DRY = dry
     fixed = int(a[a.index("--at") + 1]) if "--at" in a else None
     os.makedirs(STATE_DIR, exist_ok=True)
     while True:
         target = fixed if fixed is not None else next_instant(time.time())
         log(f"next trigger at {target} ({time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(target))}Z), in {target - time.time():.1f} s")
         while target - time.time() > 2.5: time.sleep(min(60.0, target - time.time() - 2.0))      # coarse wait, then absolute
-        signed, wake = trigger(target); st = signed["statement"]
-        log(f"trigger {target}: woke {st['wake']['late_ns'] / 1000:.1f} us late; PHC-REALTIME {st['phc']['phc_minus_realtime_ns']} ns; "
-            f"epoch_ok {st['clock_state']['epoch_ok']} ts2phc {st['clock_state']['ts2phc_state']} {st['clock_state']['ts2phc_offset_ns']} ns")
+        signed, wake, sent, nbytes = trigger(target); st = signed["statement"]
+        log(f"trigger {target}: woke {st['wake']['late_ns'] / 1000:.1f} us late; signed at +{(int(st['issued_unix_ns']) - target * 10**9) / 1e6:.3f} ms; "
+            f"{'would send' if dry else 'sent'} {nbytes} B x3 by UDP to {UDP}, first copy at +{(sent[0] - target * 10**9) / 1e6:.3f} ms; "
+            f"PHC-REALTIME {st['phc']['phc_minus_realtime_ns']} ns; epoch_ok {st['clock_state']['epoch_ok']} ts2phc {st['clock_state']['ts2phc_state']} {st['clock_state']['ts2phc_offset_ns']} ns")
         tmp = os.path.join(STATE_DIR, ".last.json.tmp")
-        json.dump({"sent_unix_ns": str(time.time_ns()), "trigger": signed}, open(tmp, "w")); os.replace(tmp, os.path.join(STATE_DIR, "last.json"))
+        json.dump({"sent_unix_ns": str(sent[0]), "trigger": signed}, open(tmp, "w")); os.replace(tmp, os.path.join(STATE_DIR, "last.json"))
         if dry: print(json.dumps(signed))
-        else:
-            rc, out = send(signed)
-            if rc != 0: time.sleep(2); rc, out = send(signed)
-            log(f"aggregator {'accepted' if rc == 0 else f'REFUSED rc={rc}'}: {out}")
         if once: return
         fixed = None; time.sleep(5)
 

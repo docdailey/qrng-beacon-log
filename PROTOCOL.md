@@ -61,6 +61,13 @@ and **finalizes** only when the aggregator confirms the resolving pulse is writt
 prepare and finalize leaves `E` recoverable; prepare is idempotent. A reveal is refused once the deadline has passed;
 the cycle records a signed failure instead.
 
+### Execution self-report (`statement.execution`)
+Every host statement says how it was produced, signed with the host's key: `user` (must be `beacon`), `host_config_sha256`
+(must equal the published hash for that host) and either `via_forced_command: true` with `beacon_cmd_sha256` (the SSH
+forced command, 0026 onward) or `via: "agentd"` with `agentd_sha256` and `request_nonce` (the machine-to-machine service
+`hosts/agentd.py`, 2026-09-13 onward). `schema.execution_ok` accepts either against `hosts/EXPECTED.json`; a verifier older
+than that rule rejects agentd statements with *"not executed via the forced command"* — upgrade (`notbefore` ≥ 0.14.0).
+
 ### Required clock statements must report a healthy clock
 For `time` and `witness`, the verifier requires the statement's own `epoch_guard` to report `epoch_ok: true`, the
 host's hardware refclock selected, and no alert. A signed statement that says "invalid" fails the pulse (ERR-007).
@@ -107,7 +114,7 @@ seq inside its validity window.
 { "v":"0.5", "type": commit|reveal|failure, "seq", "prev_hash", "chain_hash",
   "statements": { "entropy", "gnss", "time", "witness" },      # failure: entropy required, others best-effort
   "drand_at_commit" | "drand",                                 # BLS-verified by the aggregator before use
-  "derived": { ... },  "tooling": {...},  "aggregator_host":"think",
+  "derived": { ... },  "tooling": {...},  "aggregator_host": "k3" (0096+) | "think" (0018-0095),
   "cadence": { "source", "targeting", "trigger"?, "received_unix_ns"?, "aggregator_start_unix_ns", ... } }   # since 2026-09-13, see "Cadence trigger"
 pulse = { "core", "pulse_hash" = SHA256(canon(core)), "signatures": { "aggregator" }, "disclosure" }
 ```
@@ -132,12 +139,18 @@ A commit may carry `core.cadence.trigger`: a **statement signed by the time host
                  "issued_unix_ns":"<str>", "nonce", "tools":[...], "execution": {...} },
   "signature": { "alg":"ed25519", "key_id", "public_key_b64", "sig_b64", "over":"canon(statement)" } }
 ```
-`core.cadence.source` is `"p550/i210 cadence trigger"` or `"think-timer"` (fallback); `core.cadence.targeting` is
+`core.cadence.self_trigger` (from pulse 0096) is the aggregator's OWN wake record for the instant — `{host, scheduled_unix_s,
+wake:{unix_ns, late_ns}, phc:{...}}` — covered by the aggregator signature only (it is not a host statement). `core.cadence.source`
+is `"k3 clock + p550/i210 trigger"` (both present), `"k3 clock"` (self only), `"p550/i210 cadence trigger"` (think era, 0092–0095)
+or `"<host>-timer"` (the :02 fallback, no instant); `core.cadence.targeting` is
 `"scheduled-instant+lead"` (target round = the round released **at** `scheduled_unix_s` + `derived.lead_rounds`, so
 `target_release_unix_s == scheduled_unix_s + lead_rounds*3`) or `"drand-latest+lead"` (the pre-2026-09-13 rule).
 A trigger the aggregator could not verify is recorded as `cadence.trigger_rejected` and ignored; it is never fatal.
 `received_unix_ns` (think, on receipt) and `aggregator_start_unix_ns` (think, when `pulse.py` started) are on think's
 NTP clock and are latency bookkeeping, not attested quantities.
+
+When both records are present the verifier requires them to name the same instant. The time host's trigger travels as a UDP
+datagram (three copies); it is verified by signature, not by transport — there is no session to authenticate.
 
 **Verifier checks** (`verify.py`, only when a trigger is present): the statement is a v0.5 `time_attester@p550`
 `cadence-trigger` on the pinned chain; `key_id == SHA256(pk)[:16]`; the signature verifies over `canon(statement)`;

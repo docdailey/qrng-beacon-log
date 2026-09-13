@@ -36,12 +36,36 @@ after the instant and started the cycle at +0.80 s; `pulse.py commit` began at +
 began 1.29 s after the round, its GNSS anchor is 10 s after, pushed **15 s** after. `verify.py` passes all five cadence checks
 on 0092. Next trigger armed for 14:00:00Z.
 
-**Cadence source (since 2026-09-13):** the hour is started by the **time host's clock, not by think's timer**.
+**Aggregator moved to k3 (from pulse 0096, 2026-09-13 15:00Z).** think ran the cycle from 0012 to 0095. Bill, 2026-09-13:
+*"we need to trigger on that pulse and switch to milkv from think. it has much tighter time and faster clock"* and *"we need to
+do it without ssh obviously. signaling outside of auth."* k3 (Milk-V, RISC-V, `CLOCK_REALTIME` held by chrony to its PTP PHC at
+~25 ns RMS, the PHC slaved to the P550-BMC grandmaster and continuously measured by the i210) now runs `beacon-cycle.py --at next`
+as the `aggregator` user: a timer starts it at **:59:20**, it pulls, recovers, opens multiplexed SSH connections to the four role
+hosts and a UDP listener, then sleeps to **:00:00.000 with `clock_nanosleep(TIMER_ABSTIME)`** and mints at once — nothing is
+signaled to start the cycle, the clock is the trigger. The commit records the aggregator's own wake (`core.cadence.self_trigger`,
+covered by the aggregator signature) and, when it arrives, the time host's signed trigger (`core.cadence.trigger`): p550 wakes on
+the same instant, signs, and sends the statement three times as a **UDP datagram** — no session, no authentication handshake,
+the Ed25519 signature is the authentication; measured 9 ms from the instant to the datagram on k3. drand's latest round is
+fetched and BLS-verified **in parallel** with the entropy host and the statements (native blst, 0.02 s per round on k3;
+pure-Python py_ecc took 4.7 s there), the reveal fetches and verifies the latest and the target rounds concurrently, and the
+entropy host reveals while the clock hosts attest. think's aggregator key is retired at seq 95 in `keys/KEYS.json`; think keeps
+the decisions mirror and stays a cold standby (RECOVERY.md 2f). The witness statement still comes from k3's confined `beacon`
+user through the same forced command, now over loopback; aggregator and witness share a host but not a user — CLAIMS.md
+states the caveat.
+
+**Staging measurements before the cutover (2026-09-13, throwaway clone on k3, real hosts, commit only, secret retired afterwards).**
+Run 1 (SSH multiplexed to the hosts): k3 woke 6.8 µs after the instant, p550's datagram arrived 8.7 ms after it, entropy
+statement +0.92 s, gnss +1.47 s, witness +1.61 s, time +1.93 s, commit pushed **+2.9 s**. Run 2 (beacon-agentd, in-process
+host scripts): woke 5.5 µs late, datagram +7.1 ms, entropy +0.49 s, gnss +0.76 s, witness +0.84 s, time +0.93 s, TSA tokens
+at +1 s, commit pushed **+2.0 s** — against 14.8 s for think's 13:00 cycle the same morning. Every statement said
+`execution.via = agentd` and verified against the pinned daemon hash; both cadence records named the same instant.
+
+**Cadence source (since 2026-09-13 13:00Z, pulses 0092–0095 — think era):** the hour is started by the **time host's clock, not by think's timer**.
 `hosts/beacon-cadence.py` runs on p550 (PREEMPT_RT; `CLOCK_REALTIME` disciplined by chrony from the i210 PHC, which
 `ts2phc` locks to the ZED-F9T PPS) as the confined `beacon` user. At **:00:00.000 UTC** it wakes with
 `clock_nanosleep(TIMER_ABSTIME)`, reads the i210 PHC and `CLOCK_REALTIME`, signs a **cadence trigger** with the
 `time_attester` key and delivers it to think over SSH with a key that can run exactly one forced command there
-(`beacon-trigger.py`), which verifies the signature against `keys/KEYS.json` and starts `qrng-beacon.service`. The commit
+(`beacon-trigger.py`, removed at the k3 cutover), which verified the signature against `keys/KEYS.json` and started `qrng-beacon.service`. The commit
 embeds the signed trigger as `core.cadence.trigger`, and the target round is **the round released at the scheduled
 instant + 100**, so the release lands at **:05:00 every hour** instead of drifting with think's start-up time.
 `verify.py` checks the trigger's signature and that the target follows from the instant. If no trigger arrives, the
@@ -51,6 +75,23 @@ measured on p550) and the PHC−REALTIME reading at the instant; think's receipt
 think's NTP clock as bookkeeping. What is attested is *which clock said the hour started*; the ordering claims of the
 protocol are unchanged (GNSS anchor vs round release). Bill, 2026-09-13: *"think is not a precision machine. it should
 start on a trigger from i210 exactly on the hour."*
+
+**Latency experiments, 2026-09-13 (Bill: "if anyone is going to take the timing aspect seriously we need a fast chain").**
+Measured from k3 unless stated; each row is a method tried, what it cost, and what was adopted.
+
+| step | method tried | measured | adopted |
+|---|---|---|---|
+| wake at the instant | `clock_nanosleep(TIMER_ABSTIME)` | 90–150 µs late (k3), 110–460 µs (p550) | sleep to T−1.5 ms then spin on the clock: **1–5 µs** |
+| time host → aggregator trigger | SSH forced command | 0.5–0.7 s after the instant | **signed UDP datagram**: 9 ms after the instant (first copy), three copies 20 ms apart; ARP pre-warmed |
+| aggregator → role hosts | SSH cold / multiplexed | 0.4–2.0 s cold (post-quantum KEX 1.4 s of it to protectli), 0.07–0.2 s warm | **beacon-agentd**: signed request over TCP, **7–9 ms** to the allow-list; host scripts imported once, run in-process |
+| drand fetch | api / api2 / api3 / cloudflare, cold | 0.24 / 0.57 / 0.91 s / 403 (default UA) | race all relays; keep-alive GET 16–46 ms |
+| drand round availability | poll every 25 ms from release | relays serve round N **1.13–1.38 s after its release**, order varies | pre-open connections, poll from release+1.0 s every 20 ms, first answer wins, handed to `pulse.py reveal --drand` |
+| BLS verification | py_ecc (pure Python) | 2.2 s (think, x86), **4.7 s (k3, RISC-V)** | **blst** native via ctypes: **0.02 s**; same negative tests fail correctly |
+| drand in the commit | fetch+verify before anything else | on the critical path | fetched and verified **in a thread** while the entropy host commits and the hosts attest |
+| TSA (two tokens) | sequential | 0.41 s | concurrent: ~0.25 s |
+| git push to GitHub | fresh SSH each push | 0.81 s negotiation | `ControlMaster` to github.com: 0.35 s |
+| interpreter start | `python3 pulse.py` per phase | 0.04 s + 0.20 s imports | kept (subprocess boundary is worth the 0.25 s); candidate for in-process later |
+| Rekor anchor | CI workflow after the push | 18 s after the push | unchanged for now; anchoring from the aggregator at mint is the next step and would allow a 3-minute lead |
 
 **Reveal latency (2026-09-13):** the reveal used to be pushed ~85 s after the round because the aggregator polled drand
 every 3 s and then queried the three attest hosts one after another, each sampling its clock live for 12–35 s. Now the
@@ -68,10 +109,10 @@ checks, same limits (`notbefore/timing/v1`); the window is now stated per statem
 | lead | **100 rounds = 5 min** | `beacon-cycle.py LEAD` |
 | publish deadline | commit pushed + TSA-stamped **≥ 2 min before** target release | `PUBLISH_MARGIN_S`; breach → `pulse-NNNN.FAILED.json` pushed |
 | reveal deadline | reveal pushed **≤ 10 min after** target release | `REVEAL_DEADLINE_S`; breach → FAILED marker pushed; watcher attests |
-| host | think (aggregator) | always-on home-LAN Linux; oscpro902 travels |
-| cadence source | **p550's i210-disciplined clock**: signed trigger at :00:00.000 UTC, embedded in the commit | `beacon-cadence.service` on p550; `beacon-trigger.py` on think; `verify.py` cadence checks |
-| release grid | **:05:00 UTC** every hour (round at the trigger instant + 100) | `pulse.py commit --trigger` targeting `scheduled-instant+lead` |
-| fallback | think's timer at **:02:00**; the pulse says `cadence.source = "think-timer"` | `qrng-beacon.timer` `OnCalendar=*:02:00` |
+| host | **k3** (aggregator, from 0096); think 0012–0095 | k3: PTP-disciplined clock, 8-core RISC-V, always on; think keeps the decisions mirror |
+| cadence source | **the aggregator's own PHC-disciplined clock** (`clock_nanosleep` to :00:00.000; `core.cadence.self_trigger`) **plus p550's signed trigger by UDP** (`core.cadence.trigger`) | `systemd/aggregator/qrng-beacon.timer` (:59:20) → `beacon-cycle.py --at next`; `beacon-cadence.service` on p550; `verify.py` cadence checks |
+| release grid | **:05:00 UTC** every hour (round at the instant + 100) | `pulse.py commit --self-trigger/--trigger-dir`, targeting `scheduled-instant+lead` |
+| fallback | k3's timer at **:02:00** runs the plain path; the pulse says `cadence.source = "k3-timer"` | `systemd/aggregator/qrng-beacon-fallback.timer` |
 
 Operational notes: **outages and recovery are in `RECOVERY.md`** (planned-pause checklist, `pulse.py preflight`). `think:~/qrng-beacon/cycle.log` is the local record; failures are also public as
 `FAILED.json` markers. To stop: `systemctl --user disable --now qrng-beacon.timer` on think. A stopped

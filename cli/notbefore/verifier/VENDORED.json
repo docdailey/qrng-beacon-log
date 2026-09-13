@@ -1,18 +1,18 @@
 {
  "files": {
-  "bls_drand.py": "b909dd175b1f1c2dff0e78b77d83f2446afca73222a9946e35c2233732228ed9",
+  "bls_drand.py": "5d624ffb190daf93a062c088b9d65ebbd0efca4fcd29ce082c6efb158fae404c",
   "ci/KNOWN_NONCOMPLIANT.json": "403268695cbbb93f5e4f757cdb3568056b40fbb31a14d0a0a1cb8b4ec953abd6",
   "ci/anchor_lib.py": "5078e5631bb25fb66da2f90ff80c192993f579e60d4e434ced26b708168ba675",
-  "drand_anchor.py": "8c1d16bd8376218697626e5614644713f52f83b31aeb836cd7dd302b500eac85",
-  "hosts/EXPECTED.json": "4fa57dfff93b7227db41fbd5c9001c1687e9ffb9f5e568b84ac8029be92c6e35",
+  "drand_anchor.py": "bd4c55d307b4b0ca1a0fe24172d7bed7e62ea375e7bb2913ce9cff4d27f38182",
+  "hosts/EXPECTED.json": "01233620436c56e4ab3f63ad378411848e07fb0e121d96c32954712851ef8d89",
   "hosts/attest_host.py": "036cc9ca5e978fe9b3fb749a0ab7627fe1b18991ccfb05bbdeb3d1d4eec99a6a",
-  "hosts/attest_lib.py": "02ffc2a881d15daba1c1e1dda512d7f5efcf2adb9917a3748a7521954eea506f",
+  "hosts/attest_lib.py": "2dcf71469d4121c83d7fd2914e5cf1a75100923cd988fad514b8b7c13338cbe3",
   "hosts/entropy_host.py": "d2eaa923b7ac817f63b04a171abc667b0d56229c90b3e832ac787940710cd254",
   "hosts/gnss_probe.py": "e5ccf3e8e400b69be669113f6fb1ce2439225e6635054150b64fcd65f0d12cdb",
   "hosts/stamp_probe.py": "cbef4e704168a3caaff46411cc18f7772e0aa70637e196db2e6d2f1964cfbf65",
-  "keys/CHECKPOINT.json": "21e5c19be304ab156c44427ab98ea5bc3cba2b3d74bd8f90b1422f796239b43c",
+  "keys/CHECKPOINT.json": "7754adffd5a37bb1fd5691a27e7e7723f20d5204e406c33e4c185a88c1cd8fbb",
   "keys/DECISIONS.json": "e076fecdef96faf65b063101b5e86bddb4a71d4b361eb31f14f9babdd7b49e98",
-  "keys/KEYS.json": "9de75424793bcb2b00b42efc271465fa1a6656194507b1dd3ffdb7e28eef9b3f",
+  "keys/KEYS.json": "04e1f4187b14ad04af63c73c95589d4f5850ce8175d423b88fb2a6a101d96c8d",
   "keys/WITNESSES.json": "0e5b462b30b0908566359d3a18d88abda65a18bebe40cdc5e3d09c755f2c1cd9",
   "keys/anchor.pub": "5afc8aef90f65ae47aae97790aca4181c92b4cb37d23c7ab936c3a2b07de7b24",
   "keys/checkpoint.pub": "59656c367e26331c575d3ef5b4c6df2710e4d5341968392a05f11d26b1225d87",
@@ -28,13 +28,13 @@
   "keys/tsa/digicert-timestamping-ca-2025.pem": "5e13de210e735b614d6ec948361aadef9dd6c0ef575382a75f57fd59e183b90e",
   "keys/tsa/freetsa-root.pem": "2151b61137ffa86bf664691ba67e7da0b19f98c758e3d228d5d8ebf27e044438",
   "keys/tsa/freetsa-tsa.pem": "8bfb0305bb64e2571ca507552ef3245cb1c2fee8728e0ff8689225081ea13467",
-  "schema.py": "555ae06a344ffdeea79723b46327c849cec4cb88b2cc666b8b089a9efaba36f5",
+  "schema.py": "f30652af67f35c6a3f09c19c01d14750482967b2c5af2776643e9d31e6961767",
   "tlog.py": "a869262cb513c952d9fcb04a072c8e1d5e27b49089ec0778ce20856d6c60db1d",
-  "tsa.py": "bb4c45ec75e111041b93bfcf09c1e58ca462bce68d79bd4f323f31d0022fd225",
-  "verify.py": "a9840b644cd8d0b01883e8b1b18d56de1646c644e81c66f2eb510e29b570480c"
+  "tsa.py": "46482b1ca2ea0a953455c44247e1b5116218c6df865e5dc84a828b8fcda46a3d",
+  "verify.py": "d571162e4f5e1190ec34ac342d28f3e7f21de6bad5a8d9736ad7ae5367ef90f2"
  },
- "git_sha": "f65e70e3d28868f761b24aed4a8def407bd0fa9d",
+ "git_sha": "9a60e08e607b59e216fcce553e5e06fd41cb9816-dirty",
  "log_repo": "https://github.com/docdailey/qrng-beacon-log",
  "note": "Verifier, keys and expected-config pinned at this commit. The CLI executes ONLY these files; the log is read as data.",
- "vendored_utc": "2026-09-13T12:45:47Z"
+ "vendored_utc": "2026-09-13T14:19:13Z"
 }

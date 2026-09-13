@@ -274,6 +274,13 @@ def strict_main():
         # (p550 guard is covered by clock_health above)
         # ---- cadence trigger (2026-09-13): who said the hour started, and does the target follow from that instant? ----
         cad = core.get("cadence") or {}
+        selfw = cad.get("self_trigger") or {}
+        if selfw:
+            print(f"[INFO] cadence: aggregator {selfw.get('host')} woke {int((selfw.get('wake') or {}).get('late_ns') or 0) / 1000:.1f} us after "
+                  f"{utc(selfw['scheduled_unix_s']) if isinstance(selfw.get('scheduled_unix_s'), int) else '?'} on its own clock (covered by the aggregator signature only)")
+            if cad.get("trigger"):
+                chk((cad["trigger"].get("statement") or {}).get("scheduled_unix_s") == selfw.get("scheduled_unix_s"),
+                    "cadence: the time host's trigger and the aggregator's wake record name the same instant")
         if cad.get("trigger"):
             ts_, tsig = cad["trigger"]["statement"], cad["trigger"]["signature"]
             chk(ts_.get("v") == S.VERSION and ts_.get("role") == "time_attester" and ts_.get("host") == "p550" and ts_.get("kind") == "cadence-trigger"
@@ -290,6 +297,10 @@ def strict_main():
             if cad.get("targeting") == "scheduled-instant+lead":
                 chk(isinstance(t0, int) and rel == t0 + int(d.get("lead_rounds") or 0) * S.PERIOD,
                     f"cadence: target release == scheduled instant + {d.get('lead_rounds')} rounds ({utc(rel) if isinstance(t0, int) else '?'})")
+        elif selfw and cad.get("targeting") == "scheduled-instant+lead":
+            t0 = selfw.get("scheduled_unix_s")
+            chk(isinstance(t0, int) and (t0 - S.GENESIS) % S.PERIOD == 0 and rel == t0 + int(d.get("lead_rounds") or 0) * S.PERIOD,
+                f"cadence: target release == the aggregator's scheduled instant + {d.get('lead_rounds')} rounds ({utc(rel) if isinstance(t0, int) else '?'})")
             w, ph = ts_.get("wake") or {}, ts_.get("phc") or {}
             print(f"[INFO] cadence: {cad.get('source')}; p550 woke {int(w.get('late_ns') or 0) / 1000:.1f} us after {utc(t0) if isinstance(t0, int) else t0}; "
                   f"PHC-REALTIME at wake {ph.get('phc_minus_realtime_ns')} ns; targeting {cad.get('targeting')}")

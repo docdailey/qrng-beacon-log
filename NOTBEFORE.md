@@ -245,7 +245,7 @@ A reveal pulse \(N\) is a **NotBefore-eligible** seed if and only if:
 
 **First eligible pair:** 0020/0021.  
 **Preferred floor:** 0026/0027 (execution enforced).  
-**Current cadence:** hourly. Since 2026-09-13 the hour is started at :00:00 UTC by the time host's i210-disciplined clock (a signed trigger from p550, embedded in each commit as `core.cadence.trigger`); the aggregator is `think`; the release is at :05:00; think's `qrng-beacon.timer` at :02 is only the fallback (CADENCE.md §2).
+**Current cadence:** hourly. Since 2026-09-13 15:00Z the aggregator is `k3`; the cycle starts at :00:00.000 UTC on k3's own PTP-disciplined clock (`core.cadence.self_trigger`) and the time host p550 attests the same instant with a signed trigger sent by UDP (`core.cadence.trigger`); the release is at :05:00; k3's :02 timer is only the fallback (CADENCE.md §2). think aggregated 0018–0095.
 
 If the named hour is ineligible or missing, the consumer MUST take a **later** eligible hour named in advance as the alternate (the next eligible reveal in the log — typically the next cycle; a `failure` pulse shifts numbering, so name it by rule, not by \(N+2\)), never an earlier one, never a “best of three.”
 
@@ -607,6 +607,8 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 ---
 
 ## 16. Changelog
+
+**0.11 (2026-09-13).** Machine-to-machine hosts and the tick-started cycle (CADENCE.md §2, PROTOCOL §"Execution self-report", §"Cadence trigger", hosts/ISOLATION.md): host statements may now say `execution.via = "agentd"` with `agentd_sha256` (the signed-request TCP service `hosts/agentd.py` that replaces the SSH forced command); a verifier that only knows `via_forced_command` rejects them — `notbefore` ≥ 0.14.0 accepts either against the pinned hashes. Commits carry `core.cadence.self_trigger` (the aggregator's own wake at the instant) beside the time host's UDP-delivered `core.cadence.trigger`; the aggregator is k3 from the cutover seq (KEYS.json). No change to any value or derivation.
 
 **0.5.1 (2026-09-12, later).** §7.11 hardened after code review (ERR-013): both TSAs required, no failing token tolerated, gate on the LATEST token, no candidate cutoff in the rule, JCS/no-float canonical form, "timestamping" not "registration". Package and spec versions decoupled (§12). `DECISION-LOG.md` sketches the write-once decision log that would turn timestamping into registration.
 

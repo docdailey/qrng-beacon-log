@@ -22,23 +22,40 @@ GENESIS = 1692803367
 ENDPOINTS = ["https://api.drand.sh", "https://api2.drand.sh",
              "https://api3.drand.sh", "https://drand.cloudflare.com"]
 
+UA = {"User-Agent": "qrng-beacon-log/drand_anchor (notbefore.net)"}      # drand.cloudflare.com answers 403 to Python's default UA
+
+def _get_one(base, path, timeout):
+    with urllib.request.urlopen(urllib.request.Request(f"{base}/{CHAIN}{path}", headers=UA), timeout=timeout) as r:
+        return json.loads(r.read().decode()), base
+
 def _get(path, timeout=10):
-    last = None
-    for base in ENDPOINTS:
-        try:
-            with urllib.request.urlopen(f"{base}/{CHAIN}{path}", timeout=timeout) as r:
-                return json.loads(r.read().decode()), base
-        except Exception as e:
-            last = f"{base}: {type(e).__name__}: {e}"
-    raise RuntimeError(f"all drand endpoints failed; last={last}")
+    """Ask every relay at once and take the first good answer (2026-09-13: cold fetches from k3 were 0.24 / 0.57 / 0.91 s
+    for api/api2/api3 and the relays publish a new round 1.13-1.38 s after its release, in a different order each time).
+    The relay is not trusted for anything: the round is BLS-verified under the pinned group key by the caller."""
+    from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED, wait
+    errors = []
+    with ThreadPoolExecutor(max_workers=len(ENDPOINTS)) as ex:
+        pending = {ex.submit(_get_one, b, path, timeout) for b in ENDPOINTS}
+        while pending:
+            done, pending = wait(pending, return_when=FIRST_COMPLETED)
+            for f in done:
+                try:
+                    doc, base = f.result()
+                    for q in pending: q.cancel()
+                    return doc, base
+                except Exception as e: errors.append(f"{type(e).__name__}: {str(e)[:60]}")
+    raise RuntimeError(f"all drand endpoints failed; {errors}")
 
 def round_time(rnd):
     return GENESIS + (int(rnd) - 1) * PERIOD
 
-def fetch(rnd=None):
-    """Fetch `latest` (default) or a specific round. Returns a dict ready to embed in a pulse."""
-    t0 = time.time()
-    doc, base = _get("/public/latest" if rnd is None else f"/public/{int(rnd)}")
+def fetch(rnd=None, doc=None, base=None, fetched_at=None):
+    """Fetch `latest` (default) or a specific round - or, with `doc`, build the record from a document fetched by the
+    caller (beacon-cycle polls the relays for the reveal and hands the first answer over, saving a round trip). The
+    caller still BLS-verifies; the relay and the transport are not trusted. Returns a dict ready to embed in a pulse."""
+    t0 = fetched_at or time.time()
+    if doc is None: doc, base = _get("/public/latest" if rnd is None else f"/public/{int(rnd)}")
+    if rnd is not None and int(doc["round"]) != int(rnd): raise RuntimeError(f"relay returned round {doc['round']}, asked for {rnd}")
     t1 = time.time()
     sig = bytes.fromhex(doc["signature"])
     rand = bytes.fromhex(doc["randomness"])

@@ -1,5 +1,5 @@
 {
-  "note": "Expected per-host configuration for execution self-report enforcement (schema.execution_ok). beacon_cmd_sha256 is a list to allow rotation; host_config_sha256 is the SHA-256 of /etc/beacon/host.json on that host. Update deliberately, in the same commit as the change that alters them.",
+  "note": "Expected per-host configuration for execution self-report enforcement (schema.execution_ok). beacon_cmd_sha256 is a list to allow rotation; host_config_sha256 is the SHA-256 of /etc/beacon/host.json on that host. Update deliberately, in the same commit as the change that alters them. agentd_sha256 (2026-09-13): SHA-256 of /usr/local/bin/beacon-agentd (= hosts/agentd.py), the machine-to-machine service that replaces the SSH forced command; a statement produced by it says execution.via = agentd.",
   "beacon_cmd_sha256": [
     "c6e1cb712b6dd550e2763fce90212327b917e1ac54d820fc15b8dc4c8ef25a4e"
   ],
@@ -17,5 +17,8 @@
       "host_config_sha256": "ccf95f4e73636c4afdff7a0760c895455e64b2dcb022cbcb7df5ff002507ea13"
     }
   },
-  "recorded_utc": "2026-09-12"
+  "recorded_utc": "2026-09-12",
+  "agentd_sha256": [
+    "3e3c1ba9ce117f1b4b971f1030fd2c2d71b08c3b4d50d23252c68f670a827674"
+  ]
 }

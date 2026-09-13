@@ -3,13 +3,15 @@
 pulse.py — v0.5 AGGREGATOR. Assembles statements that each role host produced AND SIGNED ITSELF;
 the aggregator can neither invent a host's facts nor alter them without breaking that host's signature.
 
-  pulse.py commit [--lead N] [--trigger FILE]
+  pulse.py commit [--lead N] [--self-trigger FILE] [--trigger FILE | --trigger-dir DIR]
                                entropy host generates+holds E and signs {commitment, target_round};
-                               --trigger: the time host's signed cadence trigger (beacon-trigger.py); target = round at the
-                               scheduled instant + lead, and the trigger is embedded in core.cadence;
+                               --self-trigger: the aggregator's own wake record for the scheduled instant (beacon-cycle --at);
+                               --trigger/--trigger-dir: the time host's signed cadence trigger, given or arriving by UDP;
+                               target = round released at the instant + lead; both records are embedded in core.cadence;
                                gnss/time/witness hosts sign their own measurements bound to the commitment;
                                drand round at commit is BLS-verified here; >=2 RFC 3161 tokens or NOTHING is written.
-  pulse.py reveal              refuses until drand released the target round (BLS-verified); entropy host releases E
+  pulse.py reveal [--drand FILE]   refuses until drand released the target round (BLS-verified; FILE = the round document the
+                               cycle driver already fetched from the relays, verified here); entropy host releases E
                                and signs; other hosts sign fresh measurements bound to the commit pulse hash.
   pulse.py fail <reason>       signed FAILURE pulse for the pending commit (entropy host abandons E, signs that).
   pulse.py status
@@ -31,11 +33,20 @@ KEYS   = os.path.join(HERE, "keys", "KEYS.json")
 # (beacon-cmd) accepts a fixed set of operations. Role, host name and probe are fixed ON THE HOST, never sent from here.
 SSH = {"protectli": "beacon@192.168.70.1", "p550": "beacon@192.168.68.44", "k3": "beacon@192.168.68.24", "f9t": "beacon@192.168.68.46"}
 DEFAULT_LEAD, MIN_LEAD = 100, 60
-START_NS = time.time_ns()                      # aggregator clock at process start (think, NTP ~10 us): latency bookkeeping only
+START_NS = time.time_ns()                      # aggregator clock at process start: latency bookkeeping only
+AGG_HOST = os.environ.get("BEACON_AGGREGATOR_HOST") or os.uname().nodename.split(".")[0]   # think (until 2026-09-13) / k3
 _PULSE_RE = re.compile(r"^pulse-\d{4}\.json$")
 
 def die(m): sys.stderr.write("REFUSING TO MINT: %s\n" % m); sys.exit(2)
+RPC = os.environ.get("BEACON_RPC", "ssh")           # "agentd": signed requests over TCP to hosts/agentd.py; "ssh": the forced command
 def ssh(host, cmd, timeout=150):
+    """Ask a role host for one operation. Named for its history; with BEACON_RPC=agentd this is a signed TCP request
+    (hosts/rpc.py) and no SSH is involved. Returns what the host script printed, as before."""
+    if RPC == "agentd":
+        import shlex, rpc
+        return rpc.call(host, *shlex.split(cmd), timeout=timeout)
+    return _ssh(host, cmd, timeout)
+def _ssh(host, cmd, timeout=150):
     # stdin=DEVNULL: an inherited stdin let inner ssh sessions swallow the caller's script stream (2026-09-12 cut-over incident)
     r = subprocess.run(["ssh", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes", SSH[host], cmd], capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
     if r.returncode != 0: raise RuntimeError(f"{host}: {r.stderr.strip()[:200]}")
@@ -130,8 +141,11 @@ def collect(seq, phase, binding, names):
                 die(f"{n} ({host}) reports an unhealthy clock: epoch_ok={g.get('epoch_ok')} selects_refclock={g.get('chrony_selects_refclock')} {g.get('ALERT') or ''}")
     return out
 
-def drand_verified(rnd=None):
-    d = drand_anchor.fetch(rnd)
+def drand_verified(rnd=None, doc_file=None):
+    """BLS-verified drand round: `latest`, a specific round, or (doc_file) a document the cycle driver already fetched."""
+    if doc_file:
+        j = json.load(open(doc_file)); d = drand_anchor.fetch(rnd, doc=j["doc"], base=j.get("base"), fetched_at=j.get("fetched_unix_s"))
+    else: d = drand_anchor.fetch(rnd)
     if not d["randomness_equals_sha256_signature"]: die("drand randomness != sha256(signature)")
     ok, why = bls_drand.verify_pinned(d["round"], d["signature"], d["chain_hash"])
     if not ok: die("drand BLS verification failed: " + why)
@@ -151,7 +165,7 @@ def seal(core):
     priv = A.load_private("aggregator"); raw, b64, kid = A.pub_of(priv)
     if not key_allowed("aggregator", b64, core["seq"]): die("aggregator key not in KEYS.json for this seq")
     pulse = {"core": core, "pulse_hash": ph,
-             "signatures": {"aggregator": {"alg": "ed25519", "key_id": kid, "public_key_b64": b64, "signer": "think", "role": "aggregator",
+             "signatures": {"aggregator": {"alg": "ed25519", "key_id": kid, "public_key_b64": b64, "signer": AGG_HOST, "role": "aggregator",
                                            "sig_b64": base64.b64encode(priv.sign(bytes.fromhex(ph))).decode(), "over": "pulse_hash bytes",
                                            "attests": "assembly only; each host's facts are attested by that host's own signature inside core.statements"}},
              "disclosure": {"protocol": "PROTOCOL.md v0.5", "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md."}}
@@ -171,29 +185,50 @@ def seal(core):
     return final, ph, None
 
 # ---------------------------------------------------------------- commands
-def cmd_commit(lead, trigger_path=None):
+def _load_trigger(path, seq):
+    """(signed, received_unix_ns, ok, why) for a delivered trigger file, or None if absent."""
+    try: tj = json.load(open(path))
+    except Exception: return None
+    signed = tj.get("trigger") or {}; ok, why = check_trigger(signed, seq)
+    return signed, tj.get("received_unix_ns"), ok, why
+
+def cmd_commit(lead, trigger_path=None, self_trigger_path=None, trigger_dir=None):
+    """--self-trigger: the aggregator's own wake record for the scheduled instant (beacon-cycle.py --at); --trigger /
+    --trigger-dir: the time host's signed cadence trigger, delivered up front or arriving by UDP while this runs."""
     if lead < MIN_LEAD: die(f"lead {lead} < MIN_LEAD {MIN_LEAD}")
     require_synced()
     seq, prev_hash, hp = head()
     if ptype(hp) == "commit": die(f"pulse {seq} is an unresolved commit; reveal it or record a failure first")
     seq += 1
-    now = drand_verified()
-    # Cadence (2026-09-13): normally the time host's clock started this cycle and delivered a signed trigger; then the
-    # target is the round released AT the scheduled instant + lead, so the release lands on a fixed grid (:05:00) instead
-    # of drifting with the aggregator's start-up time. Without a valid trigger the target is drand-latest + lead as before.
-    cadence = {"schedule": "hourly; the time host (p550) triggers the commit at :00:00 UTC by its i210-disciplined clock; "
-                           "target round = the round released at that instant + lead (CADENCE.md)",
-               "source": "think-timer", "targeting": "drand-latest+lead", "aggregator_start_unix_ns": str(START_NS)}
-    target = now["round"] + lead
-    if trigger_path:
-        tj = json.load(open(trigger_path)); signed = tj["trigger"]; ok, why = check_trigger(signed, seq)
-        if ok:
-            t0 = signed["statement"]["scheduled_unix_s"]; r0 = (t0 - S.GENESIS) // S.PERIOD + 1        # the round released AT t0
-            cadence.update({"source": "p550/i210 cadence trigger", "trigger": signed, "received_unix_ns": str(tj.get("received_unix_ns"))})
-            if r0 + lead - now["round"] >= MIN_LEAD: target = r0 + lead; cadence["targeting"] = "scheduled-instant+lead"
-            else: cadence["targeting_note"] = f"trigger too old for scheduled targeting (round {r0}+{lead} vs drand latest {now['round']}); drand-latest+lead used"
-        else:
-            cadence["trigger_rejected"] = why; sys.stderr.write(f"note: cadence trigger rejected ({why}); minting from the aggregator's own start\n")
+    # Cadence (2026-09-13): the cycle starts ON the scheduled instant (the aggregator's own PHC-disciplined clock, and/or
+    # the time host's signed trigger). Then the target is the round released AT that instant + lead, so the release lands
+    # on a fixed grid (:05:00), and drand's latest round is fetched and BLS-verified IN PARALLEL with the entropy host and
+    # the statements instead of ahead of them. Without any instant the target is drand-latest + lead as before.
+    cadence = {"schedule": "hourly; the cycle starts at :00:00 UTC on the aggregator's PHC-disciplined clock; the time host (p550) attests the same "
+                           "instant with a signed trigger sent by UDP; target round = the round released at that instant + lead (CADENCE.md)",
+               "source": f"{AGG_HOST}-timer", "targeting": "drand-latest+lead", "aggregator_start_unix_ns": str(START_NS)}
+    t0 = None
+    if self_trigger_path:
+        try:
+            st_ = json.load(open(self_trigger_path))
+            if isinstance(st_.get("scheduled_unix_s"), int) and (st_["scheduled_unix_s"] - S.GENESIS) % S.PERIOD == 0 and 0 <= time.time() - st_["scheduled_unix_s"] <= 900:
+                t0 = st_["scheduled_unix_s"]; cadence["self_trigger"] = st_; cadence["source"] = f"{AGG_HOST} clock"
+            else: cadence["self_trigger_rejected"] = "not a fresh drand round boundary"
+        except Exception as e: cadence["self_trigger_rejected"] = f"{type(e).__name__}: {e}"
+    tr = _load_trigger(trigger_path, seq) if trigger_path else None
+    if tr:
+        signed, rx, ok, why = tr
+        if ok and (t0 is None or signed["statement"]["scheduled_unix_s"] == t0):
+            t0 = signed["statement"]["scheduled_unix_s"]; cadence.update({"trigger": signed, "received_unix_ns": str(rx)})
+            cadence["source"] = f"{AGG_HOST} clock + p550/i210 trigger" if "self_trigger" in cadence else "p550/i210 cadence trigger"
+        else: cadence["trigger_rejected"] = why if not ok else "trigger instant differs from the aggregator's scheduled instant"
+    from concurrent.futures import ThreadPoolExecutor
+    ex = ThreadPoolExecutor(max_workers=1); fut = ex.submit(drand_verified)          # fetch + BLS in the background
+    if t0 is not None:
+        r0 = (t0 - S.GENESIS) // S.PERIOD + 1                                          # the round released AT t0
+        target = r0 + lead; cadence["targeting"] = "scheduled-instant+lead"
+    else:
+        now = fut.result(); target = now["round"] + lead
     release = S.release_time(target)
     if release - time.time() < S.PUBLISH_MARGIN_S + 60: die("target round is not far enough away to honour the publication margin")
     # The SSH outcome itself is uncertain (timeout after the host created its secret, malformed reply): treat the
@@ -214,6 +249,17 @@ def cmd_commit(lead, trigger_path=None):
         sts = {"entropy": ent, **collect(seq, "commit", commitment, S.REQUIRED["commit"])}
         anchor_s = D(sts["gnss"]["statement"]["measurement"]["anchor"]["utc_unix_s"])
         if anchor_s >= release: raise RuntimeError("GNSS anchor is not before the target release")
+        # the time host's trigger normally lands by UDP a few ms after the instant; pick it up now if it was not given up front
+        if "trigger" not in cadence and trigger_dir and os.path.exists(os.path.join(trigger_dir, "pending.json")):
+            tr = _load_trigger(os.path.join(trigger_dir, "pending.json"), seq); os.replace(os.path.join(trigger_dir, "pending.json"), os.path.join(trigger_dir, "last.json"))
+            if tr:
+                signed, rx, ok, why = tr
+                if ok and (t0 is None or signed["statement"]["scheduled_unix_s"] == t0):
+                    cadence.update({"trigger": signed, "received_unix_ns": str(rx), "source": f"{AGG_HOST} clock + p550/i210 trigger" if "self_trigger" in cadence else "p550/i210 cadence trigger"})
+                else: cadence["trigger_rejected"] = why if not ok else "trigger instant differs from the aggregator's scheduled instant"
+        now = fut.result(); ex.shutdown(wait=False)                                     # drand latest, BLS-verified (ran in parallel)
+        if now["round"] >= target: raise RuntimeError(f"drand is already at round {now['round']} >= target {target}")
+        if t0 is not None and target - now["round"] < MIN_LEAD: raise RuntimeError(f"scheduled target {target} is only {target - now['round']} rounds ahead of drand {now['round']} (< MIN_LEAD {MIN_LEAD})")
     except SystemExit:
         rollback("aggregator-refused"); raise
     except Exception as e:
@@ -223,7 +269,7 @@ def cmd_commit(lead, trigger_path=None):
             "derived": {"entropy_commitment": commitment, "target_round": target, "target_release_unix_s": release,
                         "target_release_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(release)),
                         "anchor_utc_unix_s": str(anchor_s), "anchor_before_release_s": str(D(release) - anchor_s), "lead_rounds": lead},
-            "tooling": tooling(sts), "aggregator_host": "think", "cadence": cadence}
+            "tooling": tooling(sts), "aggregator_host": AGG_HOST, "cadence": cadence}
     try:
         path, ph, st = seal(core)
     except SystemExit:
@@ -237,20 +283,31 @@ def cmd_commit(lead, trigger_path=None):
                       "target_release_utc": core["derived"]["target_release_utc"], "tsa_tokens": [(t["tsa"], t["time"]) for t in json.load(open(path + ".tsa.json"))["tokens"]],
                       "reveal_after_s": round(release - time.time(), 1)}, indent=2))
 
-def cmd_reveal():
+def cmd_reveal(drand_file=None):
     require_synced()
     seq, prev_hash, hp = head()
     if ptype(hp) != "commit": die("head is not a commit; nothing to reveal")
     cseq, cph = seq, prev_hash; target = hp["core"]["derived"]["target_round"]; seq += 1
-    latest = drand_verified()
-    if latest["round"] < target: die(f"drand at round {latest['round']}; target {target} releases {hp['core']['derived']['target_release_utc']}")
-    if latest["round_release_unix_s"] > S.release_time(target) + S.REVEAL_DEADLINE_S:
-        die(f"reveal deadline passed (drand time is {latest['round_release_unix_s'] - S.release_time(target):.0f} s past the round); record a failure instead")
-    dr = drand_verified(target)
-    ent = check_statement("entropy", json.loads(ssh("protectli", f"reveal-prepare {cseq} {cph}")), cseq, "reveal", cph)
+    if time.time() > S.release_time(target) + S.REVEAL_DEADLINE_S:
+        die(f"reveal deadline passed ({time.time() - S.release_time(target):.0f} s past the round on the aggregator's clock); record a failure instead")
+    if drand_file:
+        dr = drand_verified(target, doc_file=drand_file)                               # the round the cycle driver already fetched; BLS-verified here
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=2) as ex:                                    # latest + target: two fetches, two BLS checks, at once
+            f_latest, f_target = ex.submit(drand_verified), ex.submit(drand_verified, target)
+            latest = f_latest.result()
+            if latest["round"] < target: die(f"drand at round {latest['round']}; target {target} releases {hp['core']['derived']['target_release_utc']}")
+            if latest["round_release_unix_s"] > S.release_time(target) + S.REVEAL_DEADLINE_S:
+                die(f"reveal deadline passed (drand time is {latest['round_release_unix_s'] - S.release_time(target):.0f} s past the round); record a failure instead")
+            dr = f_target.result()
+    with ThreadPoolExecutor(max_workers=1) as ex:                                        # the entropy host reveals while the clock hosts attest
+        f_ent = ex.submit(lambda: json.loads(ssh("protectli", f"reveal-prepare {cseq} {cph}")))
+        rest = collect(seq, "reveal", cph, S.REQUIRED["reveal"])
+        ent = check_statement("entropy", f_ent.result(), cseq, "reveal", cph)
     E = bytes.fromhex(ent["statement"]["entropy_hex"])
     if hashlib.sha256(S.COMMIT_DOMAIN + E).hexdigest() != hp["core"]["derived"]["entropy_commitment"]: die("revealed E does not match the published commitment")
-    sts = {"entropy": ent, **collect(seq, "reveal", cph, S.REQUIRED["reveal"])}
+    sts = {"entropy": ent, **rest}
     anchor_s = D(sts["gnss"]["statement"]["measurement"]["anchor"]["utc_unix_s"])
     if anchor_s < dr["round_release_unix_s"]: die("reveal anchored before the round released")
     buf = S.MIX_DOMAIN + E + bytes.fromhex(dr["randomness"]) + bytes.fromhex(dr["chain_hash"]) + int(target).to_bytes(8, "big")
@@ -262,7 +319,7 @@ def cmd_reveal():
                         "round_release_unix_s": dr["round_release_unix_s"], "anchor_utc_unix_s": str(anchor_s),
                         "anchor_after_release_s": str(anchor_s - D(dr["round_release_unix_s"])),
                         "commit_anchor_before_release_s": str(D(dr["round_release_unix_s"]) - D(hp["core"]["derived"]["anchor_utc_unix_s"]))},
-            "tooling": tooling(sts), "aggregator_host": "think",
+            "tooling": tooling(sts), "aggregator_host": AGG_HOST,
             "cadence": {"aggregator_start_unix_ns": str(START_NS), "started_after_release_s": str(D(START_NS) / D(10**9) - D(dr["round_release_unix_s"])),
                         "meaning": "when the aggregator began the reveal, on its own (NTP) clock; the attested ordering is the GNSS anchor, not this"}}
     path, ph, _ = seal(core)
@@ -285,7 +342,7 @@ def cmd_fail(reason):
             "derived": {"commit_seq": cseq, "commit_pulse_hash": cph, "reason": reason, "target_round": hp["core"]["derived"]["target_round"],
                         "entropy_commitment": hp["core"]["derived"]["entropy_commitment"],
                         "meaning": "The referenced commit did not complete its contract. Consumers must treat it as failed; its E was abandoned unrevealed."},
-            "tooling": tooling(sts), "aggregator_host": "think"}
+            "tooling": tooling(sts), "aggregator_host": AGG_HOST}
     path, ph, _ = seal(core)
     print(json.dumps({"minted": path, "type": "failure", "seq": seq, "fails_commit": cseq, "reason": reason}, indent=2))
 
@@ -355,7 +412,7 @@ def cmd_skip(reason):
                         "published_head_confirmed": not offline, "head_type_before": ptype(hp),
                         "meaning": "No commit was minted this cycle. Nothing was selected and nothing was withheld: no commitment "
                                    "existed. This pulse only makes the gap, and the operator's stated cause, public at a timestamped moment."},
-            "tooling": {}, "aggregator_host": "think"}
+            "tooling": {}, "aggregator_host": AGG_HOST}
     path, ph, _ = seal(core)
     toks = json.load(open(path + ".tsa.json"))["tokens"] if os.path.exists(path + ".tsa.json") else []
     print(json.dumps({"minted": path, "type": "skip", "seq": seq, "refused_by": core["derived"]["refused_by"],
@@ -417,8 +474,10 @@ def cmd_status():
 
 if __name__ == "__main__":
     a = sys.argv[1:]; cmd = a[0] if a else "status"
-    if cmd == "commit": cmd_commit(int(a[a.index("--lead") + 1]) if "--lead" in a else DEFAULT_LEAD, a[a.index("--trigger") + 1] if "--trigger" in a else None)
-    elif cmd == "reveal": cmd_reveal()
+    if cmd == "commit":
+        opt = lambda k: a[a.index(k) + 1] if k in a else None
+        cmd_commit(int(opt("--lead") or DEFAULT_LEAD), opt("--trigger"), opt("--self-trigger"), opt("--trigger-dir"))
+    elif cmd == "reveal": cmd_reveal(a[a.index("--drand") + 1] if "--drand" in a else None)
     elif cmd == "fail": cmd_fail(" ".join(a[1:]) or "unspecified")
     elif cmd == "finalize": cmd_finalize()
     elif cmd == "abort-unpublished": cmd_abort_unpublished()

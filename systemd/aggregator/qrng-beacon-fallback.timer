@@ -1,0 +1,11 @@
+[Unit]
+Description=qrng-beacon fallback timer (:02)
+
+[Timer]
+OnCalendar=*:02:00
+AccuracySec=1s
+RandomizedDelaySec=0
+Persistent=true
+
+[Install]
+WantedBy=timers.target

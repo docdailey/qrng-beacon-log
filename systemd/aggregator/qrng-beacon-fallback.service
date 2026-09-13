@@ -1,0 +1,12 @@
+# Fallback: if the tick-started cycle did not claim the hour (prepare failed, host rebooted), run the plain path at :02.
+# beacon-cycle.py exits at once when the hour is already claimed or another cycle holds the lock.
+[Unit]
+Description=qrng-beacon fallback: plain cycle at :02 when the tick-started one did not run (CADENCE.md)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/qrng-beacon
+Environment=BEACON_RPC=agentd
+ExecStart=/usr/bin/python3 %h/qrng-beacon/beacon-cycle.py
+TimeoutStartSec=1500

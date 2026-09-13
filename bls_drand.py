@@ -12,19 +12,58 @@ A valid σ is the unique signature a ≥threshold set of operators could produce
 cannot be precomputed, forged, or swapped for another round. This removes the HTTP relay, DNS and TLS
 from the trust base — only the pinned group key and the ≥t-honest-operators assumption remain.
 
-Requires `pip install py_ecc` (pure Python; ~1-2 s per verification). Absent it, callers should WARN.
+Backends: supranational/blst (native, ~ms; used when libblst.so is found - see _blst) or `pip install py_ecc` (pure
+Python; 2 s on x86, 4.7 s on the RISC-V aggregator). Absent both, callers should WARN. `python3 bls_drand.py` runs
+the positive and negative self-test with whichever backend is active; set BLST_LIB= (empty) to force py_ecc.
 """
 import hashlib, json, os
 
 PIN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "keys", "drand-quicknet.json")
 DST = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_"
 
-def available():
+_BLST = None
+def _blst():
+    """Native backend: supranational/blst through ctypes when BLST_LIB, ~/blst/libblst.so or /usr/local/lib/libblst.so
+    exists (built with `./build.sh -shared -D__BLST_PORTABLE__`). Falls back to py_ecc. Same checks, same answer:
+    curve + prime-order-subgroup membership of sig and pk, then e(sig, g2) == e(H(m), pk) via blst_core_verify_pk_in_g2
+    (hash_or_encode=1 = hash-to-curve RO, same DST and same 32-byte message as the py_ecc path). Measured 2026-09-13 on k3
+    (RISC-V): py_ecc 4.7 s per round, blst a few ms."""
+    global _BLST
+    if _BLST is not None: return _BLST or None
+    import ctypes
+    for cand in (os.environ.get("BLST_LIB"), os.path.expanduser("~/blst/libblst.so"), "/usr/local/lib/libblst.so"):
+        if not cand or not os.path.exists(cand): continue
+        try:
+            lib = ctypes.CDLL(cand)
+            for fn in ("blst_p1_uncompress", "blst_p2_uncompress"): getattr(lib, fn).argtypes = [ctypes.c_void_p, ctypes.c_char_p]; getattr(lib, fn).restype = ctypes.c_int
+            lib.blst_p1_affine_in_g1.argtypes = [ctypes.c_void_p]; lib.blst_p1_affine_in_g1.restype = ctypes.c_bool
+            lib.blst_p2_affine_in_g2.argtypes = [ctypes.c_void_p]; lib.blst_p2_affine_in_g2.restype = ctypes.c_bool
+            lib.blst_core_verify_pk_in_g2.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_char_p, ctypes.c_size_t]
+            lib.blst_core_verify_pk_in_g2.restype = ctypes.c_int
+            _BLST = (lib, cand); return _BLST
+        except Exception:
+            continue
+    _BLST = False; return None
+
+def backend():
+    if _blst(): return "blst"
     try:
         import py_ecc  # noqa
-        return True
+        return "py_ecc"
     except ImportError:
-        return False
+        return None
+
+def available(): return backend() is not None
+
+def _verify_round_blst(pk_hex: str, round_no: int, sig_hex: str) -> bool:
+    import ctypes
+    lib, _ = _blst(); sig_b, pk_b = bytes.fromhex(sig_hex), bytes.fromhex(pk_hex)
+    if len(sig_b) != 48 or len(pk_b) != 96: return False
+    sig, pk = ctypes.create_string_buffer(96), ctypes.create_string_buffer(192)          # blst_p1_affine, blst_p2_affine
+    if lib.blst_p1_uncompress(sig, sig_b) != 0 or lib.blst_p2_uncompress(pk, pk_b) != 0: return False
+    if not lib.blst_p1_affine_in_g1(sig) or not lib.blst_p2_affine_in_g2(pk): return False
+    m = message(round_no)
+    return lib.blst_core_verify_pk_in_g2(pk, sig, 1, m, len(m), DST, len(DST), None, 0) == 0
 
 def pinned():
     return json.load(open(PIN_FILE))
@@ -33,6 +72,7 @@ def message(round_no: int) -> bytes:
     return hashlib.sha256(int(round_no).to_bytes(8, "big")).digest()
 
 def verify_round(pk_hex: str, round_no: int, sig_hex: str) -> bool:
+    if _blst(): return _verify_round_blst(pk_hex, round_no, sig_hex)
     from py_ecc.bls.hash_to_curve import hash_to_G1
     from py_ecc.bls.point_compression import decompress_G1, decompress_G2
     from py_ecc.optimized_bls12_381 import pairing, G2, is_on_curve, b, b2, curve_order, multiply, Z1, Z2
@@ -65,6 +105,7 @@ if __name__ == "__main__":
     CH = "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
     def get(u):
         with urllib.request.urlopen(u, timeout=15) as r: return json.load(r)
+    print("backend:", backend())
     print("=== 1. cross-check the group public key across independent operators ===")
     keys = {}
     for base in ("https://api.drand.sh", "https://api2.drand.sh", "https://api3.drand.sh", "https://drand.cloudflare.com"):
