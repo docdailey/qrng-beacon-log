@@ -387,10 +387,12 @@ def reveal_phase(seq, target, release, finalize=True):
 def cyclelog(seq):
     """One row for this cycle into the timehat DB (hosts/cyclelog.py), detached: it reads the pulse files, trigger/anchor-*.json
     and cycle.log after the fact and can neither delay nor fail the beacon (Bill, 2026-09-13: stats from the timehat DB)."""
+    # Synchronous, bounded: a detached child died with the service's cgroup when the main process exited (23:00Z, no row for
+    # 0112; systemd KillMode=control-group). It runs after "cycle complete", so nothing waits on it but this log line.
     try:
-        subprocess.Popen([sys.executable, os.path.join(REPO, "hosts", "cyclelog.py"), "--seq", str(seq)], cwd=REPO,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, start_new_session=True)
-    except Exception as e: log(f"cyclelog not started: {type(e).__name__}: {str(e)[:80]}")
+        out = subprocess.run([sys.executable, os.path.join(REPO, "hosts", "cyclelog.py"), "--seq", str(seq)], cwd=REPO, capture_output=True, text=True, timeout=25, stdin=subprocess.DEVNULL)
+        log("cyclelog: " + (out.stdout.strip().splitlines() or [out.stderr.strip()[-120:] or "no output"])[-1][:160])
+    except Exception as e: log(f"cyclelog failed: {type(e).__name__}: {str(e)[:80]}")
 
 def main():
     """Fallback / plain path (a timer started this process): claim the hour, prepare, then commit and reveal."""
