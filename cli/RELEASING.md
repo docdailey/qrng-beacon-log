@@ -142,3 +142,11 @@ were refused with and without Content-Length, a malformed `created_utc` was reje
 2026-09-13 03:48 UTC; review residuals (value-rule binding, offline-selection notice, witness quorum in bundles). Confirmed
 from a fresh venv against PyPI: `verify 71` passed.
 
+`notbefore 0.12.2` — version committed on `c93ad98` but **never tagged or published**: the tag step's head-equals-origin guard
+failed after a mint landed on main, and the change (the shared verdict type, `policy.py`) shipped in 0.13.0 instead.
+
+`notbefore 0.13.0` — tag `cli-v0.13.0` on `ae8b6ea`, verifier vendored at `7e17f49`, workflow run 34737707969 (test 3.10 + 3.12,
+live, Worker conformance, publish), published 2026-09-13 04:31 UTC; spec 0.10: timing profile `notbefore/timing/v1` (review 2, T1)
+plus the shared verdict type from 0.12.2. Confirmed from a fresh venv against PyPI: `verify 73` passed; the pre-release smoke ran a
+`--timing-required` contract end to end (SATISFIED; receipt clocks section; check-bundle re-evaluated the profile from the bundle).
+
