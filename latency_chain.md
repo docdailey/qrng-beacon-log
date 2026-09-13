@@ -172,6 +172,8 @@ the other's datagram in the kernel (`SO_TIMESTAMPNS`) and in userspace. Clock st
 | 18:28:00 | normal, PM QoS held, idle states default | +5.7 µs | **+7.9 µs** | +288 µs | 503 µs | 308 µs |
 | 18:29:00 | normal, PM QoS held, idle states default | +5.6 µs | **+7.9 µs** | **+24.9 µs** | 782 µs | 395 µs |
 | 18:30:00 | normal, pinned to CPU0, no QoS | +6.8 µs | +719 µs | +274 µs | 280 µs | 340 µs |
+| 20:14–20:16 | normal, three baseline minutes (p550 only) | | +8.2 / +8.2 / +2,349 µs | +281 / +295 / +281 µs | | |
+| 20:17–20:19 | normal, three more (an unbind attempt used the wrong device name, so nothing had changed) | | +7.8 / +8.3 / +7.4 µs | +295 / +282 / +288 µs | | |
 
 One-way = the peer's send stamp to the receiver's kernel stamp, both software; serializing and the first `sendto` cost
 80–105 µs on either host and are inside these numbers.
@@ -186,15 +188,31 @@ What it shows:
   thread, which the FIFO-50 IRQ threads (all five igb vectors sit on CPU0 at FIFO 50) hold off around the second. The
   cadence service does not sleep on the clock, it waits on the PPS event, which is why the live trigger wakes 15–19 µs
   after the edge regardless.
-- **p550's clock wake is controlled; its PPS interrupt stamp is not.** Thirteen lab minutes, idle states, priority, CPU
-  pinning and PM QoS tried in turn (table). The *timer wake* of a p550 process is +7.4 to +8.3 µs whenever SCHED_FIFO or
-  PM QoS (`/dev/cpu_dma_latency` = 0) is in effect, six of six, and erratic otherwise (360 µs, 719 µs, 2.7 ms, 6.8 ms):
-  a normal-priority sleeper on this PREEMPT_RT kernel wakes late unless the tick is kept running or it outranks the IRQ
-  threads. The *pps1 edge stamp* (the software time at which the `irq/178` thread serviced the i210's second interrupt)
-  was +23 to +26 µs in three runs and +269 to +298 µs in ten, and nothing tried selects between them: not cpu-retentive
-  off (CPU0 or all), not FIFO, not a busy CPU0, not QoS (fast in two of three). The i210's hardware latch of the F9T
-  edge (ts2phc, ±10 ns) is unaffected; this is the service latency of one interrupt and it costs the trigger ~250 µs on
-  most hours. It stays an open item with a measured distribution rather than a fix.
+- **p550's clock wake is controlled by priority or PM QoS; its PPS interrupt stamp is set by a kernel splat on CPU0.**
+  The *timer wake* of a p550 process is +7.4 to +8.3 µs whenever SCHED_FIFO or PM QoS (`/dev/cpu_dma_latency` = 0) is
+  in effect, and erratic otherwise (360 µs, 719 µs, 2.3 ms, 2.7 ms, 6.8 ms): a normal-priority sleeper on this
+  PREEMPT_RT kernel wakes late unless the tick is kept running or it outranks the IRQ threads. The *pps1 edge stamp*
+  was +23 to +26 µs in three runs and +269 to +298 µs in sixteen, and neither idle states, priority, CPU pinning nor
+  QoS selected between them. The cause is elsewhere: p550's kernel logs `BUG: sleeping function called from invalid
+  context` from `pps_gpio_irq_handler → pps_event → rt_spin_lock` **every second** (604 in ten minutes), a twenty-line
+  backtrace generated inside the GPIO PPS hard interrupt on CPU0 with interrupts off. Read second by second, the two
+  PPS devices show the order: the GPIO PPS from the LEA-6T (`pps0`) is stamped **+15 to +19 µs** after the second, the
+  i210 PHC second (`pps1`) **+279 to +287 µs**, every second, both counters advancing together. The i210's MSI, also on
+  CPU0, is serviced when the GPIO handler's backtrace finishes; the ~265 µs gap is the splat. The three fast stamps are
+  the seconds when the i210 interrupt was serviced first. Interrupt affinity cannot be changed on this SoC (`EINVAL`
+  for the i210 vectors, `EIO` for the GPIO line: all on CPU0). The i210's hardware latch of the F9T edge (ts2phc,
+  ±10 ns) is untouched; only this software stamp, and everything the cadence service does after it, is late.
+- **Fix options for the 265 µs (Bill's call):** (i) unbind the `pps-gpio` device on p550 (`pps` under
+  `/sys/bus/platform/drivers/pps-gpio`): removes the splat and the LEA-6T PPS source that chrony holds as a non-selected
+  fallback behind the i210 PHC (chrony would need a restart afterwards to drop the dead descriptor); (ii) fix the
+  driver on that RT kernel (a threaded IRQ or a raw lock in `pps_event`), which is a kernel rebuild on the stratum-1
+  host and not casual; (iii) accept it. Separately, the cadence service should run at SCHED_FIFO: at 20:00 it was
+  descheduled twice around the instant (woke 1.2 ms after the edge, send stamp 1.7 ms after k3 had the datagram).
+- **k3 cannot trigger on its own PHC today.** The disciplined PHC on `end0` (stmmac) exposes one periodic output pin and
+  no alarm, no external timestamp and no PPS source. The idle 10GbE port's PHC (`r8127`) advertises a PPS source, but
+  the vendor driver emulates it with an hrtimer (`rtl8127_hrtimer_for_pps`), enabling it raised a kernel WARNING in
+  that timer on k3, no event arrived in 90 s, and the PHC read costs 25 µs. Reverted; k3 healthy. A hardware second on
+  k3 means wiring the stmmac pulse output to a GPIO with `pps-gpio`, if the pin is exposed (August's pad-route notes).
 - **The clocks agree to the resolution of software stamps.** In the 18:14 run the two one-way delays were 415 and
   417 µs: a clock offset d would make them differ by 2d, so |d| ≲ a few µs, consistent with the PHC readings (k3
   16 ns → −101 ns from its PHC across the runs; p550 ~1.7 µs, inside its 8 µs PHC read bracket).
