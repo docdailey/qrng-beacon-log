@@ -5,6 +5,7 @@
   notbefore seed    <seq> --purpose <P>
   notbefore shuffle <seq> --purpose <P> <file>
   notbefore split   <seq> --purpose <P> --frac 0.8 <file>
+  notbefore keygen | plan | register | execute | receipt | bundle | check-bundle   (WORKFLOW.md: the preregistration path)
 
 `value`/`seed`/`shuffle`/`split` print nothing usable unless `verify` would pass; exit 1 otherwise.
 Streams: the verification transcript goes to STDERR, payloads to STDOUT — `V=$(notbefore value 45)` captures the hex
@@ -86,6 +87,18 @@ def build_parser():
     ex.add_argument("--require-log", action="store_true", help="refuse unless the decision log confirms this contract is the FIRST entry for its (key_id, decision_id) and was received before the round (default: report, and refuse only a superseded or late entry)")
     ex.add_argument("--transcript", help="transcript path (default notbefore-executed-<contract sha>.json; '-' stdout; 'none')")
     for fl in (("--json",), ("--offline",), ("-q", "--quiet"), ("--no-anchors",)): ex.add_argument(*fl, action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    rcpt = sub.add_parser("receipt", help="one-page human-readable decision receipt for a contract (re-verifies every line; Markdown to stdout or --out)")
+    rcpt.add_argument("contract"); rcpt.add_argument("--transcript", help="the execution transcript (default: notbefore-executed-<sha16>.json beside the contract or in the cwd)"); rcpt.add_argument("--out", help="write the receipt here instead of stdout")
+    rcpt.add_argument("--no-verify", action="store_true", help="do not re-verify the pulse pair (faster; the receipt says so)")
+    for fl in (("--json",), ("--offline",), ("-q", "--quiet"), ("--no-anchors",)): rcpt.add_argument(*fl, action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    bd = sub.add_parser("bundle", help="write a self-contained verification bundle (directory, or .zip): contract + sidecars, transcript, pulse pair + tokens + checkpoint + inclusion proofs + anchors, decision-log leaf/proof, public keys, README (the receipt), MANIFEST")
+    bd.add_argument("contract"); bd.add_argument("--transcript"); bd.add_argument("--out", help="directory to create, or a path ending in .zip (default notbefore-bundle-<sha16>.zip)")
+    bd.add_argument("--include-input", action="store_true", help="include the committed input file (default: its SHA-256 only)"); bd.add_argument("--include-output", action="store_true", help="include the output files (default: their SHA-256s only)")
+    bd.add_argument("--no-verify", action="store_true", help=argparse.SUPPRESS)
+    for fl in (("--json",), ("--offline",), ("-q", "--quiet"), ("--no-anchors",)): bd.add_argument(*fl, action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    cb = sub.add_parser("check-bundle", help="re-verify a bundle OFFLINE with this installation's pinned keys and trust roots; exit 0/1")
+    cb.add_argument("bundle"); cb.add_argument("--no-pulse-verify", action="store_true", help="skip the vendored verify.py run on the bundled pulses")
+    for fl in (("--json",), ("-q", "--quiet")): cb.add_argument(*fl, action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     cp = sub.add_parser("checkpoint", help="show and verify the log's current signed checkpoint against the vendored identity and this machine's cached head")
     for fl in (("--json",), ("--offline",), ("-q", "--quiet")): cp.add_argument(*fl, action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     sp = sub.add_parser("split", help="shuffle, then split FILE into A (first floor(frac·k)) and B"); common(sp, purpose=True, file=True)
@@ -265,7 +278,7 @@ def _write_transcript(a, t, slug):
 
 def main(argv=None):
     a = build_parser().parse_args(argv)
-    for k, d in (("verbose", False), ("quiet", False), ("json", False), ("offline", False), ("no_anchors", False), ("seq", 0), ("checkpoint_url", None), ("transcript", None), ("witness_quorum", 0)):
+    for k, d in (("verbose", False), ("quiet", False), ("json", False), ("offline", False), ("no_anchors", False), ("seq", 0), ("checkpoint_url", None), ("transcript", None), ("witness_quorum", 0), ("no_verify", False), ("out", None), ("include_input", False), ("include_output", False)):
         if not hasattr(a, k): setattr(a, k, d)
     if getattr(a, "witness_quorum", 0): os.environ["NOTBEFORE_WITNESS_QUORUM"] = str(a.witness_quorum)
     lock = a.lock or ("notbefore.lock" if os.path.exists("notbefore.lock") and a.cmd != "pin" else None)
@@ -300,6 +313,29 @@ def main(argv=None):
             for n, t, _ in toks: _err(f"timestamped: {n} {t}")
             ok, why, _ = C.timestamp_verdict(toks, bad, None); _err(why if ok else "INCOMPLETE: " + why); return 0 if ok else 1
         if a.cmd == "execute": return _execute(a, src)
+        if a.cmd in ("receipt", "bundle"):
+            from . import receipt as RC
+            try: F = RC.gather(a.contract, a.transcript, src=src, verify_pair=not a.no_verify, refetch=not a.offline, live_log=not a.offline)
+            except FileNotFoundError as e: _err(str(e)); return 2
+            if a.cmd == "receipt":
+                md = RC.render(F)
+                if a.out: open(a.out, "w").write(md); _err(f"receipt written: {a.out}")
+                else: sys.stdout.write(md if not a.json else json.dumps({k: v for k, v in F.items() if k != "contract"} | {"contract": {k: v for k, v in F["contract"].items() if k != "obj"}}, indent=1, sort_keys=True, default=str))
+                for l in F["lines"]:
+                    if not a.quiet or l.startswith(("[FAIL]", "[WARN]")): _err(l)
+                return 0 if F["ok"] else 1
+            out = a.out or f"notbefore-bundle-{F['contract']['sha256'][:16]}.zip"
+            try: path = RC.bundle(F, out, src=src, include_input=a.include_input, include_output=a.include_output)
+            except FileExistsError as e: _err(str(e)); return 2
+            for l in F["lines"]:
+                if not a.quiet or l.startswith(("[FAIL]", "[WARN]")): _err(l)
+            _err(f"bundle written: {path} ({'all checks passed' if F['ok'] else 'WITH FAILURES — see README.md'})"); print(json.dumps({"bundle": path, "ok": F["ok"], "status": F["status"]}) if a.json else path); return 0 if F["ok"] else 1
+        if a.cmd == "check-bundle":
+            from . import receipt as RC
+            ok, lines = RC.check_bundle(a.bundle, verify_pulses=not a.no_pulse_verify)
+            for l in lines:
+                if not a.quiet or l.startswith(("[FAIL]", "[WARN]")): _err(l)
+            _err(("BUNDLE VERIFIED" if ok else "BUNDLE NOT VERIFIED") + f" — {a.bundle}"); print(json.dumps({"ok": ok, "lines": lines}, indent=1) if a.json else ("ok" if ok else "FAIL")); return 0 if ok else 1
         if a.cmd == "pin":
             ident = {}
             try:
