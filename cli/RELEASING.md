@@ -113,3 +113,9 @@ rebase, immediately before the push, every time.
 `keygen` → `plan --no-log --no-timestamp` → `execute --allow-unregistered` → `receipt` (all checks PASS, three honest
 WARNs for the unregistered dry run) → `bundle` → `check-bundle` (BUNDLE VERIFIED, offline, fresh cache) → `verify 65`.
 
+`notbefore 0.10.0` — tag `cli-v0.10.0` on `793b353`, verifier vendored at `618b5ce`, workflow run 34728679279, published
+2026-09-13 00:48 UTC; spec 0.7: `execute` fails closed on the decision log, explicit leaf-to-namespace binding, FALLBACK.md.
+Confirmed from a fresh venv against PyPI: a signed, timestamped but unregistered contract is REFUSED ("did not confirm …
+authoritative preregistration"); `--allow-unregistered` runs DEGRADED and is still refused on the round gate; a live
+registration (entry 6) passes the authority check and is refused only on the round gate; `verify 65` passed.
+
