@@ -108,3 +108,8 @@ first 0.8.1 tag was withdrawn (run cancelled, tag deleted before publish) becaus
 vendoring had moved the commit, leaving VENDORED.json naming a sha that never reached origin — vendor AFTER the
 rebase, immediately before the push, every time.
 
+`notbefore 0.9.0` — tag `cli-v0.9.0` on `34a7a2e`, verifier vendored at `2e24989`, workflow run 34727493163, published
+2026-09-13 00:19 UTC; `receipt`, `bundle`, `check-bundle`, WORKFLOW.md. Confirmed from a fresh venv against PyPI:
+`keygen` → `plan --no-log --no-timestamp` → `execute --allow-unregistered` → `receipt` (all checks PASS, three honest
+WARNs for the unregistered dry run) → `bundle` → `check-bundle` (BUNDLE VERIFIED, offline, fresh cache) → `verify 65`.
+
