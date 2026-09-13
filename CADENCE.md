@@ -86,7 +86,9 @@ Full figures in `latency_chain.md`.
 instant (0.88 ms after receiving it), host statements +0.36 to +0.75 s, commit pushed **+2.3 s** (57.7 s before its round,
 margin 20 s), Rekor integratedTime instant + 1 s, round served by the first relay 1.12 s after release, reveal pushed
 **3.2 s after release** - randomness usable **63.2 s after the instant** (303 s at 0100). Both pulses verify; the :02
-fallback found the hour claimed and exited. Next step after a day of clean 60 s cycles: 10 rounds (30 s).
+fallback found the hour claimed and exited. **19:00Z, 0104/0105:** the same to the digit that matters - edge +280 µs, k3 start
++2.58 ms, commit pushed +2.2 s (57.8 s before the round), Rekor instant + 1 s, reveal pushed 3.3 s after release, usable
+**+63.3 s**, both verified. Next step after a day of clean 60 s cycles: 10 rounds (30 s).
 
 **Cadence source (since 2026-09-13 13:00Z, pulses 0092–0095 — think era):** the hour is started by the **time host's clock, not by think's timer**.
 `hosts/beacon-cadence.py` runs on p550 (PREEMPT_RT; `CLOCK_REALTIME` disciplined by chrony from the i210 PHC, which
