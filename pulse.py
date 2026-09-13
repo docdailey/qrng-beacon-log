@@ -199,7 +199,7 @@ def _load_trigger(path, seq):
     try: tj = json.load(open(path))
     except Exception: return None
     signed = tj.get("trigger") or {}; ok, why = check_trigger(signed, seq)
-    return signed, tj.get("received_unix_ns"), ok, why
+    return signed, tj.get("received_unix_ns"), ok, why, tj.get("kernel_rx_unix_ns")
 
 def cmd_commit(lead, trigger_path=None, self_trigger_path=None, trigger_dir=None, assume_synced=False):
     """--self-trigger: the aggregator's own wake record for the scheduled instant (beacon-cycle.py --at); --trigger /
@@ -227,9 +227,9 @@ def cmd_commit(lead, trigger_path=None, self_trigger_path=None, trigger_dir=None
         except Exception as e: cadence["self_trigger_rejected"] = f"{type(e).__name__}: {e}"
     tr = _load_trigger(trigger_path, seq) if trigger_path else None
     if tr:
-        signed, rx, ok, why = tr
+        signed, rx, ok, why, krx = tr
         if ok and (t0 is None or signed["statement"]["scheduled_unix_s"] == t0):
-            t0 = signed["statement"]["scheduled_unix_s"]; cadence.update({"trigger": signed, "received_unix_ns": str(rx)})
+            t0 = signed["statement"]["scheduled_unix_s"]; cadence.update({"trigger": signed, "received_unix_ns": str(rx), "datagram_kernel_rx_unix_ns": krx})
             cadence["source"] = f"{AGG_HOST} clock + p550/i210 trigger" if "self_trigger" in cadence else "p550/i210 cadence trigger"
         else: cadence["trigger_rejected"] = why if not ok else "trigger instant differs from the aggregator's scheduled instant"
     ex = ThreadPoolExecutor(max_workers=1); fut = ex.submit(drand_verified)          # fetch + BLS in the background
@@ -262,9 +262,9 @@ def cmd_commit(lead, trigger_path=None, self_trigger_path=None, trigger_dir=None
         if "trigger" not in cadence and trigger_dir and os.path.exists(os.path.join(trigger_dir, "pending.json")):
             tr = _load_trigger(os.path.join(trigger_dir, "pending.json"), seq); os.replace(os.path.join(trigger_dir, "pending.json"), os.path.join(trigger_dir, "last.json"))
             if tr:
-                signed, rx, ok, why = tr
+                signed, rx, ok, why, krx = tr
                 if ok and (t0 is None or signed["statement"]["scheduled_unix_s"] == t0):
-                    cadence.update({"trigger": signed, "received_unix_ns": str(rx), "source": f"{AGG_HOST} clock + p550/i210 trigger" if "self_trigger" in cadence else "p550/i210 cadence trigger"})
+                    cadence.update({"trigger": signed, "received_unix_ns": str(rx), "datagram_kernel_rx_unix_ns": krx, "source": f"{AGG_HOST} clock + p550/i210 trigger" if "self_trigger" in cadence else "p550/i210 cadence trigger"})
                 else: cadence["trigger_rejected"] = why if not ok else "trigger instant differs from the aggregator's scheduled instant"
         now = fut.result(); ex.shutdown(wait=False)                                     # drand latest, BLS-verified (ran in parallel)
         if now["round"] >= target: raise RuntimeError(f"drand is already at round {now['round']} >= target {target}")

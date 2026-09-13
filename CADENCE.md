@@ -61,9 +61,11 @@ PHC second boundary, stamped by the interrupt handler. `hosts/beacon-cadence.py`
 (`PPS_FETCH`) for the last second before the instant and fires when the event for the scheduled second arrives — no timer,
 no clock arithmetic; the statement carries `hw_event` (the stamped edge, its sequence number, how long after the edge the
 process ran: 40–150 µs measured). The clock path (`clock_nanosleep` + spin) remains only as a fallback if the event stream
-is silent for 50 ms past the instant, and the statement says which one fired. On k3 the aggregator waits at the instant for
-that hardware-originated datagram and starts on it when it arrives within 5 ms (`self_trigger.start_source = "hw-datagram"`,
-~1 ms after the pulse across the LAN); otherwise it starts on its clock (`"clock"`). The remaining network hop goes away
+is silent for 50 ms past the instant, and the statement says which one fired. From 0098 to 0108 k3 waited at the instant for
+that hardware-originated datagram and started on it (`self_trigger.start_source = "hw-datagram"`, 2.5–8 ms after the instant).
+**From 0110 (22:00Z, Bill's choice "B" after the same-instant test in latency_chain.md §9) k3 starts on its own PTP-disciplined
+clock at the instant (`"own-clock"`, 5–7 µs late) and binds the time host's hardware-event datagram when it arrives, as
+attestation of the same instant rather than as the cause of the start.** `BEACON_START=hw-datagram` restores the old mode. The remaining network hop goes away
 with a wire: the i210's free periodic-output pin (SDP2, `n_per_out 2`) programmed to pulse at the instant, into a k3 GPIO
 read through the gpio character device with edge timestamps — then k3 wakes on the physical pulse the PHC generated.
 

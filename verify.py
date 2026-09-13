@@ -301,9 +301,9 @@ def strict_main():
             t0 = selfw.get("scheduled_unix_s")
             chk(isinstance(t0, int) and (t0 - S.GENESIS) % S.PERIOD == 0 and rel == t0 + int(d.get("lead_rounds") or 0) * S.PERIOD,
                 f"cadence: target release == the aggregator's scheduled instant + {d.get('lead_rounds')} rounds ({utc(rel) if isinstance(t0, int) else '?'})")
-            w, ph = ts_.get("wake") or {}, ts_.get("phc") or {}
-            print(f"[INFO] cadence: {cad.get('source')}; p550 woke {int(w.get('late_ns') or 0) / 1000:.1f} us after {utc(t0) if isinstance(t0, int) else t0}; "
-                  f"PHC-REALTIME at wake {ph.get('phc_minus_realtime_ns')} ns; targeting {cad.get('targeting')}")
+            w, ph = selfw.get("wake") or {}, selfw.get("phc") or {}                # no time-host trigger bound: only the aggregator's own record
+            print(f"[INFO] cadence: {cad.get('source')}; no time-host trigger in this pulse; aggregator woke {int(w.get('late_ns') or 0) / 1000:.1f} us after "
+                  f"{utc(t0) if isinstance(t0, int) else t0} ({selfw.get('start_source')}); PHC-REALTIME at wake {ph.get('phc_minus_realtime_ns')} ns; targeting {cad.get('targeting')}")
         elif cad:
             print(f"[INFO] cadence: {cad.get('source')} ({cad.get('targeting')})" + (f"; trigger rejected: {cad['trigger_rejected']}" if cad.get("trigger_rejected") else ""))
         if prev is not None:

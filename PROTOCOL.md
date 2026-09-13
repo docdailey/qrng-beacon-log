@@ -146,8 +146,13 @@ A commit may carry `core.cadence.trigger`: a **statement signed by the time host
   "signature": { "alg":"ed25519", "key_id", "public_key_b64", "sig_b64", "over":"canon(statement)" } }
 ```
 `core.cadence.self_trigger` (from pulse 0098) is the aggregator's OWN wake record for the instant — `{host, scheduled_unix_s,
-start_source: "hw-datagram" | "clock", datagram_rx_unix_ns?, time_host_event?, wake:{unix_ns, late_ns}, phc:{...}}` — covered by
-the aggregator signature only (it is not a host statement). The time host's trigger statement may carry `hw_event`
+start_source: "own-clock" (from pulse 0110, 2026-09-13 22:00Z) | "hw-datagram" | "clock" (0098–0108), datagram_rx_unix_ns?, time_host_event?,
+wake:{unix_ns, late_ns}, phc:{...}}` — covered by the aggregator signature only (it is not a host statement). **`own-clock`:** the
+aggregator wakes on its own PTP-disciplined clock at the scheduled instant and starts at once (5–7 µs late in every
+measurement); the time host's signed hardware-event datagram is not waited for and is bound when it arrives, as attestation of
+the same instant (`cadence.trigger`, `cadence.received_unix_ns`, `cadence.datagram_kernel_rx_unix_ns`). **`hw-datagram`:** the
+start was the arrival of that datagram (2.5–8 ms after the instant). The verifier's checks are the same in both modes: the two
+records name the same instant, the trigger verifies under p550's pinned key, and the target round follows from that instant. The time host's trigger statement may carry `hw_event`
 `{source, assert_unix_ns, sequence, edge_after_instant_ns, woke_after_edge_ns}`: the PHC's own second-boundary interrupt the
 process was blocked on; absent when the clock fallback fired (`wake.how` says which). `core.cadence.source`
 is `"k3 clock + p550/i210 trigger"` (both present), `"k3 clock"` (self only), `"p550/i210 cadence trigger"` (think era, 0092–0095)

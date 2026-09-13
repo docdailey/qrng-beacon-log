@@ -127,9 +127,14 @@ def sleep_until(t_ns, spin_ns=1_500_000):
             if r != 4: raise OSError(r, os.strerror(r))
     while time.clock_gettime_ns(time.CLOCK_REALTIME) < t_ns: pass
 
+START_MODE = os.environ.get("BEACON_START", "own-clock")             # own-clock (Bill, 2026-09-13 21:2xZ: "B") | hw-datagram (0098-0110: start on the time host's datagram)
 HW_WAIT_MS = float(os.environ.get("BEACON_HW_TRIGGER_WAIT_MS", "25"))   # p550: wake ~0.5 ms + sign ~1 ms + LAN 0.25 ms; 25 ms is margin, not expectation
 def self_trigger(t0):
-    """Start the cycle ON THE PULSE when it can, on the clock when it must (Bill, 2026-09-13: "non-userspace. we know the
+    """Two start modes (BEACON_START). own-clock (default from pulse 0112, Bill's choice "B", 2026-09-13): wake on this host's
+    PTP-disciplined clock exactly at the instant and start; the time host's signed hardware-event datagram arrives ~1-3 ms
+    later and is bound to the pulse as attestation of the same instant (measured: k3 wakes 5-7 us late on its clock; the
+    datagram-first start was 2.5-8 ms). hw-datagram (0098-0110): the mode described below.
+    Start the cycle ON THE PULSE when it can, on the clock when it must (Bill, 2026-09-13: "non-userspace. we know the
     time precisely.. we shouldn't have to wait for system clock"). The time host fires on its i210 PHC's own second
     interrupt and sends the signed datagram; if that datagram arrives here within HW_WAIT_MS of the instant the cycle
     starts on it (start_source = hw-datagram, ~1 ms after the pulse over the LAN). Otherwise the process wakes on
@@ -142,7 +147,7 @@ def self_trigger(t0):
     except OSError: pass
     ev = TRIGGER_ARRIVED if TRIGGER_ARRIVED is not None else threading.Event()
     sleep_until(t0 * 10**9)                                                  # be awake AT the instant either way
-    deadline = t0 * 10**9 + int(HW_WAIT_MS * 1e6)
+    deadline = t0 * 10**9 + (0 if START_MODE == "own-clock" else int(HW_WAIT_MS * 1e6))   # own-clock: no wait at all
     # ONE blocking wait: a 200 us polling loop here held the interpreter lock for up to its 5 ms switch interval and
     # starved the listener thread that verifies the datagram (start 0.9-8 ms after arrival in staging runs 4-8)
     at_gate = time.clock_gettime_ns(time.CLOCK_REALTIME)                     # when the main thread began waiting (should be ~T0)
@@ -159,6 +164,10 @@ def self_trigger(t0):
                "datagram_kernel_rx_unix_ns": None if getattr(ev, "kernel_rx_ns", None) is None else str(ev.kernel_rx_ns), "time_host_event": hw,
                "meaning": ("started on the time host's signed datagram, itself fired by the i210 PHC's second interrupt; the aggregator's clock was not consulted for the start"
                            if hw else "started on the time host's signed datagram, but the time host itself fired on its clock fallback (no hardware event in its statement)")}
+    elif START_MODE == "own-clock":
+        src = {"start_source": "own-clock", "meaning": ("started on the aggregator's PTP-disciplined clock at the scheduled instant (clock_nanosleep to T-1.5 ms, spin to T; "
+                                                        "5-7 us late in every measurement, latency_chain.md §9); the time host's hardware-event datagram is not waited for - "
+                                                        "it is bound as attestation of the same instant when it arrives (cadence.trigger, cadence.received_unix_ns)")}
     else:
         src = {"start_source": "clock", "meaning": f"no hardware-originated datagram within {HW_WAIT_MS:g} ms; started on CLOCK_REALTIME"}
     src["main_thread_at_gate_unix_ns"] = str(at_gate)                       # diagnostic: the wait began here; a late value means the pre-tick work overran
@@ -391,7 +400,9 @@ def precise_main(t0, commit_only=False):
         if claim_hour(hour_of(t0)): reveal_phase(*resume)
         return
     import threading; sys.setswitchinterval(0.0005)                          # 0.5 ms instead of 5: a thread holding the lock cannot delay the wake by more
-    globals()["TRIGGER_ARRIVED"] = threading.Event(); TRIGGER_ARRIVED.rx_ns = None; TRIGGER_ARRIVED.kernel_rx_ns = None; TRIGGER_ARRIVED.statement = None; TRIGGER_ARRIVED.record = None
+    if START_MODE == "own-clock": globals()["TRIGGER_ARRIVED"] = None       # B: the listener writes trigger/pending.json itself; the main thread does not wait for it
+    else:
+        globals()["TRIGGER_ARRIVED"] = threading.Event(); TRIGGER_ARRIVED.rx_ns = None; TRIGGER_ARRIVED.kernel_rx_ns = None; TRIGGER_ARRIVED.statement = None; TRIGGER_ARRIVED.record = None
     warm_connections(); udp_listener(t0, until=t0 + 240)
     # the last look at origin/main happens BEFORE the tick (10 s), so pulse.py can skip its own fetch on the timed path
     assume = []

@@ -227,11 +227,14 @@ Design option this opens (not built; Bill's call): k3 starts at its own instant 
 record as it arrives ~2.5 ms later, so the datagram attests the instant instead of causing the start. The pulse would then
 name k3's PTP-disciplined clock as the start and p550's i210 event as the independent witness of the same second. What is
 lost: today the start is *caused* by a hardware event on another host; with this change it is caused by k3's clock and
-*confirmed* by that event. Three ways to use these numbers, for Bill to choose between (none built): **(A)** as is, k3's start caused by p550's
-hardware-event datagram, +2.5 ms; **(B)** k3 starts on its own clock (+6 µs) and binds p550's hardware record when it
-arrives ~2.5 ms later; **(C)** both fire on their clocks (p550 under PM QoS or FIFO, +8 µs), p550's datagram reaches k3
-~0.4 ms after the instant, and the hardware record follows in a second datagram. Only (A) keeps "caused by a hardware
-event on another host" literally true. All p550 experiments were reverted; the host is in its 17:00 state.
+*confirmed* by that event. Three ways to use these numbers were put to Bill: **(A)** as is, k3's start caused by p550's hardware-event datagram,
++2.5 ms; **(B)** k3 starts on its own clock (+6 µs) and binds p550's hardware record when it arrives; **(C)** both fire on
+their clocks. **Bill chose B (21:2xZ).** Built as `BEACON_START=own-clock` (the default) in beacon-cycle.py: the main thread
+does not wait for the datagram, the listener writes it to `trigger/pending.json` on arrival and pulse.py binds it with its
+userspace and kernel receive stamps; the verifier's checks are unchanged (same instant, signature under the pinned key,
+target from the instant), so no CLI release is needed. Staged as a full pair on a lab instant before going live at 22:00Z
+(pulse 0110). What changes in the claim: the start is caused by k3's PTP-disciplined clock and *confirmed* by a hardware
+event on another host, no longer caused by it.
 
 ### 9b. Userspace budget on the trigger path (measured 2026-09-13 21:05Z, 300 warm iterations, pulse 0108's statement)
 
@@ -253,3 +256,69 @@ T−30 ms, just before it starts polling the PPS device (`hw_wait(..., warm=)`).
 canonical statement bytes so the verifier does not re-canonicalize (~0.1 ms) and a faster Ed25519 (libsodium, if
 present) for another ~0.1 ms. With the GPIO PPS gone the edge itself is at +21 µs; the remaining 2.8 ms to k3's start is
 now all userspace and wire: 0.2 ms to assemble, 1.4 ms to sign cold, 0.25 ms LAN, 0.9 ms to verify and hand over.
+
+## 10. Lead: 20 rounds against 10, by the numbers (data pulled 2026-09-13 21:30Z)
+
+The lead is a policy: the commit must be public (git push complete) at least `PUBLISH_MARGIN_S` = 20 s before its target
+round, or `beacon-cycle.py` mints a signed **failure pulse** for the hour instead (public, chain-linked, visible to every
+verifier; the hour has no randomness). Mint-time Rekor anchoring runs beside the push and never blocks it. So the lead has
+to cover: the instant to the push completing, with the margin behind it. Everything after the release (relay fetch, reveal)
+is unaffected by the lead. Sources: k3 and think `cycle.log`, the git commit time of each chain file, the anchors branch
+`INDEX.tsv`, the `.tsa.json` sidecars, and the timehat DB (`ptp4l_stream`, `epoch_stream`, `ts2phc_stream`, `gmmon_stream`).
+
+### What has been measured
+
+| quantity | n | median | p90 | max | source |
+|---|---|---|---|---|---|
+| **k3: instant → commit pushed** (0098–0108) | 6 | 2.3 s | 2.4 s | **2.4 s** | k3 log: lead − "pushed N s before release" |
+| think: push duration (committed → pushed), 0012–0096 | 45 | 1 s | 2 s | **2 s** | think log: "release in X" − "pushed Y before" (1 s resolution) |
+| think: git commit of the chain file after the top of the hour | 43 | 105 s | 133 s | 3,041 s (0020, 2026-09-12 manual era) | git log (the 80 s of think preparation is inside this) |
+| Rekor integratedTime − instant, mint-anchored era (0100–0108) | 5 | **1 s** | 1 s | 1 s | anchors INDEX.tsv |
+| Rekor integratedTime − instant, CI era (0042–0098) | 30 | 121 s | 132 s | 1,646 s (0090, the unscheduled pair, ERR-016) | anchors INDEX.tsv; CI ran after the push |
+| TSA token times, k3 cycles | 12 | same second as the instant | +1 s | +1 s | `.tsa.json` (`requested_unix` = instant or +1 s) |
+| drand round first served after release, k3 | 6 | 1.13 s | 1.22 s | 1.22 s | k3 log (after the release; not on the lead path) |
+| k3 PHC vs grandmaster (BMC), 24 h, state s2 only | 65,942 | 0 ns | — | **167 ns** (p99 103 ns) | timehat `ptp4l_stream` |
+| k3 system clock vs its PHC, 24 h | 32,130 | −8 ns | — | 225 ns (p99 155 ns) | timehat `epoch_stream` |
+| p550 i210 PHC vs F9T, 24 h | 33,841 | 0 ns | — | 37 ns (p99 22 ns) | timehat `ts2phc_stream` |
+| p550 system clock vs its PHC, 24 h | 32,623 | −29 ns | — | 507 ns (p99 435 ns) | timehat `epoch_stream` |
+| i210's observation of the BMC grandmaster, 24 h | 8,611 | +15 ns | — | 107 ns (p99 62 ns) | timehat `gmmon_stream` |
+
+The clocks are not a factor at any lead: the aggregator's instant is known to about 0.2 µs against a grandmaster that
+is itself within 0.1 µs of the GNSS-locked i210. What the lead buys is room for the push.
+
+Two publication failures exist in the whole log, neither a slow push: **0048** (2026-09-12 16:05Z, think): the reveal
+was refused because `main` had moved under the checkout (a concurrent push) and the resume's push was rejected as
+non-fast-forward (ERR-010); the 17:00 cycle found 0049 revealed at the head. **0096/0097** (2026-09-13 15:07Z): a crash in the new
+reveal path, ERR-017; the failure pulse was minted inside the window. Neither would be changed by the lead. `beacon-cycle.py`
+now rebases onto `origin/main` and retries a rejected push (3 attempts) and fetches `origin/main` 10 s before the tick.
+
+### The arithmetic
+
+| | 20 rounds (60 s) | 10 rounds (30 s) |
+|---|---|---|
+| target round released at | instant + 60 s | instant + 30 s |
+| push must complete by | instant + 40 s | instant + 10 s |
+| observed push completion, k3 | +2.2 to +2.4 s | +2.2 to +2.4 s |
+| slack behind the worst observed push | **37.6 s** | **7.6 s** |
+| a push slower than this fails the hour | ~39 s | **~9 s** (start +0.25 s, statements +0.75 s, then the push) |
+| observed cycles that would have breached | 0 of 6 (0 of 51 counting think's 1–2 s pushes) | 0 of 6 (0 of 51) |
+| randomness usable after the instant | 63.2–63.4 s | ≈ 33 s |
+
+The two eras agree that a push takes 1–2.4 s end to end; no push in 51 commits took longer than 2.4 s, and the one
+rejected push (0048) was a fork, not a slow link. At 10 rounds a nine-second push fails the hour; nothing in the record
+comes within a factor of three of that.
+
+### What a breach looks like
+
+A push that has not completed 20 s before the round makes the aggregator mint `failure` for that seq (signed, chain-linked,
+with the reason `commit-published-late` and the measured margin), push that instead, and the CI chain check fails the
+commit if a pushed commit ever misses the margin. Consumers see a gap hour, never a late commit presented as on time.
+
+### Recommendation
+
+Go to 10 rounds after **24 clean 60 s cycles** (one day: 0102 was the first; 18:00Z 2026-09-14) provided that over those
+cycles: no push completes later than +5 s (double the worst seen; that would still leave 5 s of slack at 30 s), no
+push is rejected and retried, and Rekor stays at instant + 1 s. If any cycle shows a push past +5 s, hold at 20 rounds and
+look at the push, not the lead. The margin stays at 20 s: with a 2.4 s push it is the number that protects against the
+one thing the record has never shown, a GitHub stall, and it is what turns a stall into a visible failure rather than a
+late commit.
