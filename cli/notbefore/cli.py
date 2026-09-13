@@ -118,7 +118,8 @@ def _print_check(R, a):
     if a.verbose:
         for v in R.verbose: sys.stderr.write("\n--- verifier output ---\n" + v)
     if not a.quiet or not R.ok:
-        sys.stderr.write(("VERIFIED" if R.ok else "NOT VERIFIED") + f" — NotBefore {R.seq} (commit {R.commit_seq}), log {str(R.log_git_sha)[:12]}\n")
+        if R.ok or R.commit_seq is not None: sys.stderr.write(("VERIFIED" if R.ok else "NOT VERIFIED") + f" — NotBefore {R.seq} (commit {R.commit_seq}), log {str(R.log_git_sha)[:12]}\n")
+        else: sys.stderr.write(f"NOT VERIFIED — {R.seq} is not a NotBefore number in this log (see the line above), log {str(R.log_git_sha)[:12]}\n")
 
 def _plan(a):
     from . import contract as C

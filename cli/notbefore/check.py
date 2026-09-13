@@ -46,6 +46,19 @@ def check_pair(seq: int, src: LogSource, refetch=True, anchors=True, verbose=Fal
     if rev is None: R.say(False, f"pulse {seq:04d} is not in the log at {R.log_ref}"); return R
     if com is None: R.say(False, f"predecessor pulse {seq-1:04d} is not in the log"); return R
     rc_, cc_ = rev["core"], com["core"]
+    rt = rc_.get("type")
+    if rt != "reveal":                                              # 0.14.3: say what the number IS instead of three inverted FAIL lines
+        if rt == "commit":
+            nxt = src.pulse(seq + 1) if src.has_pulse(seq + 1) else None; nt = ((nxt or {}).get("core") or {}).get("type")
+            rel = (rc_.get("derived") or {}).get("target_release_utc")
+            if nt == "reveal": hint = f"its reveal is {seq + 1:04d}: run  notbefore verify {seq + 1}"
+            elif nt == "failure": hint = f"it was resolved by FAILURE pulse {seq + 1:04d} and produced no value"
+            else: hint = f"it is not revealed yet (target release {rel}); verify {seq + 1} once the reveal is published"
+            R.say(False, f"{seq:04d} is a COMMIT pulse, not a NotBefore number: a NotBefore number names the REVEAL that resolves a commit; {hint}")
+        elif rt == "failure": R.say(False, f"{seq:04d} is a FAILURE pulse: commit {seq - 1:04d} was abandoned and produced no value; there is no NotBefore number here")
+        elif rt == "skip": R.say(False, f"{seq:04d} is a SKIP pulse (a refused commit, PROTOCOL v0.5.1); it carries no value")
+        else: R.say(False, f"pulse {seq:04d} is a reveal (type {rt})")
+        return R
     R.pulse_hash_reveal, R.pulse_hash_commit = rev["pulse_hash"], com["pulse_hash"]
     R.say(rc_.get("v") == "0.5", f"reveal {seq:04d} is protocol v0.5 (got {rc_.get('v') or rc_.get('version') or 'legacy'})")
     R.say(rc_.get("type") == "reveal", f"pulse {seq:04d} is a reveal (type {rc_.get('type')})")

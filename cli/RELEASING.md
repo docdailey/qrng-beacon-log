@@ -172,3 +172,9 @@ Lesson: run `vendor.py` after the LAST commit of the set exists. Here it ran bef
 `own-clock` start without a bound datagram) crashed `verify.py` with `UnboundLocalError: ts_` in the `[INFO]` line (found 2026-09-13 in a
 staging run where the lab sender never fired; no published pulse has hit it). PATCH: vendored file changed, contract unchanged.
 
+`notbefore 0.14.3` — CLI fix (verifier unchanged, vendored at `60f26a6`): `notbefore verify N` with N a COMMIT pulse printed three
+inverted FAIL lines ("pulse 0112 is a reveal (type commit)") and "NOT VERIFIED - NotBefore 112 (commit None)", which reads as a broken
+log to anyone checking the newest commit directly (2026-09-13 23:4xZ, a reviewer on 0112/0113). It now says what the number is and where
+the value is: "0112 is a COMMIT pulse ... its reveal is 0113: run notbefore verify 113"; failure and skip pulses get the same treatment.
+Test 19 covers it.
+

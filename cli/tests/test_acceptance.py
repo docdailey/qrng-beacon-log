@@ -490,3 +490,9 @@ def test_35_timing_profile_is_enforced_only_when_declared_required_and_never_rer
     rc, o, e = nb("execute", str(c2), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "t2.json"), cwd=str(tmp_path)); assert rc == 0, e   # the live record satisfies v1
     # (a required-and-failing case cannot be staged against a signed log copy without breaking host signatures, which is a different
     #  refusal; the refusal-on-the-same-commit path is covered by the pure-function verdicts above plus the transcript's timing_policy.)
+
+def test_19_commit_number_gets_guidance_not_inverted_failures():
+    """0.14.3: `verify 22` (a COMMIT) must say what 22 is and point at its reveal, not print 'is a reveal (type commit)'."""
+    rc, out, err = nb("verify", "22"); assert rc == 1
+    assert "0022 is a COMMIT pulse" in err and "verify 23" in err and "is a reveal (type commit)" not in err, err[-600:]
+    rc, out, err = nb("verify", "97"); assert rc == 1 and "0097 is a FAILURE pulse" in err, err[-400:]
