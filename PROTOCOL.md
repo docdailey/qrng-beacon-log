@@ -173,7 +173,7 @@ independent measurement of it. A reveal carries `core.cadence.aggregator_start_u
 
 ### Timing contract
 Commit: ≥ **2** RFC 3161 tokens taken at mint over the final bytes, else **nothing is written**; each token time
-must be ≥ 120 s before `target_release`; the commit must be pushed ≥ 120 s before `target_release`. Reveal must
+must be ≥ `PUBLISH_MARGIN_S` before `target_release` (120 s through pulse 0101; **20 s from 0102**, 2026-09-13, after the chain reached ~2 s to publication and ~1 s to a Rekor anchor - latency_chain.md); the commit must be pushed by the same margin. Reveal must
 be pushed ≤ 600 s after release, else a **signed failure pulse** follows the commit.
 
 ---
@@ -233,7 +233,7 @@ fields are fixed-length, so the preimage is unambiguous without separators. **Co
 
 ## 5. Timing contract (CADENCE.md)
 
-commit pushed ≥ 120 s before `target_release`; reveal pushed ≤ 600 s after. Breach → FAILED marker. A
+commit pushed ≥ 120 s (0012–0101) / ≥ 20 s (0102+) before `target_release`; reveal pushed ≤ 600 s after. Breach → a signed failure pulse. A
 commit with neither a reveal nor a FAILED marker after the deadline is a **withheld reveal**; an
 independent watcher (`watcher.py`) publishes a signed NON-REVEAL record under its own key.
 

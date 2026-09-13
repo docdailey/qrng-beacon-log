@@ -89,7 +89,7 @@ Full figures in `latency_chain.md`.
 `time_attester` key and delivers it to think over SSH with a key that can run exactly one forced command there
 (`beacon-trigger.py`, removed at the k3 cutover), which verified the signature against `keys/KEYS.json` and started `qrng-beacon.service`. The commit
 embeds the signed trigger as `core.cadence.trigger`, and the target round is **the round released at the scheduled
-instant + 100**, so the release lands at **:05:00 every hour** instead of drifting with think's start-up time.
+instant + lead** (100 rounds until 0101, **20 rounds = 60 s from 0102**, 2026-09-13 18:00Z), so the release lands on a fixed grid (**:01:00** now; :05:00 before) instead of drifting with the aggregator's start-up time.
 `verify.py` checks the trigger's signature and that the target follows from the instant. If no trigger arrives, the
 :02 timer runs the hour and the pulse says so (`core.cadence.source = "think-timer"`, `targeting = "drand-latest+lead"`);
 one cycle per hour either way (`.cycle-hour`). The trigger records its own wake lateness (`wake.late_ns`, ~0.1–0.4 ms
@@ -159,12 +159,12 @@ checks, same limits (`notbefore/timing/v1`); the window is now stated per statem
 | parameter | proposed | why |
 |---|---|---|
 | period | **1 commit/reveal pair per hour**, on the hour | `qrng-beacon.timer` |
-| lead | **100 rounds = 5 min** | `beacon-cycle.py LEAD` |
-| publish deadline | commit pushed + TSA-stamped **≥ 2 min before** target release | `PUBLISH_MARGIN_S`; breach → `pulse-NNNN.FAILED.json` pushed |
+| lead | **20 rounds = 60 s** from 0102 (2026-09-13 18:00Z); 100 rounds = 5 min for 0012–0101 | `beacon-cycle.py LEAD` / `BEACON_LEAD` in the k3 unit; floor `MIN_LEAD` 10 rounds |
+| publish deadline | commit pushed + TSA-stamped **≥ 20 s before** target release from 0102 (≥ 120 s before) | `PUBLISH_MARGIN_S`; breach → a signed failure pulse |
 | reveal deadline | reveal pushed **≤ 10 min after** target release | `REVEAL_DEADLINE_S`; breach → FAILED marker pushed; watcher attests |
 | host | **k3** (aggregator, from 0098); think 0012–0097 | k3: PTP-disciplined clock, 8-core RISC-V, always on; think keeps the decisions mirror |
 | cadence source | **the aggregator's own PHC-disciplined clock** (`clock_nanosleep` to :00:00.000; `core.cadence.self_trigger`) **plus p550's signed trigger by UDP** (`core.cadence.trigger`) | `systemd/aggregator/qrng-beacon.timer` (:59:20) → `beacon-cycle.py --at next`; `beacon-cadence.service` on p550; `verify.py` cadence checks |
-| release grid | **:05:00 UTC** every hour (round at the instant + 100) | `pulse.py commit --self-trigger/--trigger-dir`, targeting `scheduled-instant+lead` |
+| release grid | **:01:00 UTC** every hour from 0102 (round at the instant + 20); :05:00 for 0092–0101 | `pulse.py commit --self-trigger/--trigger-dir`, targeting `scheduled-instant+lead` |
 | fallback | k3's timer at **:02:00** runs the plain path; the pulse says `cadence.source = "k3-timer"` | `systemd/aggregator/qrng-beacon-fallback.timer` |
 
 Operational notes: **outages and recovery are in `RECOVERY.md`** (planned-pause checklist, `pulse.py preflight`). `think:~/qrng-beacon/cycle.log` is the local record; failures are also public as

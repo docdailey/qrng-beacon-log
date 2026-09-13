@@ -32,7 +32,7 @@
 
   <p class="note">What is fixed, and when. Each hour the operator publishes a commitment
   <code>C&nbsp;=&nbsp;SHA-256(E)</code> to 32 bytes of hardware entropy <code>E</code> it already holds, bound to a
-  <a href="https://drand.love/">drand</a> round about five minutes in the future; after the round it reveals
+  <a href="https://drand.love/">drand</a> round about one minute in the future (five minutes before 2026-09-13 18:00 UTC); after the round it reveals
   <code>E</code>. A consumer's value is <code>V*&nbsp;=&nbsp;SHA-256(domain ‖ C ‖ ρ<sub>R</sub> ‖ chain ‖ R)</code>:
   fixed the instant round <code>R</code> exists, by data committed before it. The producer knows <code>E</code>; nobody
   knows <code>ρ<sub>R</sub></code> before drand releases it, under drand's threshold assumptions. A withheld reveal

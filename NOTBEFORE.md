@@ -129,7 +129,7 @@ Entropy host draws \(E \in \{0,1\}^{256}\), holds it, and signs a statement cont
 C = \mathrm{SHA256}(D_{\mathrm{commit}} \| E),\quad R_{\mathrm{target}}
 \]
 
-with \(R_{\mathrm{target}}\) strictly after the latest quicknet round at commit time. Default lead: **100 rounds ≈ 5 min**.
+with \(R_{\mathrm{target}}\) strictly after the latest quicknet round at commit time. Default lead: **20 rounds = 60 s** from pulse 0102 (2026-09-13 18:00Z); 100 rounds ≈ 5 min before that.
 
 GNSS, time, and witness hosts each sign their own measurement, bound to \(\{seq, phase, C, H_{\mathrm{chain}}\}\).
 
@@ -139,7 +139,7 @@ Publication MUST include:
 
 - `chain/pulse-00xx.json`
 - two RFC 3161 tokens (freetsa + DigiCert), label `at-commit`
-- git push to `main` **≥ 120 s** before `release(R_target)` (computed, not the field that may still carry ERR-004 +3 s on old pulses)
+- git push to `main` **≥ 20 s** before `release(R_target)` (≥ 120 s through 0101) (computed, not the field that may still carry ERR-004 +3 s on old pulses)
 
 A commit whose tokens or push miss the margin is **FAILED**, not late-OK.
 
@@ -220,7 +220,7 @@ REFETCH=1 python3 ci/verify_anchors.py --anchors anchors      # SHOULD (consumer
 7. \(\rho = \mathrm{SHA256}(\sigma)\); \(\sigma\) BLS-verifies under the pinned quicknet key
 8. Live refetch of \(R\) matches the pulse (when network is available)
 9. \(V\) recomputes
-10. `release(R)` computed as §3; commit published ≥ 120 s before; reveal after release and ≤ 600 s after
+10. `release(R)` computed as §3; commit published ≥ 20 s before (≥ 120 s through 0101); reveal after release and ≤ 600 s after
 11. Two TSA tokens verify on the commit; token time ≤ `release(R) - 120`
 12. SHOULD: both pulses of the pair have anchors that verify (`verify_anchors.py`), and no Rekor entry under `keys/anchor.pub` is unexplained
 
@@ -245,7 +245,7 @@ A reveal pulse \(N\) is a **NotBefore-eligible** seed if and only if:
 
 **First eligible pair:** 0020/0021.  
 **Preferred floor:** 0026/0027 (execution enforced).  
-**Current cadence:** hourly. Since 2026-09-13 16:00Z the aggregator is `k3`; the cycle starts at :00:00.000 UTC on k3's own PTP-disciplined clock (`core.cadence.self_trigger`) and the time host p550 attests the same instant with a signed trigger sent by UDP (`core.cadence.trigger`); the release is at :05:00; k3's :02 timer is only the fallback (CADENCE.md §2). think aggregated 0018–0097.
+**Current cadence:** hourly. Since 2026-09-13 16:00Z the aggregator is `k3`; the cycle starts at :00:00.000 UTC on k3's own PTP-disciplined clock (`core.cadence.self_trigger`) and the time host p550 attests the same instant with a signed trigger sent by UDP (`core.cadence.trigger`); the release is at :01:00 from pulse 0102 (:05:00 before); k3's :02 timer is only the fallback (CADENCE.md §2). think aggregated 0018–0097.
 
 If the named hour is ineligible or missing, the consumer MUST take a **later** eligible hour named in advance as the alternate (the next eligible reveal in the log — typically the next cycle; a `failure` pulse shifts numbering, so name it by rule, not by \(N+2\)), never an earlier one, never a “best of three.”
 
@@ -504,7 +504,7 @@ Default log: a cached clone of `https://github.com/docdailey/qrng-beacon-log` at
 May say:
 
 - Commit bytes existed at TSA time \(T\) (two operators).
-- \(T < \mathrm{release}(R)\) by ≥ 120 s on a consumed pulse.
+- \(T < \mathrm{release}(R)\) by ≥ 20 s on a consumed pulse (≥ 120 s through 0101).
 - GNSS envelope from i210 PHC on p550, disciplined to ZED-F9T PPS; quote RMS **with window**.
 - A pulse's time is anchored on the hardware-captured GNSS epoch (F9T TP1 → i210 EXTTS, `ts2phc` ~8 ns RMS); software timestamps in statements are freshness only, never an accuracy claim.
 
@@ -607,6 +607,8 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 ---
 
 ## 16. Changelog
+
+**0.11, operational change (2026-09-13, 18:00Z, pulse 0102).** The lead went from 100 rounds (300 s, release :05:00) to **20 rounds (60 s, release :01:00)** and the aggregator's publication margin from 120 s to **20 s** (CADENCE.md §2, PROTOCOL §"Cadence trigger", latency_chain.md §5). No spec bump: the consumer verifier never enforced a fixed margin - it checks the TSA tokens and the cadence arithmetic from `lead_rounds` in the pulse - so 0.14.0 verifies 0102 unchanged; the margin is the aggregator's own fail-closed rule (a late commit becomes a signed failure pulse) and the CI chain check. Justification: the commit is public ~2 s after the instant and in Rekor at instant + 1 s (from 0100). Pulses 0012–0101 were held to the 120 s margin; the boundary is stated wherever the old figure appeared.
 
 **0.11 (2026-09-13).** Machine-to-machine hosts and the tick-started cycle (CADENCE.md §2, PROTOCOL §"Execution self-report", §"Cadence trigger", hosts/ISOLATION.md): host statements may now say `execution.via = "agentd"` with `agentd_sha256` (the signed-request TCP service `hosts/agentd.py` that replaces the SSH forced command); a verifier that only knows `via_forced_command` rejects them — `notbefore` ≥ 0.14.0 accepts either against the pinned hashes. Commits carry `core.cadence.self_trigger` (the aggregator's own wake at the instant) beside the time host's UDP-delivered `core.cadence.trigger`; the aggregator is k3 from the cutover seq (KEYS.json). No change to any value or derivation.
 

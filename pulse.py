@@ -33,7 +33,7 @@ KEYS   = os.path.join(HERE, "keys", "KEYS.json")
 # Isolation model (hosts/ISOLATION.md): the aggregator logs in ONLY as the confined `beacon` user, whose forced command
 # (beacon-cmd) accepts a fixed set of operations. Role, host name and probe are fixed ON THE HOST, never sent from here.
 SSH = {"protectli": "beacon@192.168.70.1", "p550": "beacon@192.168.68.44", "k3": "beacon@192.168.68.24", "f9t": "beacon@192.168.68.46"}
-DEFAULT_LEAD, MIN_LEAD = 100, 60
+DEFAULT_LEAD, MIN_LEAD = 20, 10       # 2026-09-13: 100/60 -> 20/10 rounds; the gate below still requires margin + 30 s of room
 START_NS = time.time_ns()                      # aggregator clock at process start: latency bookkeeping only
 AGG_HOST = os.environ.get("BEACON_AGGREGATOR_HOST") or os.uname().nodename.split(".")[0]   # think (until 2026-09-13) / k3
 _PULSE_RE = re.compile(r"^pulse-\d{4}\.json$")

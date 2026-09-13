@@ -15,7 +15,7 @@ core.cadence.trigger). A plain `beacon-cycle.py` (the :02 fallback timer) runs t
 """
 import subprocess, json, sys, os, time, glob, urllib.request
 REPO = os.path.dirname(os.path.abspath(__file__))
-LEAD, PUBLISH_MARGIN_S, REVEAL_DEADLINE_S = int(os.environ.get("BEACON_LEAD", "100")), 120, 600
+LEAD, PUBLISH_MARGIN_S, REVEAL_DEADLINE_S = int(os.environ.get("BEACON_LEAD", "20")), int(os.environ.get("BEACON_PUBLISH_MARGIN_S", "20")), 600   # 2026-09-13: lead 100 -> 20 rounds, margin 120 -> 20 s (latency_chain.md)
 LOG = os.path.join(REPO, "cycle.log")
 CHAIN_HASH = "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
 
@@ -145,7 +145,8 @@ def self_trigger(t0):
     deadline = t0 * 10**9 + int(HW_WAIT_MS * 1e6)
     # ONE blocking wait: a 200 us polling loop here held the interpreter lock for up to its 5 ms switch interval and
     # starved the listener thread that verifies the datagram (start 0.9-8 ms after arrival in staging runs 4-8)
-    remaining = (deadline - time.clock_gettime_ns(time.CLOCK_REALTIME)) / 1e9
+    at_gate = time.clock_gettime_ns(time.CLOCK_REALTIME)                     # when the main thread began waiting (should be ~T0)
+    remaining = (deadline - at_gate) / 1e9
     if remaining > 0 and not ev.is_set(): ev.wait(remaining)
     wake = time.clock_gettime_ns(time.CLOCK_REALTIME)
     if ev.is_set() and getattr(ev, "record", None):                          # the listener handed the datagram over; persist and log it here
@@ -160,6 +161,7 @@ def self_trigger(t0):
                            if hw else "started on the time host's signed datagram, but the time host itself fired on its clock fallback (no hardware event in its statement)")}
     else:
         src = {"start_source": "clock", "meaning": f"no hardware-originated datagram within {HW_WAIT_MS:g} ms; started on CLOCK_REALTIME"}
+    src["main_thread_at_gate_unix_ns"] = str(at_gate)                       # diagnostic: the wait began here; a late value means the pre-tick work overran
     rec = {"host": HOST, "scheduled_unix_s": t0, **src,
            "wake": {"clock": "CLOCK_REALTIME", "unix_ns": str(wake), "late_ns": wake - t0 * 10**9,
                     "how": "clock_nanosleep to T-1.5 ms + spin to T, then wait up to HW_WAIT_MS for the time host's hardware-triggered datagram"}}
@@ -394,6 +396,7 @@ def precise_main(t0, commit_only=False):
     # the last look at origin/main happens BEFORE the tick (10 s), so pulse.py can skip its own fetch on the timed path
     assume = []
     if t0 - 10 - time.time() > 0: sleep_until(int((t0 - 10) * 10**9), spin_ns=0)
+    t_fetch = time.time()
     try:
         run("git", "fetch", "-q", "origin", "main", timeout=8)
         if run("git", "rev-parse", "HEAD") == run("git", "rev-parse", "origin/main"): assume = ["--assume-synced"]
@@ -401,6 +404,7 @@ def precise_main(t0, commit_only=False):
             run("git", "merge", "-q", "--ff-only", "origin/main", check=False); assume = ["--assume-synced"] if run("git", "rev-parse", "HEAD") == run("git", "rev-parse", "origin/main") else []
             log("origin/main moved after prepare; fast-forwarded" if assume else "origin/main moved and could not be fast-forwarded; pulse.py will fetch and decide")
     except Exception as e: log(f"pre-tick fetch failed ({str(e)[:80]}); pulse.py will fetch itself")
+    log(f"pre-tick git work took {time.time() - t_fetch:.2f} s; main thread at the instant gate {t0 - time.time():+.3f} s before the instant")
     if time.time() > t0: log(f"instant {utc(t0)} already passed during preparation ({time.time() - t0:.1f} s); minting now")
     path, rec = self_trigger(t0)
     log(f"instant {utc(t0)}: started on {rec['start_source']} {rec['wake']['late_ns'] / 1000:.1f} us after the instant" + (f"; PHC-REALTIME {rec['phc']['phc_minus_realtime_ns']} ns" if "phc" in rec else ""))

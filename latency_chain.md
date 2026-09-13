@@ -12,7 +12,7 @@ hours named, and the floors at the end are stated as floors.
 | **trigger response** | the scheduled instant (a drand round boundary, :00:00.000 UTC) | the aggregator's cycle running | the clock that fires the instant and how the aggregator learns of it |
 | **commitment public** | the instant | the commit pulse pushed to `main` (TSA-stamped) | the chain: entropy host, three clock statements, two TSAs, seal, checkpoint, push |
 | **externally anchored** | the instant | the commit's Rekor entry (`integratedTime`) | today a CI workflow after the push |
-| **usable randomness** | the instant | the reveal pulse pushed | the lead (100 rounds = 300 s, a policy) + the relays' publication delay + the reveal chain |
+| **usable randomness** | the instant | the reveal pulse pushed | the lead (100 rounds = 300 s through 0101; **20 rounds = 60 s from 0102**, a policy) + the relays' publication delay + the reveal chain |
 
 ## 2. The same chain, three times
 
@@ -83,12 +83,13 @@ side is written and waits for a CLI release that pins its hash.
 
 - **Relays:** the League of Entropy relays publish a round **1.13–1.38 s after its release** (measured across four relays,
   order varies). No reveal can be public before about +1.5 s. This is drand's, not ours.
-- **Rekor:** the commit's external anchor is written by a CI workflow after the push, about 30 s after the instant (verified
-  for 0092 and 0094: 33 s and 32 s). Anchoring from the aggregator at mint is the next step and is what would let the
-  lead shrink below five minutes.
-- **The lead:** time to usable randomness is dominated by the 100-round (300 s) lead. It is a policy setting; the floor in
-  the code is 60 rounds, and with the chain at 1.5 s that floor is safe. It stays at five minutes until a day of live k3
-  cycles has been observed.
+- **Rekor:** through 0099 the commit's external anchor was written by a CI workflow after the push, about 30 s after the
+  instant (0092: 33 s, 0094: 32 s). From 0100 (17:00Z) the aggregator enters the commit into Rekor itself beside the git
+  push: **integratedTime = instant + 1 s** (upload 0.66 s). CI still records the entry on the anchors branch.
+- **The lead:** time to usable randomness is dominated by the lead. With the commit public at ~2 s and anchored at ~1 s,
+  the lead went from 100 rounds (300 s) to **20 rounds (60 s)** at the 18:00Z cycle (pulse 0102), with the publish margin
+  from 120 s to 20 s and the floor in the code from 60 to 10 rounds. 10 rounds (30 s) is the next step once a day of
+  60 s cycles shows the anchor and push variance.
 - **Two things we do not claim:** the aggregator's receipt and start times are its own clock's readings (bookkeeping, not
   attested); the wake and edge latencies are quoted from the statements that recorded them, never as an accuracy of the
   time base (CLAIMS.md).

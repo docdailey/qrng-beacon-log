@@ -8,5 +8,6 @@ After=network-online.target
 Type=oneshot
 WorkingDirectory=%h/qrng-beacon
 Environment=BEACON_RPC=agentd
+Environment=BEACON_LEAD=20
 ExecStart=/usr/bin/python3 %h/qrng-beacon/beacon-cycle.py
 TimeoutStartSec=1500
