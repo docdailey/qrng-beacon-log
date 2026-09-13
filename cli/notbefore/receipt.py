@@ -376,6 +376,8 @@ def check_bundle(path, verify_pulses=True):
         bound_ops = t.get("operation") == c.get("operation") and all(str(t.get(k)) == str(v) for k, v in (c.get("params") or {}).items()) and t.get("purpose") == c.get("purpose") \
                     and (not c.get("input") or (t.get("input_sha256") == c["input"]["sha256"] and t.get("record_count") == c["input"]["record_count"]))
         R.say(bound_ops, "transcript's operation, parameters, purpose and input hash are the signed contract's" if bound_ops else "transcript's operation/parameters/purpose/input do NOT match the signed contract")
+        want_rule = (c.get("value") or {}).get("rule", "reveal"); R.say(t.get("value_rule", "reveal") == want_rule, f"transcript's value rule is the contract's ({want_rule})")
+        R.say(True, "'first eligible' selection is not re-established offline (it needs the whole log): `notbefore execute` re-derives it against the live log", "INFO")
         _rerun_result(R, root, man, c, t, degrade)
         bs = _BundleSource(root)
         if t.get("value_rule") == "commit-bound":
@@ -417,7 +419,7 @@ def check_bundle(path, verify_pulses=True):
             try: R.anchors = _check_anchors(R, bs, (seq - 1, seq), rev["core"], False)
             except Exception as e: R.say(False, f"anchor check failed: {e}")
         else: degrade("no Rekor anchor records in the bundle: publication anchors not re-verified")
-        _require_checkpoint_coverage(R, root, (seq - 1, seq), degrade)
+        _require_checkpoint_coverage(R, root, (seq - 1, seq), degrade); _require_quorum(R, root)
         return _verdict(R, degraded)
     finally:
         if tmp: shutil.rmtree(tmp, ignore_errors=True)
@@ -438,6 +440,22 @@ def _rerun_result(R, root, man, c, t, degrade):
             h = sha256_file(os.path.join(root, rel_)); want = {"A": (t.get("A") or {}).get("sha256"), "B": (t.get("B") or {}).get("sha256")}
             R.say(h in (want["A"], want["B"], t.get("output_sha256")), f"{rel_} hashes to the transcript's value")
     except Exception as e: R.say(False, f"re-running the operation failed: {e}")
+
+def _require_quorum(R, root):
+    """R5: a requested witness quorum (--witness-quorum / NOTBEFORE_WITNESS_QUORUM) cannot be bypassed by a bundle: count INDEPENDENT
+    cosignatures on the bundled checkpoint against the installed WITNESSES.json."""
+    q = int(os.environ.get("NOTBEFORE_WITNESS_QUORUM", "0") or 0)
+    if not q: return
+    note_p = os.path.join(root, "log", "checkpoint")
+    if not os.path.exists(note_p): R.say(False, f"witness quorum {q} requested but the bundle carries no checkpoint"); return
+    try:
+        wj = json.load(open(os.path.join(KEYS, "WITNESSES.json"))); cos = {}; indep = {w["name"] for w in wj.get("independent_witnesses", [])}
+        for w in wj.get("witnesses", []) + wj.get("independent_witnesses", []):
+            n_, alg, pk = T.parse_verifier_key(w["verifier_key"])
+            if alg == 4: cos[n_] = pk
+        good = [n_ for n_, _ in T.verify_cosignatures(open(note_p).read(), cos) if n_ in indep]
+        R.say(len(good) >= q, f"{len(good)} independent witness cosignature(s) on the bundled checkpoint >= quorum {q}")
+    except Exception as e: R.say(False, f"witness quorum check failed: {e}")
 
 def _require_checkpoint_coverage(R, root, seqs, degrade):
     """R5: pulses from the first checkpoint on must be provably included; a bundle without checkpoint + proofs is not verified."""
@@ -494,3 +512,4 @@ def _check_bundle_commit_bound(R, root, bs, t, c, latest, received, verify_pulse
                 for s_, path in inc["proofs"].items():
                     pj = bs.pulse(int(s_)); R.say(pj is not None and T.verify_inclusion(T.leaf_hash(T.canonical(pj)), int(s_) - 1, size, [base64.b64decode(x) for x in path], root_h), f"pulse {int(s_):04d} is included in that checkpoint (RFC 6962 proof)")
     _require_checkpoint_coverage(R, root, (n,) + ((n + 1,) if rev else ()), degrade)
+    _require_quorum(R, root)
