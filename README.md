@@ -5,11 +5,11 @@
 > A working experiment in proving not merely where public randomness came from, but when its private
 > contribution became irrevocably fixed — and making a withheld reveal publicly detectable.
 
-**Spec:** [`PROTOCOL.md`](PROTOCOL.md) (normative) · **Product contract:** [`NOTBEFORE.md`](NOTBEFORE.md) (the seed \(V\), the labeled derive layer, decision contracts and the write-once decision log; draft 0.6) · **CLI:** `pip install notbefore` ([`cli/`](cli/) — `verify|value|seed|shuffle|split|sample|assign|id|range|bytes|keygen|plan|register|execute|receipt|bundle|check-bundle|timestamp|explain|pin|diff-transcript|checkpoint`, pinned vendored verifier with pinned TSA trust roots; **decision log:** [`DECISION-LOG.md`](DECISION-LOG.md); **one-page workflow for researchers/auditors:** [`WORKFLOW.md`](WORKFLOW.md) (`receipt`, `bundle`, `check-bundle`); **commit-bound value (the operator cannot steer):** [`FALLBACK.md`](FALLBACK.md), spec §4.2a/§7.13; **how to use it: [`USAGE.md`](USAGE.md)**) · **Transparency log:** [`TLOG.md`](TLOG.md) (RFC 6962 tree + C2SP checkpoints, `tlog.py`; draft 2) · **Claims discipline:** [`CLAIMS.md`](CLAIMS.md) ·
+**Spec:** [`PROTOCOL.md`](PROTOCOL.md) (normative) · **Product contract:** [`NOTBEFORE.md`](NOTBEFORE.md) (the seed \(V\), the labeled derive layer, decision contracts, the write-once decision log and the commit-bound value; draft 0.9) · **CLI:** `pip install notbefore` ([`cli/`](cli/) — `verify|value|seed|shuffle|split|sample|assign|id|range|bytes|keygen|plan|register|execute|receipt|bundle|check-bundle|timestamp|explain|pin|diff-transcript|checkpoint`, pinned vendored verifier with pinned TSA trust roots; **decision log:** [`DECISION-LOG.md`](DECISION-LOG.md); **one-page workflow for researchers/auditors:** [`WORKFLOW.md`](WORKFLOW.md) (`receipt`, `bundle`, `check-bundle`); **commit-bound value (the operator cannot steer):** [`FALLBACK.md`](FALLBACK.md), spec §4.2a/§7.13; **how to use it: [`USAGE.md`](USAGE.md)**) · **Transparency log:** [`TLOG.md`](TLOG.md) (RFC 6962 tree + C2SP checkpoints, `tlog.py`; draft 2) · **Claims discipline:** [`CLAIMS.md`](CLAIMS.md) ·
 **Trust assumptions:** [`PUBLICATION.md`](PUBLICATION.md) · **Cadence + failure semantics:** [`CADENCE.md`](CADENCE.md) ·
 **Why:** [`THESIS.md`](THESIS.md) · **Keys:** [`keys/KEYS.json`](keys/KEYS.json) (history with validity windows) ·
 **Known defects:** [`ERRATA.md`](ERRATA.md) — published pulses are never edited; defects are logged and fixed forward ·
-**Independent verifications:** [`VERIFICATIONS.md`](VERIFICATIONS.md) · **External reviews, verbatim:** [`reviews/`](reviews/) (each answered in `ERRATA.md`)
+**Where the code lives:** this repository (`public/` in the operator's workspace) is the maintained implementation; historical copies elsewhere are mirrors, and no private key is stored under any directory that is published or copied. **Independent verifications:** [`VERIFICATIONS.md`](VERIFICATIONS.md) · **External reviews, verbatim:** [`reviews/`](reviews/) (each answered in `ERRATA.md`)
 
 **Status: research prototype and adversarially honest design exercise — not infrastructure to consume.** From pulse
 0020 a hostile or compromised *aggregator* cannot fabricate any host's facts (host isolation, `hosts/ISOLATION.md`); a
@@ -24,19 +24,17 @@ sign their own measurements; the aggregator signs only the assembly (`PROTOCOL.m
 chain uses **commit-then-reveal**: a `commit` pulse publishes `sha256(entropy)` bound to a *future*
 drand round; the following `reveal` pulse discloses the entropy after that round exists.
 
-**Verify anything here with no access to our systems — one command, from an empty directory:**
+**Verify anything here with no access to our systems — from an empty directory:**
 ```bash
-pip install cryptography py_ecc      # py_ecc enables full BLS verification of the drand rounds
-RAW=https://raw.githubusercontent.com/docdailey/qrng-beacon-log/main
-curl -sfLO $RAW/verify.py; curl -sfLO $RAW/bls_drand.py; mkdir -p keys; curl -sfL $RAW/keys/drand-quicknet.json -o keys/drand-quicknet.json
-python3 verify.py $RAW/chain/pulse-0011.json --prev $RAW/chain/pulse-0010.json --pin $RAW/keys --refetch
+pip install notbefore              # the verifier, every key, the drand group key and both TSA trust chains are inside the wheel
+notbefore verify 71                # the pair 70/71: host signatures, BLS offline, RFC 3161, Rekor anchors, checkpoint inclusion
+notbefore checkpoint               # the log's current signed checkpoint against the vendored identity and this machine's cached head
 ```
-Then confirm the commit was published before its round, using GitHub's timestamp rather than ours:
-```bash
-curl -s "https://api.github.com/repos/docdailey/qrng-beacon-log/commits?path=chain/pulse-0010.json" \
-  | python3 -c "import json,sys;print(json.load(sys.stdin)[-1]['commit']['committer']['date'])"
-# 2026-09-11T23:58:46Z  <  round 32122604 release 2026-09-11T23:59:39Z
-```
+The standalone path (older pulses, or no pip): `verify.py` plus `bls_drand.py`, `schema.py`, `tsa.py`, `keys/`, `hosts/EXPECTED.json` and
+`ci/KNOWN_NONCOMPLIANT.json` from this repository, then `python3 verify.py chain/pulse-0071.json --prev chain/pulse-0070.json --pin keys --refetch`.
+Then confirm the commit was public before its round by clocks nobody here runs — never a git or GitHub commit date,
+which the committer controls: the two RFC 3161 tokens beside every commit (`tsa.py verify chain/pulse-0070.json`) and
+its Rekor anchor (`anchors` branch, `pulse-0070.anchor.json`; `notbefore verify 71` checks both and prints the margins).
 
 Why this repository exists: a commitment proves what it claims only if it was **published before**
 the round it names. This repo's git history — and every clone of it — is that publication record.

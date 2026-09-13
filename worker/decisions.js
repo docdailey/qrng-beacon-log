@@ -200,7 +200,7 @@ async function handle(req, env) {
     let contract = null;
     if (body.contract !== undefined) {
       if (typeof body.contract !== "object" || body.contract === null) return bad("contract must be an object");
-      const ctext = canon(body.contract); if (ctext.length > MAX_CONTRACT) return bad("contract too large");
+      const ctext = canon(body.contract); if (enc.encode(ctext).length > MAX_CONTRACT) return bad("contract too large");   // UTF-8 bytes, not UTF-16 code units (R8)
       if (hex(await sha256(enc.encode(ctext))) !== st.contract_sha256) return bad("disclosed contract does not hash to statement.contract_sha256");
       contract = body.contract;
     }
