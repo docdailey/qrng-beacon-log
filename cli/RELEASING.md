@@ -150,3 +150,11 @@ live, Worker conformance, publish), published 2026-09-13 04:31 UTC; spec 0.10: t
 plus the shared verdict type from 0.12.2. Confirmed from a fresh venv against PyPI: `verify 73` passed; the pre-release smoke ran a
 `--timing-required` contract end to end (SATISFIED; receipt clocks section; check-bundle re-evaluated the profile from the bundle).
 
+`notbefore 0.13.1` — tag `cli-v0.13.1` on `96e62c2`, verifier vendored at `f65e70e`, workflow run 34759369490 (test 3.10 + 3.12,
+live, Worker conformance, publish), published 2026-09-13 13:22 UTC; package PATCH, spec 0.10 unchanged: the site cross-check
+reconciles a site that is ahead of the log copy by fetching and chain-linking the missing pulses (≤ 12) instead of halting
+(TLOG.md §8 — the halt had failed the live partition on 8a3c259 when the 12:27 mint landed mid-run), and the vendored verifier
+carries the cadence-trigger checks (commits from 0092). Confirmed from a fresh venv against PyPI: `verify 93` passed; the PyPI
+wheel's SHA-256 equals the locally built one (`ca61da44…`); with a local copy one pulse behind the site the reconcile path ran
+and the pair verified.
+
