@@ -56,6 +56,14 @@ terminate die. The satellite's backhaul also shows one-second latency spikes (a 
 1 082 ms max). Remedy is on that unit: restart it, give it a wired backhaul, or move the fleet switch's uplink to the
 main unit or the other satellite.
 
+**Resolved on the hardware side (16:44Z).** Bill restarted that satellite from the Deco app (it was down 16:40-16:44Z;
+the beacon hosts kept their LAN, PTP and chrony throughout). The same survey a minute later: k3, p550, f9t and timehat
+each lost 0 of 30 fresh router-bound flows and 0 of 20 fresh TCP connections, and the backhaul's ping spread fell to
+0.7-1.4 ms. Note for the record: the two satellites took each other's DHCP addresses on the way back (the restarted
+unit 30:68:93:a8:50:86 is now 192.168.71.250), so a Deco unit is identified by MAC, never by IP. The fresh-socket retries
+stay in place: they cost nothing when the path is healthy and are the only thing that kept the 16:00Z hour when it
+was not.
+
 **Lesson.** Loss that is sticky per flow is invisible to every monitor that keeps its socket - ping, PTP, chrony, an SSH
 session - and only shows in things that open a new connection per request, which is exactly what the beacon's TSA,
 Rekor and git steps do. The probe that finds it is "N fresh sockets, count the ones that never answer"; the mitigation
