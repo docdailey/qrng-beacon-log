@@ -70,16 +70,20 @@ notbefore check-bundle r1.zip                                           # what t
   <pre>F9T TP1 PPS ──> i210 SDP0 (hardware capture) ──> ts2phc ──> i210 PHC ──── measures ────┐
                                                                                             ▼
 LEA-6T PPS ──> P550-BMC grandmaster (trimmed via ptptgt) ──> PTP domain 44 ──> k3 PHC   BMC PHC</pre>
-  <p class="note">One dated record, <a href="/chain/pulse-0067.json">pulse 0067</a> (2026-09-13 01:05 UTC), as signed
-  by each host: F9T→i210 discipline 9.95&nbsp;ns RMS, −16 to +17&nbsp;ns, 12 samples over 12&nbsp;s, servo locked;
-  i210's observation of the BMC grandmaster 7.9&nbsp;ns RMS, −13 to +4&nbsp;ns, 4 samples over 20&nbsp;s, path delay
-  442&nbsp;ns (an estimate, not a symmetry proof); BMC→k3 discipline 41.4&nbsp;ns RMS over 60 samples; F9T qErr for the
-  anchoring epoch −2.166&nbsp;ns, logged and not applied; PHC epoch guard intact on both hosts. These are windowed
-  precision figures. They are not absolute UTC accuracy: the antenna delay (69&nbsp;ns) is measured, the rest of the
-  absolute budget is not, and the receiver is L1-only today. The verifier <em>authenticates</em> these statements
-  (host signatures, pulse binding); a versioned quality policy over them is being added
-  (<a href="/PROTOCOL.md">timing profile</a>). Details and every correction: <a href="/HARDWARE.md">HARDWARE.md</a>,
-  <a href="/CLAIMS.md">CLAIMS.md</a>.</p>
+  <p class="note">One dated record, <a href="/chain/pulse-0112.json">pulse 0112</a> (2026-09-13 23:00 UTC), as signed
+  by each host: F9T→i210 discipline 8.9&nbsp;ns RMS, −20 to +20&nbsp;ns, 60 samples over 59&nbsp;s, servo locked;
+  i210's observation of the BMC grandmaster 27.1&nbsp;ns RMS, −31 to +66&nbsp;ns, 30 samples over 58&nbsp;s, path delay
+  445&nbsp;ns (an estimate, not a symmetry proof); BMC→k3 discipline 37.9&nbsp;ns RMS over 120 samples; F9T qErr for the
+  anchoring epoch +1.9&nbsp;ns, logged and not applied; PHC epoch guard intact on both hosts. The hour itself: k3 started
+  19.5&nbsp;µs after the instant on its own PTP-disciplined clock, and p550's i210 stamped its hardware second event
+  27&nbsp;µs after the same instant and delivered its signed statement to k3 1.3&nbsp;ms later, bound into the commit
+  (<a href="/latency_chain.md">latency_chain.md</a>). These are windowed precision figures. They are not absolute UTC
+  accuracy: the antenna delay (69&nbsp;ns) is measured, the rest of the absolute budget is not, and the receiver is
+  L1-only today. Every v0.5 pulse from 0018 carries these signed statements; the verifier <em>authenticates</em> them
+  (host signatures, pulse binding) and, since <code>notbefore</code> 0.13.0, <em>checks</em> them against a versioned
+  <a href="/PROTOCOL.md">timing profile</a>: v1 (clock health) for every v0.5 pulse, and from 0.15.0 v2, which also
+  requires the two-clock cadence provenance above for pulses from 0098. Details and every correction:
+  <a href="/HARDWARE.md">HARDWARE.md</a>, <a href="/CLAIMS.md">CLAIMS.md</a>, <a href="/ERRATA.md">ERRATA.md</a>.</p>
 
   <h2>Log checkpoint</h2>
   <p>The log is an RFC&nbsp;6962 Merkle tree over every pulse, published as a
@@ -97,7 +101,7 @@ LEA-6T PPS ──> P550-BMC grandmaster (trimmed via ptptgt) ──> PTP domain 
 
   <h2>Verify it yourself</h2>
   <pre>pip install notbefore
-notbefore verify 67        # host signatures, drand BLS offline, RFC 3161, Rekor anchors, checkpoint inclusion
+notbefore verify 113       # host signatures, drand BLS offline, RFC 3161, Rekor anchors, checkpoint inclusion
 notbefore checkpoint       # the current signed head against the vendored identity and your cached head</pre>
   <p class="note">The verifier, every key, the drand group key and both RFC&nbsp;3161 trust chains are inside the
   package, pinned to a named log commit. Needs <code>git</code> and <code>openssl</code> on PATH. Without the BLS

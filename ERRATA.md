@@ -36,6 +36,20 @@ set the PHC with `clock_settime`, never `phc_ctl adj` by eye; verify the pulse f
 (3) The incident timeline is in CADENCE.md §2. Open: cap the stamp probe's live window and prefer the ptp4l ring when
 ts2phc is stopped (a vendored host tool, so a CLI release); consider `noselect` on k3's NTP servers.
 
+**Addendum, 02:30Z.** The F9T pulse did not stay steady after the 01:25Z hand-back: ts2phc recorded excursions of tens to hundreds
+of milliseconds in roughly one minute of every three from 01:39Z (01:39–41, 01:43–44, 01:49–53, 01:58–02:01, 02:04, 02:06–08,
+02:11–13, 02:16, 02:22–23, 02:25–26), the receiver's own serial stream lost rows in the same minutes and at 02:23Z reported a
+time pulse with `qErr` −368.7 ms flagged invalid, and p550's chrony flapped IPHC between falseticker and selected four times
+(02:16, 02:22, 02:25, 02:26Z) without stepping. The fault is at the receiver or its connections, not only the TP1 wire. Two
+pulses carry the consequence in their signed time statements and are honest about it: **0116/0117 (01:00Z)** are
+NOT-EVALUABLE under the timing profile (ts2phc stopped: no discipline numbers; the BMC monitor was servoing, so `s2` where the
+profile expects the read-only `s0`), and **0118/0119 (02:00Z)** are NOT-SATISFIED (F9T→i210 discipline 225 µs RMS with a
++1.01 ms sample on the commit, 4.96 ms RMS with a −34.7 ms sample on the reveal; mesh likewise). Their cryptographic
+verification is unaffected; a contract that *requires* the profile would refuse them, which is the intended behaviour.
+At 02:27Z p550 was returned to the BMC discipline (ptp4l `free_running 0`, −1 ns; IPHC −4 ns; second event +24 µs) with
+ts2phc stopped, and stays there until the F9T pulse is clean for a sustained period. Cycles minted on the BMC discipline
+will be NOT-SATISFIED under v1's `servo == ts2phc` requirement and pay the stamp probe's 12 s fallback; both are known.
+
 **Lesson stated plainly.** A hand correction to a stratum-1 clock must be measured twice and applied with a tool whose
 sign convention has been read, not guessed; and a chronyd that can step without limit (`makestep 1 -1`) must not be allowed
 to choose an NTP peer over the hardware clock it exists to follow.

@@ -1,6 +1,6 @@
 # NotBefore — specification
 
-**Status:** draft 0.10, 2026-09-13 — 0.9 plus the **timing profile** (§7.14: a contract may declare `notbefore/timing/v1`; the selected commit's signed timing evidence is checked against it and reported separately; never a reroll); 0.9 fixed the commit-bound rule's evidence and verdict semantics after an adversarial review (ERR-015: publication evidence from Rekor's signed entries, halt when it cannot be established; VERIFIED / DEGRADED / INVALID verdicts); 0.8 added the **commit-bound value** (§4.6, §7.13: contracts consume V* fixed by the commit and the drand round, so a withheld reveal cannot change or void a decision); 0.7 made execution fail closed on the decision log (§7.12: an unconfirmed registration is a refusal, not a warning); 0.6 added signed contracts and the write-once decision log (§7.12: a consumer identity, `contract/2`, and a second transparency log in which the first statement per decision wins); 0.5 added decision contracts (§7.11: the consumer's commitment, timestamped before the pulse); 0.4 added the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
+**Status:** draft 0.12, 2026-09-14 — 0.11 plus timing profile **v2** (cadence provenance, §7.14); 0.10 introduced the **timing profile** (§7.14: a contract may declare `notbefore/timing/v1`; the selected commit's signed timing evidence is checked against it and reported separately; never a reroll); 0.9 fixed the commit-bound rule's evidence and verdict semantics after an adversarial review (ERR-015: publication evidence from Rekor's signed entries, halt when it cannot be established; VERIFIED / DEGRADED / INVALID verdicts); 0.8 added the **commit-bound value** (§4.6, §7.13: contracts consume V* fixed by the commit and the drand round, so a withheld reveal cannot change or void a decision); 0.7 made execution fail closed on the decision log (§7.12: an unconfirmed registration is a refusal, not a warning); 0.6 added signed contracts and the write-once decision log (§7.12: a consumer identity, `contract/2`, and a second transparency log in which the first statement per decision wins); 0.5 added decision contracts (§7.11: the consumer's commitment, timestamped before the pulse); 0.4 added the derived functions `sample`/`assign`/`id`/`range`/`bytes` (§7.6–7.10) and the tool commands `explain`/`pin`/`diff-transcript` (§8); 0.3 added the `skip` pulse type (protocol v0.5.1); 0.1 was reviewed against the live code and chain by claude-main; every change is listed in §16  
 **Implements over:** `qrng-beacon-log` protocol v0.5 (live log)  
 **Normative language:** MUST / MUST NOT / SHOULD / MAY
 
@@ -350,8 +350,12 @@ A user can still timestamp several and publish one; §7.12 closes that with the 
 the defence was the same as for any preregistration — publish the hash where it cannot be quietly withdrawn.)
 
 ### 7.14 Timing profile — enforcing the evidence the pulse already carries (spec 0.10)
-A `contract/3` MAY declare `timing: {profile: "notbefore/timing/v1", required: bool}` (the CLI declares it by default,
-`required: false`; `--timing-required`; `--no-timing`). `execute` evaluates the profile on the selected commit and on
+A `contract/3` MAY declare `timing: {profile: "notbefore/timing/v1" | "notbefore/timing/v2", required: bool}` (the CLI declares
+**v2** by default since 0.15.0, `required: false`; `--timing-profile v1|v2`; `--timing-required`; `--no-timing`). **v2 (spec 0.12)**
+adds cadence provenance to v1: the commit must carry the aggregator's own wake record and the time host's i210 hardware-event
+statement, both naming the same drand-boundary instant, with bounded event → issue → receive latency, timely host statements
+and a prompt reveal (limits in PROTOCOL §"Timing profile"). An absent or rejected trigger is NOT-SATISFIED; commits before 0098
+are NOT-EVALUABLE under v2 (declare v1 for them). `execute` evaluates the profile on the selected commit and on
 its reveal when FULL-ATTESTED, records `timing_policy {profile, required, verdict, per_pulse}` in the transcript, and —
 only when `required` — refuses a verdict other than SATISFIED **on that commit**; it never advances to another value.
 `receipt`, `bundle` and `check-bundle` re-evaluate the profile from the pulses at hand and print the clock section
@@ -607,6 +611,11 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 ---
 
 ## 16. Changelog
+
+**0.12 (2026-09-14).** Timing profile `notbefore/timing/v2` (§7.14, PROTOCOL §"Timing profile"): v1 plus cadence provenance - the
+aggregator's self-trigger record and the time host's i210 hardware-event statement must both be present, name the same instant,
+and meet bounded latencies; host statements within 30 s of the instant; reveal within 60 s of the release. A missing or rejected
+time-host trigger is now NOT-SATISFIED rather than ignored (review, 2026-09-14). CLI 0.15.0 declares v2 by default; v1 stays valid.
 
 **0.11, verifier fix (2026-09-13, CLI 0.14.2).** A commit with `cadence.self_trigger` but no `cadence.trigger` made the verifier raise instead of reporting; fixed in `verify.py` (informational line only; no check changed). Start mode `own-clock` from pulse 0110 (PROTOCOL §"Cadence trigger").
 

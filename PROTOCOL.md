@@ -331,3 +331,23 @@ a verdict other than SATISFIED refuses execution *on the selected commit* — no
 reroll; this extends the R2/R5 rule). Calibration: every healthy v0.5 commit and reveal in the record (0020–0071)
 satisfies v1; 0018/0019 (KNOWN-NONCOMPLIANT, witness guard misfired) do not. Minting still gates only on epoch health
 and reference selection; a profile failure at mint is published, not hidden. Implementation: `cli/notbefore/timing.py`.
+
+`notbefore/timing/v2` (spec 0.12, 2026-09-14; the CLI's default for new contracts since 0.15.0) is **v1 plus cadence
+provenance** - the claim that the hour was declared by one disciplined clock and corroborated by a second, independent
+hardware event, checked rather than merely carried:
+
+| on the commit | required | limits |
+|---|---|---|
+| `cadence.self_trigger` | present (exists from 0098; earlier commits are NOT-EVALUABLE under v2); `scheduled_unix_s` is a drand round boundary and `target_release == instant + lead×3` | aggregator wake `late_ns` within 0..100 ms |
+| `cadence.trigger` | present and not rejected (an absent or rejected trigger is **NOT-SATISFIED**: the hour lacks a second clock's corroboration); a `time_attester@p550` `cadence-trigger` naming the **same instant**; `wake.how = pps-event` and `hw_event.source = i210-pps` (a hardware second event, not a clock fallback) | edge stamp −1..+5 ms from the instant and consistent with `assert_unix_ns`; process ran ≤ 5 ms after the edge; statement issued 0..20 ms after the instant; received by the aggregator after issue and ≤ 500 ms after the instant |
+| host statements | `entropy`, `gnss`, `time`, `witness` each issued | 0..30 s after the instant |
+| **on the reveal** | `cadence.started_after_release_s` present | 0..60 s; each reveal statement issued 0..60 s after the release |
+
+Calibration: every k3 commit and reveal 0098–0119 satisfies v2 (edge stamps +21..+280 µs, issue ≤ 1.7 ms, receipt ≤ 8.1 ms,
+statements ≤ 12.7 s); the think-era commits 0092/0094 carry a trigger but no self-trigger record and are NOT-EVALUABLE; a
+commit whose datagram never arrived would be NOT-SATISFIED. With v2 enforced the site may say the verifier checks
+**dual-path timing provenance**; under v1 it authenticates timing data and checks clock health only.
+
+Pulses a published erratum says must NOT satisfy the profile are listed in `ci/TIMING_PROFILE_EXCEPTIONS.json` with the
+verdict expected of them (first entries: 0116–0119, ERR-018); the CLI suite requires every other v0.5 pulse from 0020 to satisfy
+v1 and each listed pulse to fail exactly as documented, so the list cannot hide anything. Pulses are immutable; the list only grows.

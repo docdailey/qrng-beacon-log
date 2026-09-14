@@ -117,7 +117,9 @@ seeing no majority among its PHC, p550's NTP and timehat, followed p550's NTP fr
 The F9T pulse read steady at 00:52Z (−23 to −61 ns against the BMC-disciplined PHC, a direct BMC-vs-F9T measurement), was gone
 again at 01:01Z (the receiver's own reports stopped; a first hand-back at 01:03Z therefore did not take and the PHC went back on the
 BMC servo), and came back for good once Bill found the **loose wire** at ~01:17Z. Hand-back at 01:25Z after 20 s of edges within
-40 ns: ts2phc locked (s2), the BMC ptp4l returned to read-only. The 01:00Z cycle ran on the BMC discipline throughout. k3's own clock logger (`epoch_stream`) shows the excursion exactly: PHC − system held 37.000 s ± 150 ns until 00:33Z, then fell
+40 ns: ts2phc locked (s2), the BMC ptp4l returned to read-only. The 01:00Z cycle ran on the BMC discipline throughout. The pulse
+then proved intermittent (receiver-side glitches, ERR-018 addendum) and p550 went back to the BMC discipline at 02:27Z; 0118/0119
+carry the excursions in their signed statements and fail the timing profile, as they should. k3's own clock logger (`epoch_stream`) shows the excursion exactly: PHC − system held 37.000 s ± 150 ns until 00:33Z, then fell
 at ~3.3 s/min as chrony followed p550's NTP (six 1–2 s steps 00:34–00:36, then slewing) to −23 s at 00:48Z, i.e. the system clock
 60 s ahead, and snapped back to 37.000 s at 00:49:27Z. A commit in that window would have been refused by the witness's own epoch
 guard (|PHC − system − TAI| > 0.5 s), which is the fail-closed design working, but none was attempted. **Fixed 01:34Z:** k3's PHC

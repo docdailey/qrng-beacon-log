@@ -466,8 +466,13 @@ def test_35_timing_profile_is_enforced_only_when_declared_required_and_never_rer
     merely declares it executes and reports."""
     import copy, shutil, notbefore.timing as TM
     cores = {int(fn[6:10]): json.load(open(os.path.join(LOG, "chain", fn)))["core"] for fn in os.listdir(os.path.join(LOG, "chain")) if re.fullmatch(r"pulse-\d{4}\.json", fn)}
-    live = [s for s in sorted(cores) if s >= 20 and cores[s].get("type") in ("commit", "reveal")]
+    # documented exceptions (ci/TIMING_PROFILE_EXCEPTIONS.json): pulses a published erratum says MUST NOT satisfy the profile; the
+    # profile detecting them is the intended behaviour, and each must fail exactly as documented so the list cannot hide anything
+    exc = {int(k): v for k, v in json.load(open(os.path.join(LOG, "ci", "TIMING_PROFILE_EXCEPTIONS.json")))["pulses"].items()}
+    live = [s for s in sorted(cores) if s >= 20 and cores[s].get("type") in ("commit", "reveal") and s not in exc]
     assert all(TM.evaluate(cores[s]).verdict == "SATISFIED" for s in live), [(s, TM.evaluate(cores[s]).failed) for s in live if TM.evaluate(cores[s]).verdict != "SATISFIED"]
+    for s_, v in exc.items():
+        if s_ in cores: assert TM.evaluate(cores[s_]).verdict == v["verdict_v1"], (s_, v["verdict_v1"], TM.evaluate(cores[s_]).verdict)
     assert TM.evaluate(cores[18]).verdict == "NOT-SATISFIED" and TM.evaluate(cores[19]).verdict == "NOT-SATISFIED"
     assert TM.evaluate(cores[10]).verdict == "NOT-EVALUABLE"                                   # pre-v0.5: no statements
     c = copy.deepcopy(cores[42]); st = c["statements"]["time"].get("statement", c["statements"]["time"])
@@ -482,11 +487,11 @@ def test_35_timing_profile_is_enforced_only_when_declared_required_and_never_rer
     st["measurement"]["stamp"]["utc_ns"] = str(int(st["measurement"]["stamp"]["utc_ns"]) + 3600 * 10**9); assert TM.evaluate(c).verdict == "NOT-SATISFIED"   # stale statement
     # contracts: declared (default) -> executes and reports; required -> refused on the same commit
     f = tmp_path / "r.txt"; f.write_text("a\\nb\\nc\\nd\\n"); c1 = tmp_path / "c1.json"; c2 = tmp_path / "c2.json"
-    rc, o, e = nb("plan", "--after", "2026-09-12T13:00:00Z", "--purpose", "test:t1", "--sample", "1", "--out", str(c1), "--no-timestamp", "--no-log", str(f), cwd=str(tmp_path)); assert rc == 0, e
-    assert json.load(open(c1))["timing"] == {"profile": TM.PROFILE_ID, "required": False}
+    rc, o, e = nb("plan", "--after", "2026-09-12T13:00:00Z", "--purpose", "test:t1", "--sample", "1", "--out", str(c1), "--no-timestamp", "--no-log", "--timing-profile", "v1", str(f), cwd=str(tmp_path)); assert rc == 0, e
+    assert json.load(open(c1))["timing"] == {"profile": TM.PROFILE_V1, "required": False}                  # v1 chosen explicitly: a 2026-09-12 commit predates the self-trigger record
     rc, o, e = nb("execute", str(c1), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "t1.json"), cwd=str(tmp_path)); assert rc == 0, e
     t = json.load(open(tmp_path / "t1.json")); assert t["timing_policy"]["verdict"] == "SATISFIED" and t["timing_policy"]["required"] is False and "timing profile" in e
-    rc, o, e = nb("plan", "--after", "2026-09-12T13:00:00Z", "--purpose", "test:t1req", "--sample", "1", "--out", str(c2), "--no-timestamp", "--no-log", "--timing-required", str(f), cwd=str(tmp_path)); assert rc == 0, e
+    rc, o, e = nb("plan", "--after", "2026-09-12T13:00:00Z", "--purpose", "test:t1req", "--sample", "1", "--out", str(c2), "--no-timestamp", "--no-log", "--timing-required", "--timing-profile", "v1", str(f), cwd=str(tmp_path)); assert rc == 0, e
     rc, o, e = nb("execute", str(c2), "--input", str(f), "--allow-unregistered", "--transcript", str(tmp_path / "t2.json"), cwd=str(tmp_path)); assert rc == 0, e   # the live record satisfies v1
     # (a required-and-failing case cannot be staged against a signed log copy without breaking host signatures, which is a different
     #  refusal; the refusal-on-the-same-commit path is covered by the pure-function verdicts above plus the transcript's timing_policy.)
@@ -496,3 +501,22 @@ def test_19_commit_number_gets_guidance_not_inverted_failures():
     rc, out, err = nb("verify", "22"); assert rc == 1
     assert "0022 is a COMMIT pulse" in err and "verify 23" in err and "is a reveal (type commit)" not in err, err[-600:]
     rc, out, err = nb("verify", "97"); assert rc == 1 and "0097 is a FAILURE pulse" in err, err[-400:]
+
+def test_20_timing_v2_cadence_provenance():
+    """spec 0.12: v2 = v1 + cadence provenance. 0112/0113 satisfy it; a commit without a self-trigger record (0092) is NOT-EVALUABLE;
+    an out-of-bound hardware edge or a missing time-host trigger is NOT-SATISFIED; v1 is unchanged on the same pulses."""
+    import copy, notbefore.timing as TM
+    com = json.load(open(os.path.join(LOG, "chain", "pulse-0112.json")))["core"]; rev = json.load(open(os.path.join(LOG, "chain", "pulse-0113.json")))["core"]
+    assert TM.evaluate(com, TM.PROFILE_V2).verdict == "SATISFIED", TM.evaluate(com, TM.PROFILE_V2).lines
+    assert TM.evaluate(rev, TM.PROFILE_V2).verdict == "SATISFIED", TM.evaluate(rev, TM.PROFILE_V2).lines
+    assert TM.evaluate(com, TM.PROFILE_V1).verdict == "SATISFIED"
+    assert TM.evaluate_pulses(com, rev, profile=TM.PROFILE_V2)[1] == "SATISFIED"
+    old = json.load(open(os.path.join(LOG, "chain", "pulse-0092.json")))["core"]
+    assert TM.evaluate(old, TM.PROFILE_V2).verdict == "NOT-EVALUABLE" and TM.evaluate(old, TM.PROFILE_V1).verdict == "SATISFIED"
+    bad = copy.deepcopy(com); bad["cadence"]["trigger"]["statement"]["hw_event"]["edge_after_instant_ns"] = 50_000_000
+    r = TM.evaluate(bad, TM.PROFILE_V2); assert r.verdict == "NOT-SATISFIED" and any("hardware edge" in f for f in r.failed), r.failed
+    gone = copy.deepcopy(com); del gone["cadence"]["trigger"]
+    r = TM.evaluate(gone, TM.PROFILE_V2); assert r.verdict == "NOT-SATISFIED" and any("bound to this commit" in f for f in r.failed), r.failed
+    assert TM.default_profile(112) == TM.PROFILE_V2 and TM.default_profile(97) == TM.PROFILE_V1
+    import notbefore.contract as C
+    assert C.TIMING_PROFILE == TM.PROFILE_V2

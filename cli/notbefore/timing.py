@@ -10,7 +10,12 @@ cryptographic integrity and from the application result:
     NOT-SATISFIED   a required observation is outside its limit (servo not locked, epoch lost, excursion too large ...)
     NOT-EVALUABLE   required evidence is missing or malformed (no statements, no mesh block, non-finite numbers, wrong units)
 
-A contract may declare `timing: {profile: "notbefore/timing/v1", required: bool}`. The policy NEVER changes which commit
+A contract may declare `timing: {profile: "notbefore/timing/v1" | "notbefore/timing/v2", required: bool}`. **v2** (spec 0.12) is v1
+plus cadence provenance: the commit's `cadence.self_trigger` (the aggregator declared the instant on its own disciplined
+clock) and `cadence.trigger` (p550's i210 hardware second event corroborates the same instant) must both be present, name
+the same drand-boundary instant, and meet bounded event/issue/receive latencies; every host statement must be issued
+within 30 s of the instant; the reveal must begin within 60 s of the release. An absent or rejected trigger is a FAIL
+(the hour lacks a second clock's corroboration); a commit before 0098 has no self-trigger record and is NOT-EVALUABLE. The policy NEVER changes which commit
 a contract consumes: a failed or unevaluable profile reports (required=false) or REFUSES on the selected commit
 (required=true) — it does not advance to another known random value (this extends R2/R5: no timing-triggered reroll).
 
@@ -38,7 +43,23 @@ NOT-EVALUABLE — missing optional evidence never grants a timing claim."""
 import math, json
 from decimal import Decimal, InvalidOperation
 
-PROFILE_ID = "notbefore/timing/v1"
+PROFILE_ID = "notbefore/timing/v1"                       # v1: clock-health statements (spec 0.10)
+PROFILE_V1, PROFILE_V2 = "notbefore/timing/v1", "notbefore/timing/v2"
+PROFILES = (PROFILE_V1, PROFILE_V2)
+FIRST_V2_SEQ = 98                                         # the aggregator's own wake record (cadence.self_trigger) exists from 0098 (k3)
+# v2 = v1 + cadence provenance (spec 0.12, 2026-09-14): the hour was declared by the aggregator's own disciplined clock AND
+# corroborated by the time host's i210 hardware second event, both naming the same drand-boundary instant, with bounded
+# event -> issue -> receive latency and timely signed host statements. Limits from the record (0098-0118): edge stamp
+# +21..+280 us, p550 process 15 us..1.2 ms after the edge, issued <= 1.7 ms, received at k3 <= 2.9 ms (8.1 ms once), host
+# statements <= 0.8 s (12.7 s once, the 01:00Z 2026-09-14 probe fallback), reveal started <= 1.5 s after release.
+CADENCE = {"k3_wake_late_max_ns": 100_000_000, "edge_min_ns": -1_000_000, "edge_max_ns": 5_000_000, "woke_after_edge_max_ns": 5_000_000,
+           "issued_max_ns": 20_000_000, "received_max_ns": 500_000_000, "stmt_after_instant_max_s": 30, "reveal_start_max_s": 60, "reveal_stmt_after_release_max_s": 60}
+GENESIS, PERIOD = 1692803367, 3
+
+def default_profile(commit_seq):
+    """The strongest profile defined for a pulse's era: v2 from 0098 (self-trigger record + hardware trigger), v1 before."""
+    try: return PROFILE_V2 if int(commit_seq) >= FIRST_V2_SEQ else PROFILE_V1
+    except Exception: return PROFILE_V1
 LIMITS = {"time": {"disc_rms_max": 100, "disc_abs_max": 250, "disc_samples_min": 3, "mesh_rms_max": 250, "mesh_abs_max": 1000, "mesh_samples_min": 3, "path_delay_max": 10000},
           "witness": {"disc_rms_max": 250, "disc_abs_max": 1000, "disc_samples_min": 10},
           "gnss": {"coverage_min": 95, "sawtooth_sd_max": 10, "qerr_abs_max": 50, "nmeas_min": 8},
@@ -46,13 +67,13 @@ LIMITS = {"time": {"disc_rms_max": 100, "disc_abs_max": 250, "disc_samples_min":
 FIRST_PROFILED_SEQ = 18          # v0.5 statements begin at 0018; earlier pulses are NOT-EVALUABLE by construction
 
 class Timing:
-    def __init__(self): self.lines = []; self.missing = []; self.failed = []; self.facts = {}
+    def __init__(self, profile=PROFILE_V1): self.profile = profile; self.lines = []; self.missing = []; self.failed = []; self.facts = {}
     def req(self, ok, what):                       # a required observation: present and within limits?
         (self.lines.append(("[PASS] " if ok else "[FAIL] ") + what)); (None if ok else self.failed.append(what))
     def absent(self, what): self.missing.append(what); self.lines.append("[MISSING] " + what)
     @property
     def verdict(self): return "NOT-EVALUABLE" if self.missing else ("NOT-SATISFIED" if self.failed else "SATISFIED")
-    def summary(self): return {"profile": PROFILE_ID, "verdict": self.verdict, "failed": self.failed, "missing": self.missing, "facts": self.facts}
+    def summary(self): return {"profile": self.profile, "verdict": self.verdict, "failed": self.failed, "missing": self.missing, "facts": self.facts}
 
 def _num(x):
     """Strict finite number from int/str-decimal; None otherwise (bool is not a number)."""
@@ -69,9 +90,10 @@ def _get(d, *path):
         d = d[p]
     return d
 
-def evaluate(core):
-    """Evaluate profile v1 over one pulse core (commit or reveal). Returns a Timing."""
-    T = Timing(); L = LIMITS
+def evaluate(core, profile=PROFILE_V1):
+    """Evaluate a profile over one pulse core (commit or reveal). Returns a Timing. v2 = v1 + cadence provenance."""
+    if profile not in PROFILES: raise ValueError(f"unknown timing profile {profile!r}")
+    T = Timing(profile); L = LIMITS
     sts = core.get("statements") if isinstance(core, dict) else None
     if not isinstance(sts, dict) or not all(r in sts for r in ("time", "witness", "gnss")):
         T.absent("v0.5 host statements (time, witness, gnss)"); return T
@@ -145,11 +167,68 @@ def evaluate(core):
         for r, ns in stamps.items():
             dt = ns / 1e9 - anchor_utc; T.req(abs(dt) <= L["freshness_s"], f"{r} statement stamped {dt:+.1f} s from the GNSS anchor epoch (freshness only; limit +/-{L['freshness_s']} s)")
         if own is not None: T.req(abs(own - anchor_utc) <= L["freshness_s"], f"pulse anchor {own - anchor_utc:+.1f} s from the GNSS statement's epoch")
+    if profile == PROFILE_V2: _cadence_v2(core, T)
     return T
 
-def evaluate_pulses(*cores):
+def _cadence_v2(core, T):
+    """Profile v2, the cadence provenance of the hour (commit) and the promptness of the reveal (reveal)."""
+    C = CADENCE; typ = core.get("type"); cad = core.get("cadence") if isinstance(core.get("cadence"), dict) else {}
+    sts = core.get("statements") if isinstance(core.get("statements"), dict) else {}
+    def issued(role):
+        st = sts.get(role, {}); st = st.get("statement", st) if isinstance(st, dict) else {}
+        return _num(st.get("issued_unix_ns"))
+    if typ == "commit":
+        sw = cad.get("self_trigger") if isinstance(cad.get("self_trigger"), dict) else None
+        if not sw: T.absent("cadence.self_trigger (the aggregator's own wake record; exists from pulse 0098 - earlier commits are NOT-EVALUABLE under v2)"); return
+        t0 = _num(sw.get("scheduled_unix_s")); rel = _num(_get(core, "derived", "target_release_unix_s")); lead = _num(_get(core, "derived", "lead_rounds"))
+        if None in (t0, rel, lead): T.absent("cadence.self_trigger.scheduled_unix_s / derived release and lead"); return
+        T.req(t0 == int(t0) and (int(t0) - GENESIS) % PERIOD == 0 and rel == t0 + lead * PERIOD,
+              f"cadence: the declared instant is a drand round boundary and the target round is that instant + {int(lead)} rounds")
+        Tn = int(t0) * 10**9
+        late = _num(_get(sw, "wake", "late_ns"))
+        if late is None: T.absent("cadence.self_trigger.wake.late_ns")
+        else: T.req(0 <= late <= C["k3_wake_late_max_ns"], f"cadence: the aggregator started {late / 1e6:.3f} ms after the instant on its own disciplined clock ({sw.get('start_source')}; limit {C['k3_wake_late_max_ns'] / 1e6:g} ms)")
+        tr = (cad.get("trigger") or {}).get("statement") if isinstance(cad.get("trigger"), dict) else None
+        if not isinstance(tr, dict):
+            T.req(False, "cadence: the time host's signed hardware-event statement is bound to this commit" + (f" (rejected: {cad.get('trigger_rejected')})" if cad.get("trigger_rejected") else " (absent: no corroboration of the instant by a second clock)")); return
+        T.req(tr.get("kind") == "cadence-trigger" and tr.get("host") == "p550" and tr.get("role") == "time_attester", "cadence: the corroborating statement is p550's time_attester cadence-trigger")
+        T.req(_num(tr.get("scheduled_unix_s")) == t0, f"cadence: the time host names the same instant as the aggregator ({int(t0)})")
+        hw = tr.get("hw_event") if isinstance(tr.get("hw_event"), dict) else None
+        how = _get(tr, "wake", "how")
+        T.req(how == "pps-event" and bool(hw) and hw.get("source") == "i210-pps", f"cadence: the time host fired on the i210 PHC's hardware second event, not a clock fallback (wake.how={how!r}, hw_event.source={(hw or {}).get('source')!r})")
+        if hw:
+            edge, woke, ass = _num(hw.get("edge_after_instant_ns")), _num(hw.get("woke_after_edge_ns")), _num(hw.get("assert_unix_ns"))
+            if None in (edge, woke, ass): T.absent("cadence.trigger.hw_event numbers (edge/woke/assert well-formed)")
+            else:
+                T.req(C["edge_min_ns"] <= edge <= C["edge_max_ns"] and ass == Tn + edge, f"cadence: hardware edge stamped {edge / 1e3:+.1f} us from the instant (limits {C['edge_min_ns'] / 1e3:g}..{C['edge_max_ns'] / 1e3:g} us) and consistent with the assert stamp")
+                T.req(0 <= woke <= C["woke_after_edge_max_ns"], f"cadence: the time host's process ran {woke / 1e3:.1f} us after the edge (limit {C['woke_after_edge_max_ns'] / 1e6:g} ms)")
+                T.facts["cadence_edge_after_instant_ns"] = edge; T.facts["cadence_woke_after_edge_ns"] = woke
+        iss = _num(tr.get("issued_unix_ns")); rx = _num(cad.get("received_unix_ns")); krx = _num(cad.get("datagram_kernel_rx_unix_ns"))
+        if iss is None or rx is None: T.absent("cadence.trigger.issued_unix_ns / cadence.received_unix_ns")
+        else:
+            T.req(0 <= iss - Tn <= C["issued_max_ns"], f"cadence: the time host issued its statement {(iss - Tn) / 1e6:.3f} ms after the instant (limit {C['issued_max_ns'] / 1e6:g} ms)")
+            T.req(iss <= rx <= Tn + C["received_max_ns"], f"cadence: the aggregator received it {(rx - Tn) / 1e6:.3f} ms after the instant (limit {C['received_max_ns'] / 1e6:g} ms)")
+            T.facts["cadence_issued_after_instant_ns"] = iss - Tn; T.facts["cadence_received_after_instant_ns"] = rx - Tn
+            if krx is not None: T.facts["cadence_kernel_rx_after_instant_ns"] = krx - Tn
+        T.facts["cadence_start_source"] = sw.get("start_source"); T.facts["cadence_aggregator_late_ns"] = late
+        for role in ("entropy", "gnss", "time", "witness"):
+            v = issued(role)
+            if v is None: T.absent(f"{role}.issued_unix_ns")
+            else: T.req(0 <= (v - Tn) / 1e9 <= C["stmt_after_instant_max_s"], f"cadence: {role} statement issued {(v - Tn) / 1e9:.3f} s after the instant (limit {C['stmt_after_instant_max_s']} s)")
+    elif typ == "reveal":
+        rel = _num(_get(core, "derived", "round_release_unix_s")); st_ = _num(cad.get("started_after_release_s"))
+        if rel is None or st_ is None: T.absent("reveal cadence: derived.round_release_unix_s / cadence.started_after_release_s (from 0098)"); return
+        T.req(0 <= st_ <= C["reveal_start_max_s"], f"cadence: the reveal began {st_:.3f} s after the round's release (limit {C['reveal_start_max_s']} s)")
+        Rn = int(rel) * 10**9
+        for role in ("entropy", "gnss", "time", "witness"):
+            v = issued(role)
+            if v is None: T.absent(f"{role}.issued_unix_ns")
+            else: T.req(0 <= (v - Rn) / 1e9 <= C["reveal_stmt_after_release_max_s"], f"cadence: {role} reveal statement issued {(v - Rn) / 1e9:.3f} s after the release (limit {C['reveal_stmt_after_release_max_s']} s)")
+        T.facts["reveal_started_after_release_s"] = st_
+
+def evaluate_pulses(*cores, profile=PROFILE_V1):
     """Evaluate each core; the overall verdict is the worst (NOT-EVALUABLE > NOT-SATISFIED > SATISFIED)."""
-    res = [evaluate(c) for c in cores if c is not None]
+    res = [evaluate(c, profile) for c in cores if c is not None]
     order = {"NOT-EVALUABLE": 2, "NOT-SATISFIED": 1, "SATISFIED": 0}
     worst = max(res, key=lambda r: order[r.verdict]) if res else None
     return res, (worst.verdict if worst else "NOT-EVALUABLE")

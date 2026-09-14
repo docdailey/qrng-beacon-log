@@ -48,7 +48,7 @@ def parse_utc(s):
     if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
     return int(dt.timestamp())
 
-TIMING_PROFILE = "notbefore/timing/v1"
+TIMING_PROFILE = "notbefore/timing/v2"      # default since 0.15.0 (spec 0.12); v1 remains valid and is the right choice for pulses before 0098
 
 def make(after_utc, purpose, operation, params, input_path=None, note=None, signer=None, decision_id=None, timing_required=False, timing_profile=TIMING_PROFILE):
     """signer = (key_id, public_key_b64) from identity.load(); decision_id defaults to the purpose string (the namespace the

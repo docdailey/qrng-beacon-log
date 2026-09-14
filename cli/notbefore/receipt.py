@@ -177,13 +177,13 @@ def _timing_facts(F, c, cores, X):
     decl = (c.get("timing") or {}); F["timing"] = None
     if not decl.get("profile"): return
     from . import timing as TM
-    if decl["profile"] != TM.PROFILE_ID: F.say(False, f"unknown timing profile {decl['profile']!r}"); return
-    res, verdict = TM.evaluate_pulses(*cores); F["timing"] = {"profile": TM.PROFILE_ID, "required": bool(decl.get("required")), "verdict": verdict, "facts": (res[0].facts if res else {}), "failed": (res[0].failed if res else []), "missing": (res[0].missing if res else [])}
+    if decl["profile"] not in TM.PROFILES: F.say(False, f"unknown timing profile {decl['profile']!r}"); return
+    res, verdict = TM.evaluate_pulses(*cores, profile=decl["profile"]); F["timing"] = {"profile": decl["profile"], "required": bool(decl.get("required")), "verdict": verdict, "facts": (res[0].facts if res else {}), "failed": (res[0].failed if res else []), "missing": (res[0].missing if res else [])}
     tx = (X.get("obj") or {}).get("timing_policy") or {}
     if tx and tx.get("verdict") != verdict: F.say(False, f"timing profile re-evaluates to {verdict}, the transcript claimed {tx.get('verdict')}")
-    if verdict == "SATISFIED": F.say(True, f"timing profile {TM.PROFILE_ID}: SATISFIED on the signed statements ({'required' if decl.get('required') else 'reported'})")
-    elif decl.get("required"): F.say(False, f"timing profile {TM.PROFILE_ID} required by the contract: {verdict}")
-    else: F.say(True, f"timing profile {TM.PROFILE_ID}: {verdict} — reported, not required by this contract", "WARN")
+    if verdict == "SATISFIED": F.say(True, f"timing profile {decl['profile']}: SATISFIED on the signed statements ({'required' if decl.get('required') else 'reported'})")
+    elif decl.get("required"): F.say(False, f"timing profile {decl['profile']} required by the contract: {verdict}")
+    else: F.say(True, f"timing profile {decl['profile']}: {verdict} — reported, not required by this contract", "WARN")
 
 def _result_line(X):
     op = X.get("operation"); o = X.get("obj") or {}
@@ -519,11 +519,11 @@ def _check_bundle_commit_bound(R, root, bs, t, c, latest, received, verify_pulse
     prov = t.get("provenance")
     if (c.get("timing") or {}).get("profile"):
         from . import timing as TM
-        if c["timing"]["profile"] != TM.PROFILE_ID: R.say(False, f"unknown timing profile {c['timing']['profile']!r}")
+        if c["timing"]["profile"] not in TM.PROFILES: R.say(False, f"unknown timing profile {c['timing']['profile']!r}")
         else:
-            res, verdict = TM.evaluate_pulses(*([com["core"]] + ([rev["core"]] if rev and rev["core"].get("type") == "reveal" else [])))
+            res, verdict = TM.evaluate_pulses(*([com["core"]] + ([rev["core"]] if rev and rev["core"].get("type") == "reveal" else [])), profile=c["timing"]["profile"])
             tx = (t.get("timing_policy") or {}).get("verdict")
-            R.say(tx == verdict, f"timing profile {TM.PROFILE_ID} re-evaluated from the bundled pulses: {verdict} (transcript said {tx})")
+            R.say(tx == verdict, f"timing profile {c['timing']['profile']} re-evaluated from the bundled pulses: {verdict} (transcript said {tx})")
             if verdict != "SATISFIED" and c["timing"].get("required"): R.say(False, "the contract requires the timing profile and it is not satisfied")
             elif verdict != "SATISFIED": degrade(f"timing profile {verdict} (reported, not required by this contract): " + "; ".join((res[0].failed + res[0].missing)[:3]))
     if prov == "FULL-ATTESTED":

@@ -75,6 +75,7 @@ def build_parser():
     pl.add_argument("--disclose", action="store_true", help="publish the contract body in the decision log, not just its hash")
     pl.add_argument("--timing-required", action="store_true", help="refuse execution unless the selected commit's signed timing evidence satisfies the declared timing profile (default: evaluate and report; never changes which commit is used)")
     pl.add_argument("--no-timing", action="store_true", help="declare no timing profile in the contract")
+    pl.add_argument("--timing-profile", choices=["v1", "v2"], default="v2", help="timing profile to declare: v2 (default; clock health + cadence provenance, pulses from 0098) or v1 (clock health only; use for pulses before 0098)")
     pl.add_argument("--after", required=True, help="ISO-8601 UTC: use the first eligible reveal whose drand round released at or after this instant (e.g. 2026-10-01T00:00Z)")
     pl.add_argument("--purpose", required=True); pl.add_argument("--out", default=None, help="contract path (default notbefore-plan-<purpose>.json)")
     for name, kw in (("--sample", dict(type=int, metavar="K")), ("--split", dict(type=float, metavar="FRAC")), ("--assign", dict(type=int, metavar="ARMS")), ("--shuffle", dict(action="store_true")),
@@ -133,7 +134,7 @@ def _plan(a):
     if not a.unsigned:
         try: priv, _, kid, pub_b64 = I.load(a.key); signer = (kid, pub_b64)
         except I.IdentityError as e: _err(str(e) + "  (or pass --unsigned for a legacy contract with no signer and no decision-log entry)"); return 2
-    try: c = C.make(a.after, a.purpose, op, params, a.file, a.note, signer=signer, decision_id=a.decision_id, timing_required=a.timing_required, timing_profile=None if a.no_timing else C.TIMING_PROFILE)
+    try: c = C.make(a.after, a.purpose, op, params, a.file, a.note, signer=signer, decision_id=a.decision_id, timing_required=a.timing_required, timing_profile=None if a.no_timing else f"notbefore/timing/{a.timing_profile}")
     except (ValueError, D.PurposeError, FileNotFoundError) as e: _err(str(e)); return 2
     out = a.out or f"notbefore-plan-{c['purpose'].replace('/', '_').replace(':', '_')}.json"
     h = C.write(c, out); _err(f"contract written: {out}  sha256 {h}" + (f"  signer {signer[0]}  decision_id {c['decision_id']}" if signer else "  (UNSIGNED legacy contract/1)"))
@@ -244,15 +245,15 @@ def _execute(a, src):
     tp = None
     if c.get("timing") and c["timing"].get("profile"):
         from . import timing as TM
-        if c["timing"]["profile"] != TM.PROFILE_ID: [_err(l) for l in lines]; _err(f"refusing: unknown timing profile {c['timing']['profile']!r} (this release knows {TM.PROFILE_ID})"); return 1
+        if c["timing"]["profile"] not in TM.PROFILES: [_err(l) for l in lines]; _err(f"refusing: unknown timing profile {c['timing']['profile']!r} (this release knows {', '.join(TM.PROFILES)})"); return 1
         cores = [src.pulse(sel["seq"])["core"]] + ([src.pulse(sel["reveal_seq"])["core"]] if commit_bound and sel.get("reveal_seq") else []) if commit_bound else [src.pulse(seq - 1)["core"], src.pulse(seq)["core"]]
-        res, verdict = TM.evaluate_pulses(*cores)
-        tp = {"profile": TM.PROFILE_ID, "required": bool(c["timing"].get("required")), "verdict": verdict, "per_pulse": [{"verdict": r.verdict, "failed": r.failed, "missing": r.missing, "facts": r.facts} for r in res]}
+        res, verdict = TM.evaluate_pulses(*cores, profile=c['timing']['profile'])
+        tp = {"profile": c['timing']['profile'], "required": bool(c["timing"].get("required")), "verdict": verdict, "per_pulse": [{"verdict": r.verdict, "failed": r.failed, "missing": r.missing, "facts": r.facts} for r in res]}
         lvl = "PASS" if verdict == "SATISFIED" else ("FAIL" if c["timing"].get("required") else "WARN")
         detail = "; ".join((res[0].failed + res[0].missing)[:3]) if res else "no pulses"
-        lines.append(f"[{lvl}] timing profile {TM.PROFILE_ID}: {verdict}" + (f" ({detail})" if verdict != "SATISFIED" else "") + (" — required by the contract" if c["timing"].get("required") else " — reported (not required by the contract)"))
+        lines.append(f"[{lvl}] timing profile {c['timing']['profile']}: {verdict}" + (f" ({detail})" if verdict != "SATISFIED" else "") + (" — required by the contract" if c["timing"].get("required") else " — reported (not required by the contract)"))
         if verdict != "SATISFIED" and c["timing"].get("required"):
-            [_err(l) for l in lines]; _err(f"refusing: the contract requires timing profile {TM.PROFILE_ID} and the selected commit's evidence is {verdict}. The selection stands (commit {sel['seq'] if commit_bound else seq-1:04d}); no other value is tried."); return 1
+            [_err(l) for l in lines]; _err(f"refusing: the contract requires timing profile {c['timing']['profile']} and the selected commit's evidence is {verdict}. The selection stands (commit {sel['seq'] if commit_bound else seq-1:04d}); no other value is tried."); return 1
     if commit_bound:
         from . import commitbound as CB
         vstar = CB.value(sel["C"], sel["rho_hex"], sel["chain_hash"], sel["target_round"]); S = D.seed(vstar, P)

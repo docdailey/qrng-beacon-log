@@ -1,0 +1,25 @@
+{
+  "note": "Pulses EXPECTED not to satisfy the timing profile because of a published erratum: the profile detecting them is the intended behaviour, not a defect. The CLI suite requires every other v0.5 pulse from 0020 to satisfy v1 and every pulse listed here NOT to, so this list cannot hide anything. Pulses are immutable; the list only grows.",
+  "pulses": {
+    "116": {
+      "erratum": "ERR-018",
+      "verdict_v1": "NOT-EVALUABLE",
+      "why": "01:00Z 2026-09-14: ts2phc stopped during the F9T incident (no discipline numbers); the BMC ptp4l was servoing, so the mesh monitor reports s2 where the profile expects the read-only s0"
+    },
+    "117": {
+      "erratum": "ERR-018",
+      "verdict_v1": "NOT-EVALUABLE",
+      "why": "reveal of 0116 under the same configuration"
+    },
+    "118": {
+      "erratum": "ERR-018",
+      "verdict_v1": "NOT-SATISFIED",
+      "why": "02:00Z 2026-09-14: the intermittent F9T pulse put a +1.01 ms sample into the F9T->i210 discipline window (225 us RMS) and -1.01 ms into the mesh"
+    },
+    "119": {
+      "erratum": "ERR-018",
+      "verdict_v1": "NOT-SATISFIED",
+      "why": "reveal of 0118: -34.7 ms sample, 4.96 ms RMS in the discipline window"
+    }
+  }
+}
