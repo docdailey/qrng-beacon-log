@@ -50,6 +50,12 @@ At 02:27Z p550 was returned to the BMC discipline (ptp4l `free_running 0`, −1 
 ts2phc stopped, and stays there until the F9T pulse is clean for a sustained period. Cycles minted on the BMC discipline
 will be NOT-SATISFIED under v1's `servo == ts2phc` requirement and pay the stamp probe's 12 s fallback; both are known.
 
+**Addendum, 03:30Z.** The pulse stayed intermittent through 03:20Z (clean windows at 03:00 and 03:10, 51 edges with a 33.7 ms
+outlier at 03:20); p550 remains on the BMC discipline. **0120/0121 (03:00Z)** verify and are NOT-EVALUABLE under the profile
+(mesh monitor servoing; f9t sawtooth-log coverage 86 % from the receiver's serial row loss); they and every pulse until the
+hand-back are listed in `ci/TIMING_PROFILE_EXCEPTIONS.json` (an open range from 0122). Each such cycle also pays the stamp
+probe's 12 s fallback (push +14.4 s, reveal +16.6 s at 03:00Z; margins intact).
+
 **Lesson stated plainly.** A hand correction to a stratum-1 clock must be measured twice and applied with a tool whose
 sign convention has been read, not guessed; and a chronyd that can step without limit (`makestep 1 -1`) must not be allowed
 to choose an NTP peer over the hardware clock it exists to follow.

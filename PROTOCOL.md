@@ -350,4 +350,6 @@ commit whose datagram never arrived would be NOT-SATISFIED. With v2 enforced the
 
 Pulses a published erratum says must NOT satisfy the profile are listed in `ci/TIMING_PROFILE_EXCEPTIONS.json` with the
 verdict expected of them (first entries: 0116–0119, ERR-018); the CLI suite requires every other v0.5 pulse from 0020 to satisfy
-v1 and each listed pulse to fail exactly as documented, so the list cannot hide anything. Pulses are immutable; the list only grows.
+v1 and each listed pulse to fail exactly as documented, so the list cannot hide anything. An open **range** (`to: null`) covers a
+running condition - from 0122, p550 disciplined by the BMC grandmaster while the F9T pulse is out - and every pulse in it must
+NOT be SATISFIED; it is closed at the first pulse minted after the condition ends. Pulses are immutable; the list only grows.

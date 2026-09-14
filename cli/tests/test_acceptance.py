@@ -468,11 +468,16 @@ def test_35_timing_profile_is_enforced_only_when_declared_required_and_never_rer
     cores = {int(fn[6:10]): json.load(open(os.path.join(LOG, "chain", fn)))["core"] for fn in os.listdir(os.path.join(LOG, "chain")) if re.fullmatch(r"pulse-\d{4}\.json", fn)}
     # documented exceptions (ci/TIMING_PROFILE_EXCEPTIONS.json): pulses a published erratum says MUST NOT satisfy the profile; the
     # profile detecting them is the intended behaviour, and each must fail exactly as documented so the list cannot hide anything
-    exc = {int(k): v for k, v in json.load(open(os.path.join(LOG, "ci", "TIMING_PROFILE_EXCEPTIONS.json")))["pulses"].items()}
-    live = [s for s in sorted(cores) if s >= 20 and cores[s].get("type") in ("commit", "reveal") and s not in exc]
+    xj = json.load(open(os.path.join(LOG, "ci", "TIMING_PROFILE_EXCEPTIONS.json")))
+    exc = {int(k): v for k, v in xj["pulses"].items()}
+    in_range = lambda s: any(r["from"] <= s <= (r.get("to") if r.get("to") is not None else 10**9) for r in xj.get("ranges", []))
+    live = [s for s in sorted(cores) if s >= 20 and cores[s].get("type") in ("commit", "reveal") and s not in exc and not in_range(s)]
     assert all(TM.evaluate(cores[s]).verdict == "SATISFIED" for s in live), [(s, TM.evaluate(cores[s]).failed) for s in live if TM.evaluate(cores[s]).verdict != "SATISFIED"]
     for s_, v in exc.items():
         if s_ in cores: assert TM.evaluate(cores[s_]).verdict == v["verdict_v1"], (s_, v["verdict_v1"], TM.evaluate(cores[s_]).verdict)
+    for s_ in sorted(cores):
+        if in_range(s_) and s_ not in exc and cores[s_].get("type") in ("commit", "reveal"):
+            assert TM.evaluate(cores[s_]).verdict != "SATISFIED", (s_, "listed in an open exception range but SATISFIED: close the range")
     assert TM.evaluate(cores[18]).verdict == "NOT-SATISFIED" and TM.evaluate(cores[19]).verdict == "NOT-SATISFIED"
     assert TM.evaluate(cores[10]).verdict == "NOT-EVALUABLE"                                   # pre-v0.5: no statements
     c = copy.deepcopy(cores[42]); st = c["statements"]["time"].get("statement", c["statements"]["time"])

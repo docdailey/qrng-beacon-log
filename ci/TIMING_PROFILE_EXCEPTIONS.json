@@ -1,5 +1,5 @@
 {
-  "note": "Pulses EXPECTED not to satisfy the timing profile because of a published erratum: the profile detecting them is the intended behaviour, not a defect. The CLI suite requires every other v0.5 pulse from 0020 to satisfy v1 and every pulse listed here NOT to, so this list cannot hide anything. Pulses are immutable; the list only grows.",
+  "note": "Pulses EXPECTED not to satisfy the timing profile because of a published erratum: the profile detecting them is the intended behaviour, not a defect. The CLI suite requires every other v0.5 pulse from 0020 to satisfy v1 and every pulse listed here NOT to, so this list cannot hide anything. Pulses are immutable; the list only grows. A range with `to: null` is open: pulses in it must NOT be SATISFIED (either failing verdict) until it is closed.",
   "pulses": {
     "116": {
       "erratum": "ERR-018",
@@ -20,6 +20,25 @@
       "erratum": "ERR-018",
       "verdict_v1": "NOT-SATISFIED",
       "why": "reveal of 0118: -34.7 ms sample, 4.96 ms RMS in the discipline window"
+    },
+    "120": {
+      "erratum": "ERR-018",
+      "verdict_v1": "NOT-EVALUABLE",
+      "why": "03:00Z 2026-09-14: p550 on the BMC discipline (mesh monitor servoing, s2 where v1 expects s0); receiver serial row loss put the f9t sawtooth-log coverage at 86 % (< 95 %)"
+    },
+    "121": {
+      "erratum": "ERR-018",
+      "verdict_v1": "NOT-EVALUABLE",
+      "why": "reveal of 0120 under the same configuration"
     }
-  }
+  },
+  "ranges": [
+    {
+      "from": 122,
+      "to": null,
+      "erratum": "ERR-018",
+      "verdict_v1_not": "SATISFIED",
+      "why": "while p550's i210 PHC is disciplined by the BMC grandmaster instead of the F9T (ts2phc stopped; F9T pulse intermittent since 2026-09-14 01:39Z), every pulse is NOT-EVALUABLE or NOT-SATISFIED under v1 by design; close this range (set `to`) at the first pulse minted after the F9T hand-back"
+    }
+  ]
 }
