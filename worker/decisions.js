@@ -215,13 +215,14 @@ async function handle(req, env) {
 // One row per (UTC hour, path, kind, country) in D1 table `hits`, incremented after the response is sent (waitUntil). No IPs,
 // no user agents and no per-request rows are stored. `kind`: self = our own machines (SELF_IPS secret: exact IPv4s and IPv6
 // prefixes, comma-separated) or our own automation user agents; cli = the notbefore CLI; bot = declared crawlers; other = everything
-// else (browsers, curl, unknown). "Excluding our machines" is simply kind != self. Counting never affects the response: any error is swallowed.
+// else (browsers, curl, unknown); ci = the CLI run from GitHub Actions on every push. "Excluding our machines" is kind not in (self, ci). Counting never affects the response: any error is swallowed.
 const SELF_UA = ["qrng-beacon-log/", "qrng-beacon-watcher/", "notbefore-decisions-mirror"];
 function hitKind(req, env) {
   const ip = req.headers.get("CF-Connecting-IP") || "", ua = req.headers.get("User-Agent") || "";
   const self = (env.SELF_IPS || "").split(",").map(s => s.trim()).filter(Boolean);
   if (self.some(s => s.includes(":") ? ip.toLowerCase().startsWith(s.toLowerCase()) : ip === s)) return "self";
   if (SELF_UA.some(u => ua.startsWith(u))) return "self";
+  if (ua.startsWith("notbefore-cli") && req.cf && req.cf.asn === 8075) return "ci";                 // the CLI run by our own GitHub Actions (Azure ASN); a real CLI user on Azure would land here too
   if (ua.startsWith("notbefore-cli")) return "cli";
   if (/bot|crawler|spider|slurp|preview|fetch\/|monitor|uptime|headless/i.test(ua)) return "bot";
   return "other";
@@ -243,12 +244,12 @@ async function stats(req, env) {
   const url = new URL(req.url); const days = Math.min(365, Math.max(1, parseInt(url.searchParams.get("days") || "30", 10) || 30));
   const since = new Date(Date.now() - days * 86400e3).toISOString().slice(0, 13) + ":00Z";
   const q = (sql, ...b) => db.prepare(sql).bind(...b).all().then(r => r.results);
-  const byPath = await q("SELECT path, SUM(n) AS hits FROM hits WHERE hour >= ?1 AND kind != 'self' GROUP BY path ORDER BY hits DESC LIMIT 40", since);
-  const byDay = await q("SELECT substr(hour, 1, 10) AS day, SUM(n) AS hits FROM hits WHERE hour >= ?1 AND kind != 'self' GROUP BY day ORDER BY day", since);
+  const byPath = await q("SELECT path, SUM(n) AS hits FROM hits WHERE hour >= ?1 AND kind NOT IN ('self','ci') GROUP BY path ORDER BY hits DESC LIMIT 40", since);
+  const byDay = await q("SELECT substr(hour, 1, 10) AS day, SUM(n) AS hits FROM hits WHERE hour >= ?1 AND kind NOT IN ('self','ci') GROUP BY day ORDER BY day", since);
   const byKind = await q("SELECT kind, SUM(n) AS hits FROM hits WHERE hour >= ?1 GROUP BY kind ORDER BY hits DESC", since);
-  const byCountry = await q("SELECT country, SUM(n) AS hits FROM hits WHERE hour >= ?1 AND kind != 'self' GROUP BY country ORDER BY hits DESC LIMIT 25", since);
+  const byCountry = await q("SELECT country, SUM(n) AS hits FROM hits WHERE hour >= ?1 AND kind NOT IN ('self','ci') GROUP BY country ORDER BY hits DESC LIMIT 25", since);
   const total = byPath.reduce((a, r) => a + r.hits, 0);
-  return json({ since, days, note: "hits to notbefore.net excluding the operator's own machines and automation (kind = self); counted per UTC hour, path, kind and country; no addresses or user agents are stored",
+  return json({ since, days, note: "hits to notbefore.net excluding the operator's own machines and automation (kind = self) and the CLI run by the repository's own CI (kind = ci); counted per UTC hour, path, kind and country; no addresses or user agents are stored",
                 total_excluding_self: total, by_day: byDay, by_path: byPath, by_kind_including_self: byKind, by_country: byCountry });
 }
 
