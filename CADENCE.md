@@ -123,6 +123,10 @@ carry the excursions in their signed statements and fail the timing profile, as 
 04:11:16Z after three clean ten-minute windows (gated, automatic); 0116–0123 are the eight pulses that fail the profile for
 this incident (`ci/TIMING_PROFILE_EXCEPTIONS.json`), all of them cryptographically valid.
 
+**12:00Z–14:36Z 2026-09-14, ERR-019:** commit 0138's reveal was refused (stale GNSS anchor from f9t's stalled serial stream), the
+failure path broke on its reason string, and the 13:00 and 14:00 hours minted nothing while the recovery kept hitting the same
+refusal; resolved by hand with failure pulse 0139 at 14:36Z. Fixes in pulse.py and beacon-cycle.py (see ERRATA).
+
 **Pre-built trigger datagram (from 0138, 12:00Z 2026-09-14):** p550 canonicalizes the statement before the instant and, after the
 edge, fills the event numbers, signs with libsodium and sends: first copy at +0.28 ms in the lab (was +1.0–1.15 ms live). The
 statement's content and k3's verification are unchanged (latency_chain.md §9b). k3's own clock logger (`epoch_stream`) shows the excursion exactly: PHC − system held 37.000 s ± 150 ns until 00:33Z, then fell

@@ -318,10 +318,14 @@ def cmd_reveal(drand_file=None):
     if hashlib.sha256(S.COMMIT_DOMAIN + E).hexdigest() != hp["core"]["derived"]["entropy_commitment"]: die("revealed E does not match the published commitment")
     sts = {"entropy": ent, **rest}
     anchor_s = D(sts["gnss"]["statement"]["measurement"]["anchor"]["utc_unix_s"])
-    for attempt in range(3):                                   # the chain now reveals ~1.5 s after the round; the GNSS host's anchor is a whole
-        if anchor_s >= dr["round_release_unix_s"]: break       # second and can lag the release by one: ask again instead of failing the pulse
-        sys.stderr.write(f"note: GNSS anchor {anchor_s} precedes the release {dr['round_release_unix_s']}; asking f9t again ({attempt + 1}/3)\n")
-        time.sleep(0.7); sts.update(collect(seq, "reveal", cph, ("gnss",))); anchor_s = D(sts["gnss"]["statement"]["measurement"]["anchor"]["utc_unix_s"])
+    # The GNSS host's anchor is a whole second and can lag the release; its serial stream can also stall for seconds (ERR-019:
+    # three 0.7 s retries were not enough at 12:01Z 2026-09-14). Ask again every second for up to 60 s, never past the window.
+    t_retry = time.time(); attempt = 0
+    while anchor_s < dr["round_release_unix_s"]:
+        attempt += 1
+        if time.time() - t_retry > 60 or time.time() > S.release_time(target) + S.REVEAL_DEADLINE_S - 90: break
+        sys.stderr.write(f"note: GNSS anchor {anchor_s} precedes the release {dr['round_release_unix_s']}; asking f9t again ({attempt}, {time.time() - t_retry:.0f} s)\n")
+        time.sleep(1.0); sts.update(collect(seq, "reveal", cph, ("gnss",))); anchor_s = D(sts["gnss"]["statement"]["measurement"]["anchor"]["utc_unix_s"])
     if anchor_s < dr["round_release_unix_s"]: die("reveal anchored before the round released")
     buf = S.MIX_DOMAIN + E + bytes.fromhex(dr["randomness"]) + bytes.fromhex(dr["chain_hash"]) + int(target).to_bytes(8, "big")
     core = {"v": S.VERSION, "type": "reveal", "seq": seq, "prev_hash": prev_hash, "chain_hash": S.CHAIN_HASH,
@@ -349,8 +353,18 @@ def cmd_fail(reason):
     seq, prev_hash, hp = head()
     if ptype(hp) != "commit": die("head is not a commit; nothing to fail")
     cseq, cph = seq, prev_hash; seq += 1
-    ent = check_statement("entropy", json.loads(ssh("protectli", f"abandon-prepare {cseq} {cph} {reason}")), cseq, "failure", cph)
-    if ent["statement"].get("reason") != reason: die("entropy host signed a different failure reason")
+    # ERR-019 (2026-09-14): the reason went through shlex.split on its way to the daemon, which stripped the quotes json.dumps
+    # had put in (host signed one string, we compared another) and raised on an unbalanced quote (the 12:01Z crash). Send the
+    # reason as ONE argument; the daemon joins its trailing arguments with single spaces, so it signs exactly this string.
+    if RPC == "agentd":
+        import rpc
+        raw = rpc.call("protectli", "abandon-prepare", str(cseq), cph, reason)
+    else: raw = ssh("protectli", f"abandon-prepare {cseq} {cph} {reason}")
+    ent = check_statement("entropy", json.loads(raw), cseq, "failure", cph)
+    host_reason = ent["statement"].get("reason")
+    if not host_reason: die("entropy host signed an empty failure reason")
+    if host_reason != reason:
+        sys.stderr.write(f"note: entropy host signed the reason as {host_reason!r}; the pulse carries the host's signed wording\n"); reason = host_reason
     sts = {"entropy": ent}
     for n in ("gnss", "time", "witness"):
         try: sts.update(collect(seq, "failure", cph, (n,)))

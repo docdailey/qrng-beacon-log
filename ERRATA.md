@@ -6,6 +6,37 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-019 — commit 0138 could not be revealed or failed for 2 h 35 min: a stalled receiver stream put the GNSS anchor before the release, and the failure path then broke on its own reason string (2026-09-14 12:01–14:36Z)
+
+**What happened.** At 12:01:01Z the round for commit 0138 was served 1.11 s after its release and the reveal began. f9t's
+GNSS anchor came back as 1789387259 (one second before the release 1789387260), because the receiver's serial stream had
+stalled - the same row loss that has dropped its sawtooth-log coverage below 95 % since the F9T incident (ERR-018). The
+reveal asked f9t again three times 0.7 s apart, got the same stale second each time, and was refused ("reveal anchored
+before the round released"). The cycle then tried to mint the failure pulse, and that path had two defects of its own:
+the reason string (built with `json.dumps`, so quoted) was passed through `shlex.split` on its way to the entropy host's
+daemon, which strips quotes and, on the 200-character truncation cutting inside a quoted section, raised ValueError - the
+12:01Z crash. The 13:00Z and 14:00Z cycles resumed the unresolved commit as designed, reached the failure path, and were
+refused with "entropy host signed a different failure reason": the host had signed the de-quoted string. Neither hour
+minted its own commit. Resolved by hand at 14:36Z: failure pulse **0139** minted with a single-token reason, published,
+finalized on the entropy host, verified; the chain resumed at 15:00Z.
+
+**What it affected.** Two hours without a pulse (13:00Z, 14:00Z) and one commit resolved 2 h 35 min late, by a failure
+pulse rather than a reveal. No value was revealed or withheld improperly: 0138's secret stayed on the entropy host in the
+`abandoning` state until finalized as abandoned. CI's chain check failed from 12:50Z to 14:36Z on the unresolved commit,
+which is what it is for. 0138 is NOT-SATISFIED under the timing profile (f9t coverage 88.7 %) and is listed in
+`ci/TIMING_PROFILE_EXCEPTIONS.json`. The pre-built trigger datagram deployed at 11:34Z worked as intended and is unrelated
+(0138's trigger reached k3's kernel 0.55 ms after the instant).
+
+**What was done.** (1) The failure reason is sent to the daemon as one argument, never shell-split; if the host's signed
+wording differs, the pulse carries the host's wording instead of refusing. (2) The reveal keeps asking f9t for a fresh
+anchor every second for up to 60 s, never past the reveal window, instead of three quick tries. (3) The cycle driver's
+failure extras are plain `key=value`, no quotes or braces. Open: the receiver's serial stream itself (Sipeed bridge or
+receiver; ERR-018), and the stamp-probe window that makes f9t's coverage a per-pulse verdict.
+
+**Lesson.** A failure path is only a failure path if it has been exercised end to end with realistic inputs; this one
+had been fixed once (ERR-017) for the reason string and still carried a shell-splitting step nobody had run a quoted
+string through.
+
 ## ERR-018 — operator error during a clock incident: the time host's PHC was set 73.8 s off by hand for four minutes, and the aggregator's clock followed NTP 60 s away from its PHC (2026-09-14 00:32–00:50Z; no pulse minted or affected)
 
 **What happened.** While Bill re-seated the ZED-F9T (a loose TP1 wire), its pulse into p550's i210 was absent or disturbed

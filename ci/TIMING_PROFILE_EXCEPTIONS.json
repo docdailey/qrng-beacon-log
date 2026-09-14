@@ -40,6 +40,11 @@
       "erratum": "ERR-018",
       "verdict_v1": "NOT-EVALUABLE",
       "why": "reveal of 0122 under the same configuration"
+    },
+    "138": {
+      "erratum": "ERR-019",
+      "verdict_v1": "NOT-SATISFIED",
+      "why": "12:00Z 2026-09-14: f9t sawtooth-log coverage 88.7 % (< 95 %) from the receiver's serial row loss; the same stall put the reveal's GNSS anchor before the release and the reveal was refused (failure pulse 0139)"
     }
   },
   "ranges": [

@@ -68,7 +68,8 @@ def fail(seq, reason, extra=None):
     mints a failure pulse chained after the commit. Nothing is hidden and nothing is unsigned."""
     log(f"FAILED seq {seq}: {reason} {extra or ''}")
     try:
-        out = run("python3", "pulse.py", "fail", f"{reason} {json.dumps(extra) if extra else ''}".strip())
+        detail = " ".join(f"{k}={str(v).replace(chr(34), '').replace(chr(39), '')}" for k, v in (extra or {}).items())   # key=value, no quotes/braces (ERR-019)
+        out = run("python3", "pulse.py", "fail", f"{reason} {detail}".strip())
         log("failure pulse minted: " + out.strip().replace("\n", " ")[:160])
     except Exception as e:
         log(f"could not mint failure pulse: {e}")
