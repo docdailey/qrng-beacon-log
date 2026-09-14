@@ -37,6 +37,8 @@ jobs:
       matrix: { python: ["3.10", "3.12"] }
     steps:
       - uses: actions/checkout@v4
+      - name: Tell the hit counter this runner is ours (notbefore.net/stats excludes it)
+        run: curl -s -m 8 -4 -o /dev/null -H "X-Self-Token: ${{ secrets.NOTBEFORE_SELF_TOKEN }}" -H "X-Self-Note: github-actions" https://notbefore.net/self-register || true
         with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: "${{ matrix.python }}" }
@@ -54,6 +56,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Tell the hit counter this runner is ours (notbefore.net/stats excludes it)
+        run: curl -s -m 8 -4 -o /dev/null -H "X-Self-Token: ${{ secrets.NOTBEFORE_SELF_TOKEN }}" -H "X-Self-Note: github-actions" https://notbefore.net/self-register || true
         with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
