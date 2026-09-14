@@ -12,12 +12,81 @@
       "enabled": true,
       "timeout_s": 8,
       "since_utc": "2026-09-12"
+    },
+    {
+      "name": "witness.stagemole.eu",
+      "verifier_key": "witness.stagemole.eu+67f7aea0+BEqSG3yu9YrmcM3BHvQYTxwFj3uSWakQepafafpUqklv",
+      "url": "https://witness.stagemole.eu",
+      "software": "c2sp tlog-witness (Mullvad VPN AB)",
+      "operated_by": "Mullvad VPN AB",
+      "independent": true,
+      "lists": [
+        "testing/log-list.1",
+        "staging/log-list-10qps-4klogs.1",
+        "staging/log-list-100qps-40klogs.1"
+      ],
+      "enabled": false,
+      "timeout_s": 3,
+      "about": "https://witness.stagemole.eu/about",
+      "contact": "services@mullvad.net",
+      "note": "answers 404 'unknown log' to our checkpoint until notbefore.net/log is on a list it serves (probed 2026-09-14 15:00Z); enable when listed"
+    },
+    {
+      "name": "staging.witness.transparency.goog/ring-any-bells",
+      "verifier_key": "staging.witness.transparency.goog/ring-any-bells+2e1a8dc9+BG5JTpLc3FJtwzgh1Uv+Qelz9qeOH2bfWjS1s0s+y4rL",
+      "url": "https://staging.witness.transparency.goog/ring-any-bells",
+      "software": "TrustFabric witness",
+      "operated_by": "TrustFabric (transparency.dev)",
+      "independent": true,
+      "lists": [
+        "testing/log-list.1",
+        "staging/log-list-10qps-4klogs.1"
+      ],
+      "enabled": false,
+      "timeout_s": 3,
+      "about": "https://transparency.dev/witnesses",
+      "note": "404 to our checkpoint until listed (probed 2026-09-14); enable when listed"
+    },
+    {
+      "name": "witness.navigli.sunlight.geomys.org",
+      "verifier_key": "witness.navigli.sunlight.geomys.org+a3e00fe2+BNy/co4C1Hn1p+INwJrfUlgz7W55dSZReusH/GhUhJ/G",
+      "url": "https://witness.navigli.sunlight.geomys.org",
+      "software": "Sunlight witness (Geomys)",
+      "operated_by": "Geomys",
+      "independent": true,
+      "lists": [
+        "testing/log-list.1",
+        "staging/log-list-10qps-4klogs.1",
+        "staging/log-list-100qps-40klogs.1"
+      ],
+      "enabled": false,
+      "timeout_s": 3,
+      "about": "https://geomys.org/witness/navigli",
+      "note": "staging instance; enable when listed"
+    },
+    {
+      "name": "transparency.dev/DEV:witness-little-garden",
+      "verifier_key": "transparency.dev/DEV:witness-little-garden+d8042a87+BCtusOxINQNUTN5Oj8HObRkh2yHf/MwYaGX4CPdiVEPM",
+      "url": "https://api.transparency.dev/dev/witness/little-garden",
+      "software": "TrustFabric dev witness",
+      "operated_by": "TrustFabric (transparency.dev)",
+      "independent": true,
+      "lists": [
+        "testing/log-list.1"
+      ],
+      "enabled": false,
+      "timeout_s": 3,
+      "about": "https://transparency.dev/witnesses",
+      "note": "testing-list only; may reset without notice; 404 to our checkpoint until listed"
     }
   ],
   "independent_witnesses": [],
   "witness_network": {
     "site": "https://witness-network.org",
-    "status": "participation requested 2026-09-12 (Bill emailed participate@lists.witness-network.org; staging list, qpd 60)",
-    "independent_witnesses_configured": 0
+    "application": "Bill emailed participate@lists.witness-network.org on 2026-09-12 19:40 UTC (thread H54MTSQCFJSXJT3N43BYCLQLBHN2UHT2): staging list, qpd 60, vkey notbefore.net/log+8b627e7f+AfPQekreiy4JUcf8TEcJs4Mj00EHL7JvHUSSLXeyZVLs, contact docdailey(a)gmail.com",
+    "status_2026-09-14T15:00Z": "no maintainer reply yet; notbefore.net/log is on none of the three lists; all four network witnesses answer 404 unknown log to a well-formed add-checkpoint (format accepted, listing missing)",
+    "requirements_check": "origin schema-less URL: ok; vkey Ed25519 0x01 in signed-note form: ok; checkpoint per tlog-checkpoint, note per signed-note: ok (live at https://notbefore.net/checkpoint); tlog-witness v1 client (old/proof/blank/note, 409 size dance): ok, probed; tlog-cosignature v1 parsing and quorum in verify: ok; qpd: 48/day steady (2 per hour), requested 60; contact: ok; parallel submission with a 3 s total budget so witnesses cannot delay publication (2026-09-14)",
+    "independent_witnesses_configured": 4,
+    "independent_witnesses_enabled": 0
   }
 }

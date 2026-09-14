@@ -183,21 +183,34 @@ def cosigners_from(root_dir=HERE):
             if alg == 4: out[name] = pub
         except Exception as e: sys.stderr.write(f"WITNESSES.json: cannot parse verifier key for {w.get('name')}: {e}\n")
     return out
-def gather_cosignatures(note, leaves, root_dir=HERE, log=None):
-    """Ask every configured witness; append the cosignature lines that VERIFY; never raise (a witness outage must not delay a pulse)."""
+WITNESS_BUDGET_S = 3.0        # all witnesses are asked IN PARALLEL and publication waits at most this long for the slowest (2026-09-14)
+def gather_cosignatures(note, leaves, root_dir=HERE, log=None, budget_s=WITNESS_BUDGET_S):
+    """Ask every configured witness at once; append the cosignature lines that VERIFY; never raise and never wait longer than
+    budget_s in total (a witness outage or a slow witness must not delay a pulse; with N witnesses asked one after another the
+    old cap of 3 s each could hold the push for 3N s). A witness that answers after the budget is simply absent from this
+    checkpoint - v1 cosignatures are independent of one another."""
+    import concurrent.futures, time as _t
     cos = cosigners_from(root_dir); added = []
-    for w in witnesses(root_dir):
-        if not w.get("url") or not w.get("enabled", True): continue
-        try:
-            lines = witness_submit(w["url"], note, leaves, timeout=min(int(w.get("timeout_s", 8)), 3))   # a slow witness must not hold publication (cap 3 s)
-            good = verify_cosignatures(note.rstrip("\n") + "\n" + lines, cos)
-            names = {n for n, _ in good}
-            for l in lines.splitlines():
-                m = re.match(r"^\u2014 (\S+) ", l)
-                if m and m.group(1) in names and l + "\n" not in note: note = note + l + "\n"; added.append(m.group(1))
-            if log: log(f"witness {w['name']}: {'cosigned' if added and w['name'] in added else 'no valid cosignature (' + (lines.strip()[:60] or 'empty') + ')'}")
-        except Exception as e:
-            if log: log(f"witness {w.get('name', w.get('url'))}: {str(e)[:120]}")
+    ws = [w for w in witnesses(root_dir) if w.get("url") and w.get("enabled", True)]
+    if not ws: return note, added
+    def ask(w): return w, witness_submit(w["url"], note, leaves, timeout=min(int(w.get("timeout_s", 8)), budget_s))
+    t0 = _t.time()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(ws)) as ex:
+        futs = {ex.submit(ask, w): w for w in ws}
+        for fut in concurrent.futures.as_completed(futs, timeout=None):
+            w = futs[fut]
+            try:
+                if _t.time() - t0 > budget_s and not fut.done(): raise TimeoutError("witness budget exhausted")
+                _, lines = fut.result(timeout=max(0.05, budget_s - (_t.time() - t0)))
+                good = verify_cosignatures(note.rstrip("\n") + "\n" + lines, cos)
+                names = {n for n, _ in good}
+                for l in lines.splitlines():
+                    m = re.match(r"^\u2014 (\S+) ", l)
+                    if m and m.group(1) in names and l + "\n" not in note: note = note + l + "\n"; added.append(m.group(1))
+                if log: log(f"witness {w['name']}: {'cosigned' if w['name'] in added else 'no valid cosignature (' + (lines.strip()[:60] or 'empty') + ')'} in {_t.time() - t0:.2f} s")
+            except Exception as e:
+                if log: log(f"witness {w.get('name', w.get('url'))}: {str(e)[:120]}")
+        ex.shutdown(wait=False, cancel_futures=True)
     return note, added
 
 # ---------------------------------------------------------------- publishing (called by beacon-cycle.publish on think)
