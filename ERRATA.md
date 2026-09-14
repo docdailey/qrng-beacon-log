@@ -64,6 +64,13 @@ unit 30:68:93:a8:50:86 is now 192.168.71.250), so a Deco unit is identified by M
 stay in place: they cost nothing when the path is healthy and are the only thing that kept the 16:00Z hour when it
 was not.
 
+**Audit and watch (19:00Z).** From both sides of the mesh: WAN 0 % loss over 30 probes, 1500-byte path MTU clean, ~660 Mbit/s
+down; every dependency the cycle uses answered a real request from k3 in 0.1-1.1 s (both TSAs granted, four drand relays
+on the same round, Rekor, four OpenTimestamps calendars, both block-header sources, GitHub API and SSH, all four Witness
+Network witnesses, PyPI, the site); 60 of 60 fresh flows to the router. `hosts/netprobe.py` now runs every five minutes
+on k3 and on think (the control on the main unit's wire) and writes `timehat.netprobe_stream`; a nonzero "fresh flows
+lost" there is this fault coming back, and it will show hours before a cycle trips on it.
+
 **Lesson.** Loss that is sticky per flow is invisible to every monitor that keeps its socket - ping, PTP, chrony, an SSH
 session - and only shows in things that open a new connection per request, which is exactly what the beacon's TSA,
 Rekor and git steps do. The probe that finds it is "N fresh sockets, count the ones that never answer"; the mitigation
