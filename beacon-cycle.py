@@ -30,8 +30,12 @@ def run(*a, check=True, timeout=600):
     return r.stdout.strip()
 
 def drand_latest_round():
-    with urllib.request.urlopen(f"https://api.drand.sh/{CHAIN_HASH}/public/latest", timeout=15) as r:
-        return json.load(r)["round"]
+    for attempt in range(3):                # fresh connection per attempt (ERR-020)
+        try:
+            with urllib.request.urlopen(f"https://api.drand.sh/{CHAIN_HASH}/public/latest", timeout=6) as r:
+                return json.load(r)["round"]
+        except Exception:
+            if attempt == 2: raise
 
 def checkpoint():
     """TLOG.md: sign the new tree head so the pulse and the checkpoint covering it travel in ONE commit. Never blocks
@@ -47,10 +51,13 @@ def push_with_rebase(attempts=3):
     checkpoint files, so rebasing onto the new head is conflict-free; a rejected push is retried after a rebase
     instead of costing a reveal (ERR-010, 2026-09-12 16:00Z cycle)."""
     for i in range(attempts):
-        r = subprocess.run(["git", "push", "-q", "origin", "main"], cwd=REPO, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        try: r = subprocess.run(["git", "push", "-q", "origin", "main"], cwd=REPO, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=40)
+        except subprocess.TimeoutExpired:
+            log(f"push hung 40 s (a new connection is a new flow on the lossy backhaul, ERR-020); retrying ({i+1}/{attempts})"); continue
         if r.returncode == 0: return
         msg = (r.stderr or r.stdout).strip().splitlines(); log(f"push rejected ({msg[-1][:80] if msg else '?'}); rebasing onto origin/main and retrying ({i+1}/{attempts})")
-        rb = subprocess.run(["git", "pull", "-q", "--rebase", "origin", "main"], cwd=REPO, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        try: rb = subprocess.run(["git", "pull", "-q", "--rebase", "origin", "main"], cwd=REPO, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=40)
+        except subprocess.TimeoutExpired: log("rebase pull hung 40 s; retrying"); continue
         if rb.returncode != 0:
             subprocess.run(["git", "rebase", "--abort"], cwd=REPO, capture_output=True); raise RuntimeError("rebase onto origin/main failed: " + (rb.stderr or rb.stdout).strip()[:200])
     raise RuntimeError(f"git push rejected {attempts} times")
@@ -251,7 +258,11 @@ def catch_up():
 
 def prepare():
     """pull, catch up, recover. Returns None (ready to commit) or (seq, target, release) of an unresolved commit to resume."""
-    run("git", "pull", "-q", "--ff-only", "origin", "main")
+    for attempt in range(3):                # 2026-09-14 (ERR-020): each attempt is a new flow; a hung one costs 25 s, not the hour
+        try: run("git", "pull", "-q", "--ff-only", "origin", "main", timeout=25); break
+        except (subprocess.TimeoutExpired, RuntimeError) as e:
+            if attempt == 2: raise
+            log(f"pull attempt {attempt + 1}/3 failed ({type(e).__name__}: {str(e)[:80]}); retrying on a new connection")
     catch_up()
     r = subprocess.run(["python3", "pulse.py", "recover"], cwd=REPO, capture_output=True, text=True, stdin=subprocess.DEVNULL)
     log("recover: " + (r.stdout.strip() or r.stderr.strip())[:200])

@@ -53,7 +53,14 @@ def _ssh(host, cmd, timeout=150):
     if r.returncode != 0: raise RuntimeError(f"{host}: {r.stderr.strip()[:200]}")
     return r.stdout.strip()
 def git(*a):
-    r = subprocess.run(["git", "-C", HERE, *a], capture_output=True, text=True); return r.returncode, r.stdout.strip(), r.stderr.strip()
+    """Network verbs get a 20 s timeout and three attempts on a fresh connection (ERR-020, 2026-09-14: the LAN backhaul drops ~1/3
+    of new flows stickily); local verbs get 45 s so a wedged git can never hang the cycle. rc 124 = timed out."""
+    net = bool(a) and a[0] in ("fetch", "pull", "push", "ls-remote"); last = (124, "", "git timed out")
+    for attempt in range(3 if net else 1):
+        try:
+            r = subprocess.run(["git", "-C", HERE, *a], capture_output=True, text=True, timeout=20 if net else 45); return r.returncode, r.stdout.strip(), r.stderr.strip()
+        except subprocess.TimeoutExpired: last = (124, "", f"git {a[0]} timed out after {20 if net else 45} s (attempt {attempt + 1})")
+    return last
 def pulse_files(): return sorted(f for f in glob.glob(os.path.join(CHAIN, "pulse-*.json")) if _PULSE_RE.match(os.path.basename(f)))
 def head():
     fs = pulse_files()

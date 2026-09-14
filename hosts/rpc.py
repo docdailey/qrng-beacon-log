@@ -36,7 +36,12 @@ def _conn(host):
     with _LOCK:
         s = _CONN.get(host)
         if s is None:
-            ip, port = AGENTS[host]; s = socket.create_connection((ip, port), timeout=10); s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1); _CONN[host] = s
+            ip, port = AGENTS[host]; err = None
+            for attempt in range(4):                # 2026-09-14: the LAN backhaul drops ~1/3 of NEW flows stickily (per 5-tuple, ERR-020);
+                try: s = socket.create_connection((ip, port), timeout=4); break     # a fresh socket is a fresh source port, i.e. a new flow
+                except OSError as e: err = e
+            if s is None: raise err
+            s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1); _CONN[host] = s
         return s
 def _drop(host):
     with _LOCK:
