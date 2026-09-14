@@ -100,6 +100,24 @@ Rekor +1 s, reveal 3.2 s after release, usable +63.2 s, both verified. **23:00Z,
 pushed +2.5 s, Rekor +1 s, reveal 3.3 s after release, usable +63.3 s, both verified. **00:00Z 2026-09-14, 0114/0115:** own-clock +20.9 µs, datagram +1.3 ms, pushed +2.5 s, Rekor +1 s,
 reveal 3.3 s after release, both verified - eight clean 60 s cycles (0102–0115). Next step after a day of clean 60 s cycles: 10 rounds (30 s).
 
+**01:00Z 2026-09-14, 0116/0117, both verified, the first cycle that wrote its own row to the timehat DB:** own-clock +22.4 µs, datagram
++1.1 ms, but commit pushed **+14.4 s** (45.6 s before the round, margin intact), Rekor +13 s, reveal pushed **16.1 s** after release,
+usable +76.1 s. The 12 s came from p550's time statement: with `ts2phc-f9t` stopped during the clock incident below, `stamp_probe.py`
+fell back to sampling the discipline live over a 12 s window ("so RMS is a real statistic"), once for the commit and once for the
+reveal. That fallback should cap at ~2 s and prefer the ptp4l/BMC ring when ts2phc is not running - a host-tool change, so a CLI
+release; noted, not yet done.
+
+**Clock incident, 2026-09-14 00:32–00:50Z, no pulse minted in the window.** While Bill worked on the ZED-F9T its TP1 pulse was
+absent or disturbed; p550's `ts2phc` (which never steps) railed at the i210's frequency limit chasing it and had dragged the PHC
+130 ms off by 00:40; chrony marked IPHC a falseticker. Recovery: ts2phc stopped; a first manual correction with the wrong sign put
+the PHC +73.8 s off for four minutes; the PHC was then set directly to UTC + 37 s and handed to the i210's `ptp4l` against the
+P550-BMC grandmaster (normally read-only; `free_running 0`), which locked at −7 ns; chrony re-selected IPHC. Side effect: k3's chrony,
+seeing no majority among its PHC, p550's NTP and timehat, followed p550's NTP from 00:37 and stepped +60 s, then −60.02 s back at
+00:49:27Z once the PHC was re-selected. All of it is in the timehat clock streams (`ts2phc_stream`, `epoch_stream`, `ptp4l_stream`).
+When the F9T pulse read steady again (−23 to −61 ns against the BMC-disciplined PHC, a direct BMC-vs-F9T measurement), the PHC was
+handed back to ts2phc at 01:03Z and the BMC ptp4l returned to read-only. Follow-ups: k3 chrony `refclock PHC ... prefer trust` so NTP
+can never outvote the PTP PHC (Bill's call); the stamp-probe window above.
+
 **Deployment lag, one cycle (learned 2026-09-14 00:0xZ):** the cycle process for hour H starts at (H−1):59:20 and Python loads
 `beacon-cycle.py` *before* `prepare()` pulls `origin/main`, so a push to main takes effect in the cycle **after** the next one
 (the pull at (H−1):59:20 serves hour H+1). `pulse.py` and the `hosts/` scripts are separate processes and take effect at the

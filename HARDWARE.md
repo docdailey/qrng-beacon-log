@@ -528,3 +528,15 @@ Capture effectively stopped early November 2025.
 
 Mostly-empty siblings: `quantum_backup/` (12 K), `random/` and `/Volumes/MySSD/random` are *code*
 projects (analysis tooling, venvs), not byte stores.
+
+### Operating note (2026-09-14): what a disturbed F9T pulse does, and the fallback
+
+`ts2phc -s generic` never steps the PHC. If TP1 goes away or jitters (the receiver handled, re-powered, a cable moved), the servo
+chases whatever edges arrive and rails the i210 at its ±6.25 % frequency limit: the PHC left UTC+37 s by 130 ms in eight minutes on
+2026-09-14, chrony flagged IPHC, and everything that reads the PHC second (the cadence trigger's `pps1`) moved with it. Before touching
+the receiver: `systemctl stop ts2phc-f9t`. Fallback discipline that holds the PHC at ~10 ns without the F9T: `free_running 0` in
+`/etc/linuxptp/bmc-monitor.conf` and restart `bmc-phc-monitor` (the i210's ptp4l slaves to the P550-BMC grandmaster, which is fed by
+the 6T); return it to `free_running 1` before restarting ts2phc, never run both servos on the PHC at once. To put the PHC back on time
+by hand use `clock_settime` on the PHC (a negative `phc_ctl adj` is rejected silently, and `phc_ctl cmp` prints REALTIME − PHC, not the
+reverse). Check the pulse before handing back: `ts2phc ... --free_running 1 -m` for ten seconds should print steady offsets within
+tens of ns; on 2026-09-14 01:03Z it read −23 to −61 ns against the BMC-disciplined PHC.
