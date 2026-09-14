@@ -6,6 +6,35 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-021 — the 19:00Z hour was skipped: a bouncing receiver connector fed ts2phc bogus edges, the servo railed and stepped the i210 PHC by 2.1 s, chrony stepped the time host's clock, and the cycle refused to mint (2026-09-14 18:58–19:03Z)
+
+**What happened.** From 18:58:44Z p550's `ts2phc` (F9T 1 PPS → i210 PHC) began receiving edges that were not on the
+second: its offset samples swung +2 ms, −10 ms, +37 ms, −132 ms, the servo hit the i210's frequency rail (±6.25 %) for
+13 of the next 218 s, and at 19:02:22Z a +2.12 s sample crossed `step_threshold 1.0`, so ts2phc **stepped the PHC**.
+chrony had marked IPHC a falseticker from 18:58:53Z and, following it back, stepped the system clock +1.849 s and
+−2.732 s at 19:02:25–28Z (`makestep 1 -1`). At 19:00:00Z the trigger service found the PHC 0.36 s off (PHC−REALTIME
+36.6385 s), fell back to the software clock and woke 50 ms late; the time host's statement reported
+`epoch_ok=True selects_refclock=False`, and k3 refused: "REFUSING TO MINT: time (p550) reports an unhealthy clock".
+**Skip pulse 0147** was minted and published at 19:00:01Z. f9t's sawtooth rows collapsed in the same minutes (15, 19, 7,
+14, 18 rows per minute from 18:58Z; none at 19:04–19:05Z), so the receiver's UART was bouncing together with its PPS:
+one loose connector, the same one behind the coverage shortfall since 0126 (a replacement plug is on order). By 19:03:29Z
+ts2phc was back within ±100 ns and chrony back on IPHC; by 19:09Z the last three minutes' worst offset was 66 ns.
+
+**What it affected.** One hour without a commit (19:00Z), recorded as skip 0147 with `refused_by: time`. The refusal is
+the design working: the time host was genuinely unhealthy and no pulse carried its bad statement. The 18:00Z pair
+0145/0146 and the 20:00Z pair are unaffected. The i210 monitor saw the excursion too (mesh offset −63 ms at 19:03Z).
+
+**What was done (19:10:34Z).** `/etc/linuxptp/ts2phc-f9t.conf` now has `step_threshold 0` (never step after the seed;
+the seed is `iphc-epoch-seed.py` plus `first_step_threshold`) and `max_frequency 200000` (slew capped at 200 ppm; the
+i210 needs −52.6 ppm). One bad edge can now move the PHC at most 200 µs before the next good edge pulls it back, instead
+of dragging it seconds and stepping it. ts2phc re-locked within seconds of the restart. Backup of the old file kept.
+Open: the connector itself (plug on order), and the time host's chrony `makestep 1 -1`, which should become `makestep
+1 3` so a disturbed refclock can never step the system clock again after boot — an operator decision, not made here.
+
+**Lesson.** A PPS discipline needs a slew cap sized to the oscillator, not the hardware maximum: with the cap at the
+i210's ±6.25 % rail, a single bounce on a connector is worth seconds of clock error, and "never steps" was only true
+until an excursion exceeded the step threshold.
+
 ## ERR-020 — the 15:00Z hour was skipped: the LAN path between the fleet timing switch and the router drops a third or more of NEW connections, stickily per flow (2026-09-14; open on the hardware side)
 
 **What happened.** At 15:00:31Z the commit was refused: `[tsa] digicert: URLError timed out` after the 25 s request

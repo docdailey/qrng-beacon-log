@@ -237,6 +237,10 @@ was the LAN path between the fleet timing switch and the router dropping a third
 flow (pings and kept connections unaffected, so no monitor saw it). From the 16:00Z cycle every outbound connection
 retries on a fresh socket with a short timeout; the path itself needs hands (ERRATA ERR-020).
 
+**2026-09-14 19:00Z: skip pulse 0147 (ERR-021).** The F9T's loose connector bounced; ts2phc chased the bogus edges to the
+frequency rail and stepped the i210 PHC 2.1 s, chrony stepped p550's clock, and the time statement was refused as
+unhealthy — correctly. ts2phc now never steps after its seed and slews at most 200 ppm; the connector is being replaced.
+
 ## 3. Second party for non-reveal — watcher SHIPPED, operator = Grok (pending its repo/key)
 The chain makes a skipped reveal *visible*; it does not make it *attested*. The design:
 

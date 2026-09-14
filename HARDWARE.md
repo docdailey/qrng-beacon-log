@@ -79,6 +79,8 @@ PTP-disciplined clock at the same instant (CADENCE.md §2). The clock evidence a
 ts2phc offsets per PPS, the i210's observation of the BMC GM, and the epoch guard, logged at source rate to
 `/run/beacon-clocklog` and the timehat DB. See CADENCE.md §2.
 
+**Discipline guard (2026-09-14, ERR-021).** `ts2phc-f9t.conf` runs with `step_threshold 0` and `max_frequency 200000`: after the epoch seed the PHC is never stepped, and the servo can slew at most 200 ppm (the i210 oscillator needs about −53 ppm), so a bouncing PPS connector costs at most ~200 µs per bad edge instead of seconds.
+
 **Discipline chain — verified, not assumed.** `ts2phc-f9t.service` is active; `/run/ts2phc-f9t.status`
 states the source verbatim: *"ZED-F9T TP1 (falling edge on the second) -> i210 SDP0, ts2phc generic"*.
 
