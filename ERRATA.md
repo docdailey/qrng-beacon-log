@@ -33,6 +33,15 @@ Open: the connector itself (plug on order). At 19:19Z, on Bill's decision, the t
 clock again. (A first attempt put the comment on the directive's line, which chrony rejects as "too many arguments"; chrony
 was down for 29 s until the comment moved to its own line. No step, no effect on ts2phc or the trigger service.)
 
+**First test of the guard (20:00Z).** The connector bounced again at 19:58:20–20:01:06Z: 16 bogus samples, the worst
++16.75 ms. The servo pinned at ±200 ppm as intended; the PHC's real displacement peaked at 0.93 ms (epoch ring,
+19:58:23Z) and was +0.82 ms at the 20:00:00Z edge; chrony kept IPHC selected in every one of 475 seconds and did not
+step. The hour minted: commit 0148 pushed 57.3 s before release, anchored in Rekor at mint (0.62 s), reveal 0149
+pushed 9.5 s after release (the reveal waited about 8 s for a fresh GNSS anchor from the same flaky stream — inside its
+60 s allowance). Under the timing profile both pulses are NOT-SATISFIED on the F9T→i210 discipline RMS (2.76 ms over the
+window) and on sawtooth coverage (80 %): the connector, listed in the open exception range from 0126. Without the guard
+this bounce would have been a second skipped hour.
+
 **Lesson.** A PPS discipline needs a slew cap sized to the oscillator, not the hardware maximum: with the cap at the
 i210's ±6.25 % rail, a single bounce on a connector is worth seconds of clock error, and "never steps" was only true
 until an excursion exceeded the step threshold.

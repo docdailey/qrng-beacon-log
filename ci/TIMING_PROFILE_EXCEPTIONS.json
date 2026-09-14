@@ -60,7 +60,7 @@
       "to": null,
       "erratum": "ERR-019",
       "verdict_v1_not": "SATISFIED",
-      "why": "from 06:00Z 2026-09-14 the F9T receiver's serial row loss (ERR-018/ERR-019, hardware side open) holds f9t's sawtooth-log coverage below the 95 % the profile requires (67-91 % measured 0126-0138), so every pulse is NOT-SATISFIED by design; close this range (set `to`) at the first pulse whose gnss statement reports coverage >= 95 % again"
+      "why": "from 06:00Z 2026-09-14 the F9T receiver's loose connector (ERR-018/ERR-019/ERR-021; replacement plug on order) drops serial rows (sawtooth-log coverage 67-91 % against the 95 % the profile requires) and, on the same connector, bounces the PPS so that the F9T->i210 discipline RMS exceeds 100 ns in the affected windows; every pulse is NOT-SATISFIED by design until the plug is replaced. Close this range (set `to`) at the first pulse whose gnss statement reports coverage >= 95 % and whose time statement is back within the discipline limits."
     }
   ]
 }
