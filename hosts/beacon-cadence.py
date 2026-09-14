@@ -77,10 +77,10 @@ def hw_wait(t0, pfd, warm=None):
     except OSError: return None
     return None
 
-def phc_read(fd):
-    """Tightest of five REALTIME/PHC/REALTIME brackets."""
+def phc_read(fd, n=5):
+    """Tightest of n REALTIME/PHC/REALTIME brackets (5 before the instant; 1 on the fast path after the edge, 12 us)."""
     clk = ((~fd) << 3) | 3; best = None
-    for _ in range(5):
+    for _ in range(n):
         a = time.clock_gettime_ns(CLOCK_REALTIME); p = time.clock_gettime_ns(clk); b = time.clock_gettime_ns(CLOCK_REALTIME)
         if best is None or b - a < best[2] - best[0]: best = (a, p, b)
     a, p, b = best
@@ -111,6 +111,55 @@ def trigger(t0):
         st = A.normalize(statement); sig = priv.sign(A.canon(st))
         return {"statement": st, "signature": {"alg": "ed25519", "key_id": kid, "public_key_b64": pub_b64, "sig_b64": base64.b64encode(sig).decode(), "over": "canon(statement)"}}
     sign({"warm": 1})                                                         # first-use costs paid before the instant
+    # Fast signer: libsodium via ctypes (112 us vs 197 us for OpenSSL through `cryptography` on p550, identical signatures);
+    # falls back to priv.sign if the library is absent. The seed is the same 32 bytes the PEM holds.
+    _sodium = None
+    try:
+        _lib = ctypes.util.find_library("sodium")
+        if _lib:
+            _so = ctypes.CDLL(_lib); _so.sodium_init(); _sk = ctypes.create_string_buffer(64); _pk = ctypes.create_string_buffer(32)
+            _so.crypto_sign_seed_keypair(_pk, _sk, priv.private_bytes_raw())
+            if _pk.raw == raw:
+                _sigbuf = ctypes.create_string_buffer(64); _siglen = ctypes.c_ulonglong()
+                def _sodium(msg):
+                    _so.crypto_sign_detached(_sigbuf, ctypes.byref(_siglen), msg, len(msg), _sk); return _sigbuf.raw
+                if _sodium(b"warm") != priv.sign(b"warm"): _sodium = None
+    except Exception: _sodium = None
+    fast_sign = _sodium or priv.sign
+    # Pre-built datagram (Bill, 2026-09-14: "get a datagram ready and send on the dot"): everything that does not depend on the
+    # event is canonicalized BEFORE the instant; after the edge only the event numbers are substituted into the canonical
+    # template (25 us, byte-identical to a fresh canon), signed (112 us) and wrapped by concatenation (11 us).
+    SENT = {"issued": "__ISSUED__", "assert": "__ASSERT__", "wake": "__WAKE__", "phc": "__PHC__", "mid": "__MID__",
+            "edge": -777777001, "woke": -777777002, "late": -777777003, "pmr": -777777004, "br": -777777005, "seq": -777777006}
+    prebuilt = {}
+    def build_template(ep, ts2, nonce):
+        tst = A.normalize(dict(static, wake={"clock": "CLOCK_REALTIME", "unix_ns": SENT["wake"], "late_ns": SENT["late"], "how": "pps-event"},
+                               hw_event={"source": "i210-pps", "device": PPS_DEV, "assert_unix_ns": SENT["assert"], "sequence": SENT["seq"],
+                                         "edge_after_instant_ns": SENT["edge"], "woke_after_edge_ns": SENT["woke"]},
+                               phc={"device": PHC_DEV, "unix_ns": SENT["phc"], "realtime_mid_unix_ns": SENT["mid"], "phc_minus_realtime_ns": SENT["pmr"], "bracket_ns": SENT["br"],
+                                    "tai_minus_utc_s": ep.get("tai_minus_utc_s")},
+                               clock_state={"epoch_ok": ep.get("epoch_ok"), "refclock_selected": ep.get("refclock_selected"), "epoch_row_age_s": ep.get("age_s"),
+                                            "ts2phc_state": ts2.get("state"), "ts2phc_offset_ns": ts2.get("offset_ns"), "ts2phc_row_age_s": ts2.get("age_s")},
+                               issued_unix_ns=SENT["issued"], nonce=nonce))
+        # split once on the sentinels (each occurs exactly once) so the fill is a single join, not eleven passes over 1.1 KB
+        import re
+        toks = sorted((str(v) for v in SENT.values()), key=len, reverse=True)
+        parts = re.split("(" + "|".join(re.escape(t) for t in toks) + ")", A.canon(tst).decode())
+        prebuilt["parts"] = parts; prebuilt["slots"] = {tok: i for i, tok in enumerate(parts) if tok in toks}
+        assert len(prebuilt["slots"]) == len(SENT), "every sentinel must appear once in the template"
+        prebuilt["prefix"] = b'{"statement":'; prebuilt["suffix"] = (',"signature":{"alg":"ed25519","key_id":"' + kid + '","public_key_b64":"' + pub_b64 + '","sig_b64":"').encode()
+        prebuilt["tail"] = b'","over":"canon(statement)"}}'
+    def fast_datagram(hw, wake, phc, issued_ns):
+        """The canonical statement with the event numbers filled in, signed and wrapped. Returns (datagram bytes, statement dict)."""
+        t0_fill = time.clock_gettime_ns(CLOCK_REALTIME); parts = list(prebuilt["parts"]); slots = prebuilt["slots"]
+        vals = {"issued": issued_ns, "assert": str(hw["assert_unix_ns"]), "wake": str(wake), "phc": phc["unix_ns"], "mid": phc["realtime_mid_unix_ns"],
+                "edge": str(hw["assert_unix_ns"] - t0 * 10**9), "woke": str(hw["woke_unix_ns"] - hw["assert_unix_ns"]), "late": str(wake - t0 * 10**9),
+                "pmr": str(int(phc["phc_minus_realtime_ns"])), "br": str(int(phc["bracket_ns"])), "seq": str(int(hw["sequence"]))}
+        for key, val in vals.items(): parts[slots[str(SENT[key])]] = val
+        t1 = time.clock_gettime_ns(CLOCK_REALTIME); mb = "".join(parts).encode(); sig = fast_sign(mb); t2 = time.clock_gettime_ns(CLOCK_REALTIME)
+        out = prebuilt["prefix"] + mb + prebuilt["suffix"] + base64.b64encode(sig) + prebuilt["tail"]
+        prebuilt["timing"] = {"fill_us": (t1 - t0_fill) / 1e3, "sign_us": (t2 - t1) / 1e3, "wrap_us": (time.clock_gettime_ns(CLOCK_REALTIME) - t2) / 1e3, "signer": "libsodium" if _sodium else "openssl"}
+        return out, mb
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); host, port = UDP.rsplit(":", 1); dest = (host, int(port))
     try:
         ep, ts2 = ring_last("epoch") or {}, ring_last("ts2phc") or {}       # read a moment before the instant (rows <= 1 s old)
@@ -126,26 +175,42 @@ def trigger(t0):
                          phc={"device": "/dev/ptp0", "unix_ns": str(t0 * 10**9), "realtime_mid_unix_ns": str(t0 * 10**9), "phc_minus_realtime_ns": 0, "bracket_ns": 0, "tai_minus_utc_s": 37},
                          clock_state={"epoch_ok": True, "refclock_selected": "IPHC", "epoch_row_age_s": 0.0, "ts2phc_state": "s2", "ts2phc_offset_ns": 0, "ts2phc_row_age_s": 0.0},
                          issued_unix_ns=A.now_ns_str(), nonce=secrets.token_hex(16))
-            hw = hw_wait(t0, pfd, warm=lambda: json.dumps(sign(dummy), separators=(",", ":")).encode()); os.close(pfd)
+            nonce = secrets.token_hex(16)
+            def warm():
+                json.dumps(sign(dummy), separators=(",", ":")).encode()
+                try:
+                    build_template(ep, ts2, nonce); prebuilt["ok"] = True
+                    # run the fast path once on dummy numbers so its first real execution is warm (79 -> ~25 us fill, 162 -> ~112 us sign)
+                    fast_datagram({"assert_unix_ns": t0 * 10**9, "woke_unix_ns": t0 * 10**9, "sequence": 0}, t0 * 10**9, phc_read(fd, n=1), A.now_ns_str()); prebuilt.pop("timing", None)
+                except Exception as e: prebuilt["ok"] = False; log(f"template not built ({type(e).__name__}: {str(e)[:60]}); slow path")
+            hw = hw_wait(t0, pfd, warm=warm); os.close(pfd)
         if hw is None:
             if time.time() < t0: sleep_until(t0 * 10**9)
             wake = time.clock_gettime_ns(CLOCK_REALTIME); how = "clock-fallback"          # clock_nanosleep to T-1.5 ms then a spin (PROTOCOL.md)
         else:
             wake = hw["woke_unix_ns"]; how = "pps-event"                                   # blocked in the kernel on the PHC's second event
-        phc = phc_read(fd)
-        st = dict(static, wake={"clock": "CLOCK_REALTIME", "unix_ns": str(wake), "late_ns": wake - t0 * 10**9, "how": how},
+        data = None
+        if hw is not None and prebuilt.get("ok"):
+            try:
+                phc = phc_read(fd, n=1)                                                       # one bracket (12 us), not five
+                data, mb = fast_datagram(hw, wake, phc, A.now_ns_str()); st = None; signed = None      # parse AFTER the sends
+            except Exception as e: data = None; log(f"fast path failed ({type(e).__name__}: {str(e)[:60]}); slow path")
+        if data is None: phc = phc_read(fd)
+        if data is None: st = dict(static, wake={"clock": "CLOCK_REALTIME", "unix_ns": str(wake), "late_ns": wake - t0 * 10**9, "how": how},
                   hw_event=None if hw is None else {"source": "i210-pps", "device": PPS_DEV, "assert_unix_ns": str(hw["assert_unix_ns"]), "sequence": hw["sequence"],
                                                      "edge_after_instant_ns": hw["assert_unix_ns"] - t0 * 10**9, "woke_after_edge_ns": hw["woke_unix_ns"] - hw["assert_unix_ns"]},
                   phc={**phc, "tai_minus_utc_s": ep.get("tai_minus_utc_s")},
                   clock_state={"epoch_ok": ep.get("epoch_ok"), "refclock_selected": ep.get("refclock_selected"), "epoch_row_age_s": ep.get("age_s"),
                                "ts2phc_state": ts2.get("state"), "ts2phc_offset_ns": ts2.get("offset_ns"), "ts2phc_row_age_s": ts2.get("age_s")},
                   issued_unix_ns=A.now_ns_str(), nonce=secrets.token_hex(16))
-        signed = sign(st)
-        data = json.dumps(signed, separators=(",", ":")).encode(); sent = []
+        if data is None: signed = sign(st); data = json.dumps(signed, separators=(",", ":")).encode()
+        sent = []
         for _ in range(3):
             if not DRY: sock.sendto(data, dest)
             sent.append(time.clock_gettime_ns(CLOCK_REALTIME))
             if _ < 2: time.sleep(0.02)
+        if signed is None: signed = json.loads(data); st = signed["statement"]
+        if prebuilt.get("timing"): log("fast path: fill %(fill_us).0f us, sign %(sign_us).0f us (%(signer)s), wrap %(wrap_us).0f us" % prebuilt["timing"])
     finally:
         os.close(fd); sock.close()
     return signed, wake, sent, len(data)

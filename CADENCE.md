@@ -121,7 +121,11 @@ BMC servo), and came back for good once Bill found the **loose wire** at ~01:17Z
 then proved intermittent (receiver-side glitches, ERR-018 addendum) and p550 went back to the BMC discipline at 02:27Z; 0118/0119
 carry the excursions in their signed statements and fail the timing profile, as they should. The F9T was handed back at
 04:11:16Z after three clean ten-minute windows (gated, automatic); 0116–0123 are the eight pulses that fail the profile for
-this incident (`ci/TIMING_PROFILE_EXCEPTIONS.json`), all of them cryptographically valid. k3's own clock logger (`epoch_stream`) shows the excursion exactly: PHC − system held 37.000 s ± 150 ns until 00:33Z, then fell
+this incident (`ci/TIMING_PROFILE_EXCEPTIONS.json`), all of them cryptographically valid.
+
+**Pre-built trigger datagram (from 0138, 12:00Z 2026-09-14):** p550 canonicalizes the statement before the instant and, after the
+edge, fills the event numbers, signs with libsodium and sends: first copy at +0.28 ms in the lab (was +1.0–1.15 ms live). The
+statement's content and k3's verification are unchanged (latency_chain.md §9b). k3's own clock logger (`epoch_stream`) shows the excursion exactly: PHC − system held 37.000 s ± 150 ns until 00:33Z, then fell
 at ~3.3 s/min as chrony followed p550's NTP (six 1–2 s steps 00:34–00:36, then slewing) to −23 s at 00:48Z, i.e. the system clock
 60 s ahead, and snapped back to 37.000 s at 00:49:27Z. A commit in that window would have been refused by the witness's own epoch
 guard (|PHC − system − TAI| > 0.5 s), which is the fail-closed design working, but none was attempted. **Fixed 01:34Z:** k3's PHC

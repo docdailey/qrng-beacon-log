@@ -259,7 +259,26 @@ warm figure, because the process has been asleep for an hour and everything is c
 receipt and the start against 0.47 ms warm. The first of the cheap next steps is done: the cadence service now signs and serializes a full-size dummy statement at
 T−30 ms, just before it starts polling the PPS device (`hw_wait(..., warm=)`). Same-conditions lab minutes, `--once
 --no-send` at SCHED_FIFO 30: issued → first copy **1.36 ms before, 0.73 ms after** (21:07 and 21:08Z); deployed for the
-22:00Z cycle (script sha256 `23210619a8d0…`, self-reported in the trigger's `tools`; not a pinned hash). Still open: and on k3 sending the
+22:00Z cycle (script sha256 `23210619a8d0…`, self-reported in the trigger's `tools`; not a pinned hash). **Pre-built datagram (Bill, 2026-09-14: "get a datagram ready and send on the dot"; deployed 11:34Z for the 12:00Z cycle).** The
+hardware-event statement cannot be signed before the edge - it carries the edge stamp and the wake - but everything around those
+numbers can be prepared: the statement is canonicalized before the instant with sentinels in the eleven event fields (split once,
+so the fill is a single join), the signer is libsodium through ctypes (identical signatures to OpenSSL, 112 vs 197 µs), the PHC is
+read once instead of five times (12 vs 60 µs), the wrapper is concatenated (11 vs 94 µs), and the fast path is run once on dummy
+numbers before the instant so its first real execution is warm. Lab minutes, p550 at SCHED_FIFO 30, `--once --no-send`:
+
+| variant | issued | first copy |
+|---|---|---|
+| live path (21:00Z–11:00Z) | +0.20–0.27 ms | +1.0–1.15 ms |
+| fast path, cold | +0.13 ms | +0.62 ms |
+| fast path, instrumented (fill 79 µs, sign 162 µs, wrap 18 µs) | +0.16 ms | +0.44 ms |
+| fast path, warmed, single-join fill (34 / 133 / 15 µs) | **+0.08 ms** | **+0.28 ms** |
+
+Every datagram was verified exactly as k3's listener does (p550's active key, canonical form) and has the live statement's
+shape. Expected live from 0138: the datagram at k3's kernel ~+0.45 ms instead of +1.15 ms, so the two clocks' records of the
+same second sit within half a millisecond of each other in the pulse. The `received` bound in timing/v2 (500 ms) can tighten
+once a day of these is in the record.
+
+Still open: and on k3 sending the
 canonical statement bytes so the verifier does not re-canonicalize (~0.1 ms) and a faster Ed25519 (libsodium, if
 present) for another ~0.1 ms. With the GPIO PPS gone the edge itself is at +21 µs; the remaining 2.8 ms to k3's start is
 now all userspace and wire: 0.2 ms to assemble, 1.4 ms to sign cold, 0.25 ms LAN, 0.9 ms to verify and hand over.
