@@ -56,6 +56,13 @@ outlier at 03:20); p550 remains on the BMC discipline. **0120/0121 (03:00Z)** ve
 hand-back are listed in `ci/TIMING_PROFILE_EXCEPTIONS.json` (an open range from 0122). Each such cycle also pays the stamp
 probe's 12 s fallback (push +14.4 s, reveal +16.6 s at 03:00Z; margins intact).
 
+**Closure, 04:15Z.** The F9T pulse read clean in three consecutive ten-minute windows (03:51, 04:01, 04:11Z: 60–61 edges per
+minute, worst offsets 43–67 ns) and the gated watcher handed the i210 PHC back to ts2phc at 04:11:16Z: locked at +3 ns, the BMC
+ptp4l returned to read-only, chrony IPHC −4 ns. **0122/0123 (04:00Z)**, minted eleven minutes earlier on the BMC discipline,
+verify and are NOT-EVALUABLE under the profile like 0116–0121; the exception range is closed at 0123 and from 0124 every
+pulse must satisfy the profile again. Total: eight pulses (0116–0123) fail the timing profile because of this incident, none
+fails cryptographic verification, and the record says which and why.
+
 **Lesson stated plainly.** A hand correction to a stratum-1 clock must be measured twice and applied with a tool whose
 sign convention has been read, not guessed; and a chronyd that can step without limit (`makestep 1 -1`) must not be allowed
 to choose an NTP peer over the hardware clock it exists to follow.
