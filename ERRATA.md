@@ -46,6 +46,16 @@ second, pushed 57.6 s before release; reveal 0142 pushed 4.8 s after release. No
 mint-time Rekor upload did land on a dead flow: it did not finish inside its 10 s budget and was left to CI's anchoring
 pass as designed, so from 0.15.1 that request too retries on a fresh socket (3 x 8 s instead of one 40 s wait).
 
+**Placed (16:35Z, fleet-wide survey).** Thirteen hosts ran the same probe at the same minute. The four that lose flows
+(k3, p550, f9t, timehat) are exactly the hosts wired to Deco satellite **192.168.71.249** (30:68:93:a8:50:86): 0.3-0.5 ms
+to it, ~3 ms to the main unit over its wireless backhaul, 6-8 of 30 fresh router-bound flows lost each. Hosts wired to
+the other satellite 192.168.71.250 (beast, gx10-1; also ~3 ms to the main over wireless) and hosts wired to the main
+unit (think, ryzen, macstu, protectli, cm5-0) lost 0 of 30. LAN connections *through* the sick satellite to any host on
+the other two are clean (15 of 15 to beast, gx10-1, rtx4500, nas1, protectli); only flows the main unit must route or
+terminate die. The satellite's backhaul also shows one-second latency spikes (a ping from beast to it: 5 ms min,
+1 082 ms max). Remedy is on that unit: restart it, give it a wired backhaul, or move the fleet switch's uplink to the
+main unit or the other satellite.
+
 **Lesson.** Loss that is sticky per flow is invisible to every monitor that keeps its socket - ping, PTP, chrony, an SSH
 session - and only shows in things that open a new connection per request, which is exactly what the beacon's TSA,
 Rekor and git steps do. The probe that finds it is "N fresh sockets, count the ones that never answer"; the mitigation
