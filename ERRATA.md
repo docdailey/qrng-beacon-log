@@ -6,6 +6,40 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-018 — operator error during a clock incident: the time host's PHC was set 73.8 s off by hand for four minutes, and the aggregator's clock followed NTP 60 s away from its PHC (2026-09-14 00:32–00:50Z; no pulse minted or affected)
+
+**What happened.** While Bill re-seated the ZED-F9T (a loose TP1 wire), its pulse into p550's i210 was absent or disturbed
+from 00:29Z. `ts2phc`, which never steps, railed the i210 at its ±6.25 % frequency limit chasing the bad edges and had the
+PHC 130 ms off UTC+37 s by 00:40Z; p550's chrony marked IPHC a falseticker. The operator (Claude, on Bill's instruction to
+check the recovery) stopped ts2phc and then applied a manual `phc_ctl adj` **with the wrong sign** (`phc_ctl cmp` prints
+REALTIME − PHC, not PHC − REALTIME), putting the PHC **+73.8 s** off at 00:43:49Z; the attempt to undo it with a negative
+`phc_ctl adj` was silently rejected, and a first restart of the i210's ptp4l servo railed too. The PHC was set correctly
+with `clock_settime` at 00:48:14Z and disciplined by the P550-BMC grandmaster (`bmc-phc-monitor`, normally read-only,
+`free_running 0`), locking at −7 ns; chrony re-selected IPHC. Independently, from 00:34Z k3's chrony, seeing no majority
+among its PTP PHC, p550's NTP and timehat, **followed p550's NTP instead of its own hardware clock** and stepped and slewed
+the aggregator's system clock to **60 s ahead** by 00:48Z (six 1–2 s steps, then slewing at maximum rate, tracking p550
+as the operator moved p550's PHC); it snapped back −60.02 s at 00:49:27Z and re-selected the PHC at 00:50:27Z. The F9T
+pulse was back and steady at 00:52Z, gone again 01:01–01:16Z while the wire was fixed, and the PHC was handed back to
+ts2phc at 01:25Z after 20 s of edges within 40 ns (the BMC ptp4l returned to read-only).
+
+**What it affected.** No pulse. The last cycle before the incident finished at 00:01:03Z with Rekor's integratedTime one
+second after its instant, and the next (01:00Z, 0116/0117) ran on correct clocks with p550 on the BMC discipline; both
+verify. Had a commit been attempted in the window, the witness's own epoch guard (|PHC − system − TAI| > 0.5 s) would have
+refused it, producing a public skip pulse. The excursions are recorded, second by second, in the timehat clock streams
+(`ts2phc_stream`, `epoch_stream` for k3: PHC − system fell from 37.000 s to −23 s and back; `ptp4l_stream`, `gmmon_stream`).
+The 01:00Z cycle paid 12 s twice because p550's stamp probe falls back to a 12 s live sampling window when ts2phc is not
+running (push +14.4 s, reveal +16.1 s after release; margins intact).
+
+**What was done.** (1) k3's chrony PHC refclock is `prefer trust` (01:34Z): NTP can no longer outvote the PTP PHC.
+(2) A recovery procedure for a disturbed F9T pulse is written into HARDWARE.md (stop ts2phc first; BMC fallback discipline;
+set the PHC with `clock_settime`, never `phc_ctl adj` by eye; verify the pulse free-running before handing back).
+(3) The incident timeline is in CADENCE.md §2. Open: cap the stamp probe's live window and prefer the ptp4l ring when
+ts2phc is stopped (a vendored host tool, so a CLI release); consider `noselect` on k3's NTP servers.
+
+**Lesson stated plainly.** A hand correction to a stratum-1 clock must be measured twice and applied with a tool whose
+sign convention has been read, not guessed; and a chronyd that can step without limit (`makestep 1 -1`) must not be allowed
+to choose an NTP peer over the hardware clock it exists to follow.
+
 ## ERR-017 — commit 0096 failed at the reveal: the new reveal path crashed on a missing import, and the first failure pulse could not mint (2026-09-13)
 
 **What was wrong.** The fast-chain commit (`01e17d6`, 14:20Z) restructured `pulse.py reveal` so the cycle driver could
