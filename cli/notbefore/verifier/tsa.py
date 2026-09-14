@@ -41,8 +41,14 @@ def stamp(pulse_path, label=None):
         name, cfg = item; out = f"{pulse_path}.{name}.tsr"
         try:
             req = urllib.request.Request(cfg["url"], data=query, headers={"Content-Type": "application/timestamp-query"})
-            with urllib.request.urlopen(req, timeout=25) as resp:
-                body = resp.read()
+            body = err = None
+            for attempt in range(3):                # fresh socket per attempt: a new source port is a new flow on the lossy LAN backhaul (ERR-020, 2026-09-14)
+                try:
+                    with urllib.request.urlopen(req, timeout=8) as resp: body = resp.read()
+                    break
+                except Exception as e:
+                    err = e; sys.stderr.write(f"[tsa] {name}: attempt {attempt + 1}/3 {type(e).__name__}: {str(e)[:60]}\n")
+            if body is None: raise err
             open(out, "wb").write(body)
             txt = sh("openssl", "ts", "-reply", "-in", out, "-text").stdout
             if "Status: Granted" not in txt:

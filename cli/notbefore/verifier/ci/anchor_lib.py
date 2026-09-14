@@ -73,10 +73,19 @@ def verify_sig(pub, sig, data):
     except InvalidSignature: return False
 
 # ------------------------------------------------------------------ Rekor REST
-def _req(path, obj=None, timeout=40):
+def _req(path, obj=None, timeout=8, attempts=3):
+    """Fresh socket per attempt (ERR-020, 2026-09-14: the LAN path drops ~1/3 of NEW flows stickily, so a retry on a new source
+    port succeeds where a longer wait on the same one never does). urllib opens a new connection per call; an HTTP error
+    (4xx/5xx) is Rekor's answer and is raised at once, only transport failures are retried."""
     data = json.dumps(obj).encode() if obj is not None else None
     req = urllib.request.Request(REKOR + path, data=data, headers={"Content-Type": "application/json", "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r: return r.status, json.load(r)
+    err = None
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r: return r.status, json.load(r)
+        except urllib.error.HTTPError: raise
+        except Exception as e: err = e
+    raise err
 
 def rekor_upload(statement, sig, anchor_pub_pem):
     body = {"apiVersion": "0.0.1", "kind": "hashedrekord",
