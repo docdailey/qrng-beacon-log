@@ -1,0 +1,39 @@
+{
+  "core": {
+    "v": "0.5",
+    "type": "skip",
+    "seq": 140,
+    "prev_hash": "347660fb1f8d0f23991247d8b409da32698f32056f4a9b171c8a18932bc38a36",
+    "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+    "statements": {},
+    "derived": {
+      "reason": "commit refused: python3 pulse.py commit failed: [tsa] digicert: URLError: <urlopen error timed out>\nREFUSING TO MINT: only 1 TSA token(s); nothing was written; E abandoned and erased on the entropy host",
+      "refused_by": "entropy",
+      "attempted_unix_s": 1789398032,
+      "attempted_utc": "2026-09-14T15:00:32Z",
+      "drand_round_seen": 32198222,
+      "published_head_confirmed": true,
+      "head_type_before": "failure",
+      "meaning": "No commit was minted this cycle. Nothing was selected and nothing was withheld: no commitment existed. This pulse only makes the gap, and the operator's stated cause, public at a timestamped moment."
+    },
+    "tooling": {},
+    "aggregator_host": "k3"
+  },
+  "pulse_hash": "339cfaa487c0d907dbbb15986ca87149c4b69cf9e07440c9a4560672d983e101",
+  "signatures": {
+    "aggregator": {
+      "alg": "ed25519",
+      "key_id": "56c30593534ad116",
+      "public_key_b64": "q/Mx1IKvtgU56iq+JZKQba/R93qcleWdZp7xLl7eSIE=",
+      "signer": "k3",
+      "role": "aggregator",
+      "sig_b64": "/5Pfoc4szVa6StXIfp+ldO8x9SBu+7CEvYl6QrFF3LuMBNyR0IgumuSyxOwv7+KuEQ+ChAfM7TXSsFSQ+sZEAw==",
+      "over": "pulse_hash bytes",
+      "attests": "assembly only; each host's facts are attested by that host's own signature inside core.statements"
+    }
+  },
+  "disclosure": {
+    "protocol": "PROTOCOL.md v0.5",
+    "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md."
+  }
+}
