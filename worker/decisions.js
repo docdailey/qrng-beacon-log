@@ -217,11 +217,36 @@ async function handle(req, env) {
 // prefixes, comma-separated) or our own automation user agents; cli = the notbefore CLI; bot = declared crawlers; other = everything
 // else (browsers, curl, unknown); ci = the CLI run from GitHub Actions on every push. "Excluding our machines" is kind not in (self, ci). Counting never affects the response: any error is swallowed.
 const SELF_UA = ["qrng-beacon-log/", "qrng-beacon-watcher/", "notbefore-decisions-mirror"];
-function hitKind(req, env) {
+// Our machines register their own egress address (IPv4 exact, IPv6 as its /64) by calling /self-register with the SELF_TOKEN secret
+// every ten minutes; a key seen in the last 24 h is ours. The static SELF_IPS secret stays as a fallback. Addresses in self_ips are the
+// operator's own and are never returned by any endpoint.
+function selfKey(ip) {
+  if (!ip) return null;
+  if (!ip.includes(":")) return ip;
+  const [a, b = ""] = ip.toLowerCase().split("::"); const A = a ? a.split(":") : [], B = b ? b.split(":") : [];
+  const full = [...A, ...Array(Math.max(0, 8 - A.length - B.length)).fill("0"), ...B];
+  return full.slice(0, 4).map(x => x.padStart(4, "0")).join(":") + "::/64";
+}
+async function isRegisteredSelf(env, ip) {
+  try {
+    const key = selfKey(ip); if (!key || !env.DB) return false;
+    const r = await env.DB.prepare("SELECT seen FROM self_ips WHERE key = ?1").bind(key).first();
+    return !!(r && r.seen && r.seen >= new Date(Date.now() - 86400e3).toISOString());
+  } catch (e) { return false; }
+}
+async function selfRegister(req, env) {
+  const tok = req.headers.get("X-Self-Token") || ""; if (!env.SELF_TOKEN || tok !== env.SELF_TOKEN) return bad("no", 403);
+  const ip = req.headers.get("CF-Connecting-IP") || "", key = selfKey(ip); if (!key) return bad("no address", 400);
+  const seen = new Date().toISOString(); const note = (req.headers.get("X-Self-Note") || "").slice(0, 40);
+  await env.DB.prepare("INSERT INTO self_ips (key, seen, note) VALUES (?1, ?2, ?3) ON CONFLICT (key) DO UPDATE SET seen = ?2, note = ?3").bind(key, seen, note).run();
+  return json({ registered: key.includes("/") ? "ipv6 /64 prefix" : "ipv4 address", seen });
+}
+async function hitKind(req, env) {
   const ip = req.headers.get("CF-Connecting-IP") || "", ua = req.headers.get("User-Agent") || "";
   const self = (env.SELF_IPS || "").split(",").map(s => s.trim()).filter(Boolean);
   if (self.some(s => s.includes(":") ? ip.toLowerCase().startsWith(s.toLowerCase()) : ip === s)) return "self";
   if (SELF_UA.some(u => ua.startsWith(u))) return "self";
+  if (await isRegisteredSelf(env, ip)) return "self";
   if (ua.startsWith("notbefore-cli") && req.cf && req.cf.asn === 8075) return "ci";                 // the CLI run by our own GitHub Actions (Azure ASN); a real CLI user on Azure would land here too
   if (ua.startsWith("notbefore-cli")) return "cli";
   if (/bot|crawler|spider|slurp|preview|fetch\/|monitor|uptime|headless/i.test(ua)) return "bot";
@@ -233,8 +258,9 @@ async function countHit(req, env) {
     const url = new URL(req.url); let p = url.pathname.replace(/\/+$/, "") || "/";
     if (/^\/(chain|checkpoints|anchors)\//.test(p)) p = p.split("/").slice(0, 2).join("/") + "/*";     // per-file paths fold into their directory
     if (p.length > 80) p = p.slice(0, 80);
+    if (p === "/stats" || p === "/self-register") return;                                            // meta endpoints are not hits
     const hour = new Date().toISOString().slice(0, 13) + ":00Z";
-    const kind = hitKind(req, env), country = (req.cf && req.cf.country) || "";
+    const kind = await hitKind(req, env), country = (req.cf && req.cf.country) || "";
     await db.prepare("INSERT INTO hits (hour, path, kind, country, n) VALUES (?1, ?2, ?3, ?4, 1) ON CONFLICT (hour, path, kind, country) DO UPDATE SET n = n + 1")
             .bind(hour, p, kind, country).run();
   } catch (e) { /* counting must never break serving */ }
@@ -260,6 +286,9 @@ export default {
       url.hostname = "notbefore.net"; return Response.redirect(url.toString(), 301);
     }
     if (req.method === "GET" || req.method === "HEAD") { if (ctx && ctx.waitUntil) ctx.waitUntil(countHit(req, env)); else countHit(req, env); }
+    if (url.pathname === "/self-register") {
+      try { return await selfRegister(req, env); } catch (e) { return json({ error: "internal: " + (e.message || String(e)) }, 500); }
+    }
     if (url.pathname === "/stats" || url.pathname === "/stats/") {
       try { return await stats(req, env); } catch (e) { return json({ error: "internal: " + (e.message || String(e)) }, 500); }
     }
