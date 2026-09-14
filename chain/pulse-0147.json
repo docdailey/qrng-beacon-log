@@ -1,0 +1,39 @@
+{
+  "core": {
+    "v": "0.5",
+    "type": "skip",
+    "seq": 147,
+    "prev_hash": "f7d9a30dac71fd6cb69422abf60ec1eff8fca2a4d7e3facbde44bcf242ad0b15",
+    "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+    "statements": {},
+    "derived": {
+      "reason": "commit refused: python3 pulse.py commit failed: REFUSING TO MINT: time (p550) reports an unhealthy clock: epoch_ok=True selects_refclock=False",
+      "refused_by": "time",
+      "attempted_unix_s": 1789412401,
+      "attempted_utc": "2026-09-14T19:00:01Z",
+      "drand_round_seen": 32203012,
+      "published_head_confirmed": true,
+      "head_type_before": "reveal",
+      "meaning": "No commit was minted this cycle. Nothing was selected and nothing was withheld: no commitment existed. This pulse only makes the gap, and the operator's stated cause, public at a timestamped moment."
+    },
+    "tooling": {},
+    "aggregator_host": "k3"
+  },
+  "pulse_hash": "65dcbbb23920c8565276aafe2bc1e7cc421a4c319dd612aeab8ee58874f6e2cd",
+  "signatures": {
+    "aggregator": {
+      "alg": "ed25519",
+      "key_id": "56c30593534ad116",
+      "public_key_b64": "q/Mx1IKvtgU56iq+JZKQba/R93qcleWdZp7xLl7eSIE=",
+      "signer": "k3",
+      "role": "aggregator",
+      "sig_b64": "KhRrFg80T/1ufCPmU7PJd4xBM1lR3aYhFMcVbJMhVogq9+ZKyz6r2mz2vAVvhM7Ln2oVvCREWnSr36r92CPEDw==",
+      "over": "pulse_hash bytes",
+      "attests": "assembly only; each host's facts are attested by that host's own signature inside core.statements"
+    }
+  },
+  "disclosure": {
+    "protocol": "PROTOCOL.md v0.5",
+    "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md."
+  }
+}
