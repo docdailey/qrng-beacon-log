@@ -97,8 +97,13 @@ SCHED_FIFO: edge stamp **+21 µs** (was +275), process 20 µs after it, trigger 
 sign took 1.4 ms this hour - latency_chain.md §9b); usable +63.4 s, both verified. **22:00Z, 0110/0111, first live own-clock start (mode B):** k3 started **18.9 µs** after the
 instant on its own PTP clock; p550's edge +37 µs, its datagram at k3's kernel +1.33 ms and bound to the commit; pushed +2.3 s,
 Rekor +1 s, reveal 3.2 s after release, usable +63.2 s, both verified. **23:00Z, 0112/0113:** own-clock start +19.5 µs, edge +27 µs, datagram at k3's kernel +1.18 ms,
-pushed +2.5 s, Rekor +1 s, reveal 3.3 s after release, usable +63.3 s, both verified - seven clean 60 s cycles (0102–0113).
-Next step after a day of clean 60 s cycles: 10 rounds (30 s).
+pushed +2.5 s, Rekor +1 s, reveal 3.3 s after release, usable +63.3 s, both verified. **00:00Z 2026-09-14, 0114/0115:** own-clock +20.9 µs, datagram +1.3 ms, pushed +2.5 s, Rekor +1 s,
+reveal 3.3 s after release, both verified - eight clean 60 s cycles (0102–0115). Next step after a day of clean 60 s cycles: 10 rounds (30 s).
+
+**Deployment lag, one cycle (learned 2026-09-14 00:0xZ):** the cycle process for hour H starts at (H−1):59:20 and Python loads
+`beacon-cycle.py` *before* `prepare()` pulls `origin/main`, so a push to main takes effect in the cycle **after** the next one
+(the pull at (H−1):59:20 serves hour H+1). `pulse.py` and the `hosts/` scripts are separate processes and take effect at the
+next cycle. To deploy beacon-cycle.py for the very next hour, pull the live checkout by hand outside :59–:02.
 
 **Cadence source (since 2026-09-13 13:00Z, pulses 0092–0095 — think era):** the hour is started by the **time host's clock, not by think's timer**.
 `hosts/beacon-cadence.py` runs on p550 (PREEMPT_RT; `CLOCK_REALTIME` disciplined by chrony from the i210 PHC, which

@@ -335,7 +335,8 @@ late commit.
 Bill: "can we not just pull stats from timehat db on nas?" Now yes. `hosts/cyclelog.py` writes one row per cycle into
 `timehat.beacon_cycle_stream` on nas1 (the database the clock streams already use), detached after `cycle complete` or a
 failure pulse, from the pulse files, `trigger/anchor-NNNN.json` and `cycle.log`; it never runs before the mint and a DB
-outage changes nothing. Back-filled for 0098–0108. Columns are every stamp in §8: the p550 edge and wake, the datagram's
+outage changes nothing. Back-filled for 0098–0114 (0110, 0112 and 0114 by hand: the hook reached the running cycle one hour later than pushed, because the
+cycle process loads beacon-cycle.py before its own pull - CADENCE.md §2; the first self-written row is expected from 0116, 01:00Z). Columns are every stamp in §8: the p550 edge and wake, the datagram's
 kernel and userspace receive on k3, k3's wake and gate, pulse.py start, the four statements, commit push, Rekor, relay serve
 delay, reveal start and push, and `usable_after_instant_ms`. The 60 s era today, one query:
 
