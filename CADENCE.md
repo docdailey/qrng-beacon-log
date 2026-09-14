@@ -114,8 +114,10 @@ the PHC +73.8 s off for four minutes; the PHC was then set directly to UTC + 37 
 P550-BMC grandmaster (normally read-only; `free_running 0`), which locked at −7 ns; chrony re-selected IPHC. Side effect: k3's chrony,
 seeing no majority among its PHC, p550's NTP and timehat, followed p550's NTP from 00:37 and stepped +60 s, then −60.02 s back at
 00:49:27Z once the PHC was re-selected. All of it is in the timehat clock streams (`ts2phc_stream`, `epoch_stream`, `ptp4l_stream`).
-When the F9T pulse read steady again (−23 to −61 ns against the BMC-disciplined PHC, a direct BMC-vs-F9T measurement), the PHC was
-handed back to ts2phc at 01:03Z and the BMC ptp4l returned to read-only. Follow-ups: k3 chrony `refclock PHC ... prefer trust` so NTP
+The F9T pulse read steady at 00:52Z (−23 to −61 ns against the BMC-disciplined PHC, a direct BMC-vs-F9T measurement), was gone
+again at 01:01Z (the receiver's own reports stopped; a first hand-back at 01:03Z therefore did not take and the PHC went back on the
+BMC servo), and came back for good once Bill found the **loose wire** at ~01:17Z. Hand-back at 01:25Z after 20 s of edges within
+40 ns: ts2phc locked (s2), the BMC ptp4l returned to read-only. The 01:00Z cycle ran on the BMC discipline throughout. Follow-ups: k3 chrony `refclock PHC ... prefer trust` so NTP
 can never outvote the PTP PHC (Bill's call); the stamp-probe window above.
 
 **Deployment lag, one cycle (learned 2026-09-14 00:0xZ):** the cycle process for hour H starts at (H−1):59:20 and Python loads
