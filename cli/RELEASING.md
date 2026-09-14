@@ -178,7 +178,7 @@ log to anyone checking the newest commit directly (2026-09-13 23:4xZ, a reviewer
 the value is: "0112 is a COMMIT pulse ... its reveal is 0113: run notbefore verify 113"; failure and skip pulses get the same treatment.
 Test 19 covers it.
 
-`notbefore 0.15.0` — **spec 0.12**: timing profile `notbefore/timing/v2` (v1 + cadence provenance: self-trigger record, p550's i210
+`notbefore 0.15.0` — tag `cli-v0.15.0` on `4a783dd`, verifier unchanged (vendored at `60f26a6`), workflow run 34800081440 (test 3.10 + 3.12, live, Worker conformance, publish), published 2026-09-14 02:48 UTC; fresh-venv verify of the latest pulse passed; wheel/sdist equal a local rebuild. **Spec 0.12**: timing profile `notbefore/timing/v2` (v1 + cadence provenance: self-trigger record, p550's i210
 hardware-event statement on the same instant, bounded event/issue/receive latency, timely statements, prompt reveal); the CLI declares
 v2 by default (`--timing-profile v1` for pulses before 0098); an absent or rejected trigger is NOT-SATISFIED. Verifier unchanged
 (vendored at `60f26a6`). Prompted by the 2026-09-14 review: "the timing profile does not enforce cadence provenance". Test 20.
