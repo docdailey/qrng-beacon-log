@@ -400,3 +400,5 @@ Pre-configured and disabled until listed (`keys/WITNESSES.json`): `witness.stage
 (TrustFabric), `witness.navigli.sunlight.geomys.org` (Geomys), `transparency.dev/DEV:witness-little-garden` (testing only). Enabling
 them is a one-word change once `notbefore.net/log` appears on a list they serve; until an operator we do not control has cosigned,
 CLAIMS.md keeps "witnessed" out of the copy.
+
+**Check 2026-09-14 20:15Z.** Not listed yet. The three lists the witnesses serve: `https://staging.witness-network.org/log-list-100qps-40klogs.1`, `https://staging.witness-network.org/log-list-10qps-4klogs.1`, `https://testing.witness-network.org/log-list.1` (index at `https://witness-network.org/log-lists`) — none names `notbefore.net/log`; a live `witness_submit` of checkpoint 149 to all four witnesses still returns 404 unknown log (0.2–0.9 s). The participation request of 2026-09-12 19:40Z has had no maintainer action; the list moderator's reply of 2026-09-14 concerned the subscription only. Nothing changes on our side until a list names the log; then `enabled: true` per witness, one cycle, then a CLI re-vendor.
