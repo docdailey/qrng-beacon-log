@@ -28,8 +28,10 @@ the design working: the time host was genuinely unhealthy and no pulse carried i
 the seed is `iphc-epoch-seed.py` plus `first_step_threshold`) and `max_frequency 200000` (slew capped at 200 ppm; the
 i210 needs −52.6 ppm). One bad edge can now move the PHC at most 200 µs before the next good edge pulls it back, instead
 of dragging it seconds and stepping it. ts2phc re-locked within seconds of the restart. Backup of the old file kept.
-Open: the connector itself (plug on order), and the time host's chrony `makestep 1 -1`, which should become `makestep
-1 3` so a disturbed refclock can never step the system clock again after boot — an operator decision, not made here.
+Open: the connector itself (plug on order). At 19:19Z, on Bill's decision, the time host's chrony went from `makestep 1 -1` to
+`makestep 1 3`: it may step only in its first three updates after boot, so a disturbed refclock can never step the system
+clock again. (A first attempt put the comment on the directive's line, which chrony rejects as "too many arguments"; chrony
+was down for 29 s until the comment moved to its own line. No step, no effect on ts2phc or the trigger service.)
 
 **Lesson.** A PPS discipline needs a slew cap sized to the oscillator, not the hardware maximum: with the cap at the
 i210's ±6.25 % rail, a single bounce on a connector is worth seconds of clock error, and "never steps" was only true
