@@ -185,5 +185,5 @@ v2 by default (`--timing-profile v1` for pulses before 0098); an absent or rejec
 
 `notbefore 0.15.1` — re-vendor after `tlog.py` changed on the log side (witness submission in parallel with a 3 s total budget; the
 verifier-side functions the CLI uses are unchanged). Also `keys/WITNESSES.json` (vendored) now lists four Witness Network witnesses,
-disabled until `notbefore.net/log` is on a list. PATCH: vendored files changed, contract unchanged.
+disabled until `notbefore.net/log` is on a list. Re-vendored a second time for ERR-020 (2026-09-14): `tsa.py` retries each TSA request on a fresh socket (3 x 8 s) and `schema.py` classifies a TSA refusal as `tsa` before the entropy words can claim it (pulse 0140 was published as `entropy`). `ci/TIMING_PROFILE_EXCEPTIONS.json` gained the open range 0126- (f9t sawtooth-log coverage below 95 %, ERR-019 addendum), which is what turned test 35 green again. PATCH: vendored files changed, contract unchanged.
 

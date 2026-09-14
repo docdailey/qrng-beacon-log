@@ -232,6 +232,11 @@ cadence leaves no hole — holes only come from a commit without a reveal. **Sin
 RUNS but cannot commit mints a signed `skip` pulse naming the refusing dependency; only a deliberately stopped timer is
 silent, which is why a planned pause is announced here first (`RECOVERY.md` §3).**
 
+**2026-09-14 15:00Z: skip pulse 0140 (ERR-020).** The commit was refused when one of the two TSAs timed out; the cause
+was the LAN path between the fleet timing switch and the router dropping a third or more of new connections, sticky per
+flow (pings and kept connections unaffected, so no monitor saw it). From the 16:00Z cycle every outbound connection
+retries on a fresh socket with a short timeout; the path itself needs hands (ERRATA ERR-020).
+
 ## 3. Second party for non-reveal — watcher SHIPPED, operator = Grok (pending its repo/key)
 The chain makes a skipped reveal *visible*; it does not make it *attested*. The design:
 

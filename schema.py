@@ -17,7 +17,9 @@ REQUIRED = {"commit": ("entropy", "gnss", "time", "witness"),
 SKIP_REFUSED_BY = ("entropy", "gnss", "time", "witness", "drand", "tsa", "git", "aggregator", "unknown")
 def classify_refusal(text):
     t = (text or "").lower()
-    for key, words in (("entropy", ("protectli", "entropy")), ("gnss", ("f9t", "gnss")), ("time", ("p550", "time (", "time:")),
+    # tsa first: a TSA refusal ends "... E abandoned and erased on the entropy host", which the entropy words would claim
+    # (pulse 0140 was published as refused_by "entropy" for a DigiCert timeout - ERR-020; the published field stands, this fixes the next one)
+    for key, words in (("tsa", ("[tsa]", "tsa token", "tsa ")), ("entropy", ("protectli", "entropy")), ("gnss", ("f9t", "gnss")), ("time", ("p550", "time (", "time:")),
                        ("witness", ("k3", "witness")), ("drand", ("drand",)), ("tsa", ("tsa", "token")),
                        ("git", ("origin", "fetch", "published head", "unpublished")), ("aggregator", ("lead", "margin", "recover"))):
         if any(w in t for w in words): return key

@@ -6,6 +6,51 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-020 — the 15:00Z hour was skipped: the LAN path between the fleet timing switch and the router drops a third or more of NEW connections, stickily per flow (2026-09-14; open on the hardware side)
+
+**What happened.** At 15:00:31Z the commit was refused: `[tsa] digicert: URLError timed out` after the 25 s request
+timeout, leaving one TSA token where the beacon demands two (`MIN_TSA_TOKENS`), so the cycle minted the signed **skip
+pulse 0140** and abandoned the prepared secret on the entropy host - nothing was written. The pulse's `refused_by` field
+reads `entropy` because the classifier matched the words "entropy host" in the tail of the reason ("E abandoned and erased
+on the entropy host") before it matched `[tsa]`; the reason text itself is correct. The published field stands; the
+classifier now tests the TSA wording first.
+
+**What was found.** The DigiCert timeout was not DigiCert's. Measured from the aggregator k3 between 15:12Z and 15:44Z,
+with raw UDP DNS queries and fresh TCP connects toward the router (192.168.68.1) and the internet: a subset of flows gets
+no reply at all, and the subset is fixed by the flow's 5-tuple - four retransmissions on the same socket never recover,
+a new socket (a new source port) usually does. Fresh flows lost: 4 of 40 at 15:16Z, 24 of 60 at 15:18Z, 20 of 60 at
+15:28Z; fresh TCP connects failing after 3.5 s: 8 of 25 from k3, 11 of 25 from p550, 19 of 25 from f9t (15:36-15:44Z).
+think, wired to the main router, lost 0 of 40 flows and 0 of 40 connects at the same minutes. Pings, kept connections
+(SSH sessions, ptp4l, chrony, the trigger listener) and LAN flows between hosts (f9t and k3 to the NAS database, 25 of
+25 each) were unaffected. The common factor is "a host behind the fleet timing switch talking to or through the router".
+It is not k3 (identical from p550 and f9t), not DNS (raw UDP and TCP alike), not IPv6 (both families), not the NIC
+(pinning every flow to k3's other transmit queue changed nothing), and not a server (DigiCert, freetsa, drand, GitHub,
+Rekor and Cloudflare all answer in under 0.3 s when the flow gets through). The physical cause is on the router side of
+that path and needs hands: a router or satellite restart, or moving the switch's uplink to a port on the main unit.
+
+**What it affected.** One hour without a commit (15:00Z), recorded honestly as skip pulse 0140. No value was withheld
+or revealed improperly. The 06:00-14:00Z hours minted normally, so either the loss began after 14:00Z or its rate was
+low enough that no fetch fell on a dead flow. A side finding on k3: its resolver preferred an IPv6 DNS server and IPv6
+addresses, so under the same per-flow loss every lookup took 5-15 s; k3 now prefers IPv4 (`/etc/gai.conf` precedence)
+and IPv4 resolvers, and its git SSH connect timeout is 6 s. Those shorten the worst case; they are not the cause.
+
+**What was done (commit 94b536e, live for the 16:00Z cycle).** Every outbound connection the cycle makes now retries on
+a fresh socket with a short timeout, so a dead flow costs seconds instead of the hour: the entropy-host RPC connect
+(4 x 4 s), each TSA request (3 x 8 s, the two TSAs still in parallel), the cycle's pull, push and rebase (25/40 s, three
+attempts), the drand latest-round fetch (3 x 6 s) and pulse.py's git fetch (3 x 20 s); local git verbs get 45 s so
+nothing can hang. No protocol, format or verifier change. Still open: the path itself (above), and a third pinned TSA so
+that a single unreachable authority cannot skip an hour (2-of-3).
+
+**Outcome at 16:00Z.** With the retries live the hour minted normally: commit 0141 with both TSA tokens in under a
+second, pushed 57.6 s before release; reveal 0142 pushed 4.8 s after release. No retry was needed on those steps. The
+mint-time Rekor upload did land on a dead flow: it did not finish inside its 10 s budget and was left to CI's anchoring
+pass as designed, so from 0.15.1 that request too retries on a fresh socket (3 x 8 s instead of one 40 s wait).
+
+**Lesson.** Loss that is sticky per flow is invisible to every monitor that keeps its socket - ping, PTP, chrony, an SSH
+session - and only shows in things that open a new connection per request, which is exactly what the beacon's TSA,
+Rekor and git steps do. The probe that finds it is "N fresh sockets, count the ones that never answer"; the mitigation
+that works without touching hardware is "retry on a new socket", not a longer timeout.
+
 ## ERR-019 — commit 0138 could not be revealed or failed for 2 h 35 min: a stalled receiver stream put the GNSS anchor before the release, and the failure path then broke on its own reason string (2026-09-14 12:01–14:36Z)
 
 **What happened.** At 12:01:01Z the round for commit 0138 was served 1.11 s after its release and the reveal began. f9t's
@@ -36,6 +81,12 @@ receiver; ERR-018), and the stamp-probe window that makes f9t's coverage a per-p
 **Lesson.** A failure path is only a failure path if it has been exercised end to end with realistic inputs; this one
 had been fixed once (ERR-017) for the reason string and still carried a shell-splitting step nobody had run a quoted
 string through.
+
+**Addendum (15:50Z).** The receiver row loss named above has held f9t's sawtooth-log coverage between 67 % and 91 %
+for every pulse from **0126 (06:00Z) onward** (the database holds 2 245-3 568 f9t rows per hour since 00:00Z against a
+steady 3 600 from the timehat 6T logger; the loss is scattered single seconds, not whole-minute gaps). Those pulses are
+NOT-SATISFIED under the timing profile for that reason alone and are listed as an open range in
+`ci/TIMING_PROFILE_EXCEPTIONS.json`; the range closes at the first pulse whose coverage is back above 95 %.
 
 ## ERR-018 — operator error during a clock incident: the time host's PHC was set 73.8 s off by hand for four minutes, and the aggregator's clock followed NTP 60 s away from its PHC (2026-09-14 00:32–00:50Z; no pulse minted or affected)
 

@@ -54,6 +54,13 @@
       "erratum": "ERR-018",
       "verdict_v1_not": "SATISFIED",
       "why": "while p550's i210 PHC is disciplined by the BMC grandmaster instead of the F9T (ts2phc stopped; F9T pulse intermittent since 2026-09-14 01:39Z), every pulse is NOT-EVALUABLE or NOT-SATISFIED under v1 by design; close this range (set `to`) at the first pulse minted after the F9T hand-back CLOSED at 0123: the F9T pulse was handed back at 04:11:16Z 2026-09-14 after three clean ten-minute windows; from 0124 every pulse must satisfy v1 again."
+    },
+    {
+      "from": 126,
+      "to": null,
+      "erratum": "ERR-019",
+      "verdict_v1_not": "SATISFIED",
+      "why": "from 06:00Z 2026-09-14 the F9T receiver's serial row loss (ERR-018/ERR-019, hardware side open) holds f9t's sawtooth-log coverage below the 95 % the profile requires (67-91 % measured 0126-0138), so every pulse is NOT-SATISFIED by design; close this range (set `to`) at the first pulse whose gnss statement reports coverage >= 95 % again"
     }
   ]
 }
