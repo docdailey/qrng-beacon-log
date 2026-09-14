@@ -211,11 +211,56 @@ async function handle(req, env) {
   return bad("not found", 404);
 }
 
+// ---------------------------------------------------------------- hit counter (2026-09-14, Bill: "a hit counter excluding our machines")
+// One row per (UTC hour, path, kind, country) in D1 table `hits`, incremented after the response is sent (waitUntil). No IPs,
+// no user agents and no per-request rows are stored. `kind`: self = our own machines (SELF_IPS secret: exact IPv4s and IPv6
+// prefixes, comma-separated) or our own automation user agents; cli = the notbefore CLI; bot = declared crawlers; other = everything
+// else (browsers, curl, unknown). "Excluding our machines" is simply kind != self. Counting never affects the response: any error is swallowed.
+const SELF_UA = ["qrng-beacon-log/", "qrng-beacon-watcher/", "notbefore-decisions-mirror"];
+function hitKind(req, env) {
+  const ip = req.headers.get("CF-Connecting-IP") || "", ua = req.headers.get("User-Agent") || "";
+  const self = (env.SELF_IPS || "").split(",").map(s => s.trim()).filter(Boolean);
+  if (self.some(s => s.includes(":") ? ip.toLowerCase().startsWith(s.toLowerCase()) : ip === s)) return "self";
+  if (SELF_UA.some(u => ua.startsWith(u))) return "self";
+  if (ua.startsWith("notbefore-cli")) return "cli";
+  if (/bot|crawler|spider|slurp|preview|fetch\/|monitor|uptime|headless/i.test(ua)) return "bot";
+  return "other";
+}
+async function countHit(req, env) {
+  try {
+    const db = env.DB; if (!db) return;
+    const url = new URL(req.url); let p = url.pathname.replace(/\/+$/, "") || "/";
+    if (/^\/(chain|checkpoints|anchors)\//.test(p)) p = p.split("/").slice(0, 2).join("/") + "/*";     // per-file paths fold into their directory
+    if (p.length > 80) p = p.slice(0, 80);
+    const hour = new Date().toISOString().slice(0, 13) + ":00Z";
+    const kind = hitKind(req, env), country = (req.cf && req.cf.country) || "";
+    await db.prepare("INSERT INTO hits (hour, path, kind, country, n) VALUES (?1, ?2, ?3, ?4, 1) ON CONFLICT (hour, path, kind, country) DO UPDATE SET n = n + 1")
+            .bind(hour, p, kind, country).run();
+  } catch (e) { /* counting must never break serving */ }
+}
+async function stats(req, env) {
+  const db = env.DB; if (!db) return bad("storage not configured", 503);
+  const url = new URL(req.url); const days = Math.min(365, Math.max(1, parseInt(url.searchParams.get("days") || "30", 10) || 30));
+  const since = new Date(Date.now() - days * 86400e3).toISOString().slice(0, 13) + ":00Z";
+  const q = (sql, ...b) => db.prepare(sql).bind(...b).all().then(r => r.results);
+  const byPath = await q("SELECT path, SUM(n) AS hits FROM hits WHERE hour >= ?1 AND kind != 'self' GROUP BY path ORDER BY hits DESC LIMIT 40", since);
+  const byDay = await q("SELECT substr(hour, 1, 10) AS day, SUM(n) AS hits FROM hits WHERE hour >= ?1 AND kind != 'self' GROUP BY day ORDER BY day", since);
+  const byKind = await q("SELECT kind, SUM(n) AS hits FROM hits WHERE hour >= ?1 GROUP BY kind ORDER BY hits DESC", since);
+  const byCountry = await q("SELECT country, SUM(n) AS hits FROM hits WHERE hour >= ?1 AND kind != 'self' GROUP BY country ORDER BY hits DESC LIMIT 25", since);
+  const total = byPath.reduce((a, r) => a + r.hits, 0);
+  return json({ since, days, note: "hits to notbefore.net excluding the operator's own machines and automation (kind = self); counted per UTC hour, path, kind and country; no addresses or user agents are stored",
+                total_excluding_self: total, by_day: byDay, by_path: byPath, by_kind_including_self: byKind, by_country: byCountry });
+}
+
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const url = new URL(req.url);
     if (url.hostname === "www.notbefore.net") {                                    // one canonical host: www -> apex, path and query kept
       url.hostname = "notbefore.net"; return Response.redirect(url.toString(), 301);
+    }
+    if (req.method === "GET" || req.method === "HEAD") { if (ctx && ctx.waitUntil) ctx.waitUntil(countHit(req, env)); else countHit(req, env); }
+    if (url.pathname === "/stats" || url.pathname === "/stats/") {
+      try { return await stats(req, env); } catch (e) { return json({ error: "internal: " + (e.message || String(e)) }, 500); }
     }
     if (url.pathname === "/decisions" || url.pathname.startsWith("/decisions/")) {
       try { return await handle(req, env); } catch (e) { return json({ error: "internal: " + (e.message || String(e)) }, 500); }
