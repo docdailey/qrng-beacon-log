@@ -380,3 +380,23 @@ serves notbefore.net (`worker/decisions.js`, key `keys/decisions.pub`, note key 
 `decisions/` in this repository is where witnesses cosign and `ci/anchor_pulses.py` anchors its checkpoints
 (`decisions-checkpoint-NNNNNNNN`). Witnesses add one verifier-key line to their configuration; the two logs share
 `keys/WITNESSES.json`. `tlog.py`'s functions verify both — only the origin and key differ.
+
+## 17. Witness Network readiness (checked against witness-network.org and the C2SP specs, 2026-09-14)
+
+| requirement (source) | ours | state |
+|---|---|---|
+| origin line: unique, unchanging, schema-less URL (`c2sp.org/tlog-checkpoint`) | `notbefore.net/log`, permanent since 2026-09-12 (`keys/CHECKPOINT.json`) | met |
+| log vkey in signed-note form, Ed25519 key type 0x01 (participate page) | `notbefore.net/log+8b627e7f+AfPQekreiy4JUcf8TEcJs4Mj00EHL7JvHUSSLXeyZVLs` (`tlog.py verifier-key`); key name equals the origin | met |
+| checkpoint: origin / size / base64 root, signature line `— <origin> base64(4-byte key ID ‖ sig)` | live at `https://notbefore.net/checkpoint` (text/plain, CORS-open); `tlog.py selftest` covers the format | met |
+| never sign an inconsistent checkpoint | `publish-checkpoint` verifies consistency with the last published checkpoint and refuses rollbacks | met |
+| `POST <prefix>/add-checkpoint` body `old N` / proof lines / blank / note; handle 409 with the witness's size; ignore unknown cosignatures (`c2sp.org/tlog-witness`) | `tlog.witness_submit` + `verify_cosignatures`; probed 2026-09-14 against Mullvad, TrustFabric (staging and dev) and Geomys: all answer **404 unknown log**, i.e. the request is well-formed and only the listing is missing | met |
+| cosignature v1: `cosignature/v1` + `time T` + checkpoint text; key ID with 0x04 (`c2sp.org/tlog-cosignature`) | `tlog.cosign` / `verify_cosignatures`; `verify --witness-quorum N` | met |
+| submission rate (`qpd` in the log list) | 2 per hour steady (commit and reveal), 48/day; requested 60 | met |
+| contact | docdailey (at) gmail.com; https://notbefore.net | met |
+| witnesses must not be able to delay the log | all configured witnesses are asked in parallel with a **3 s total budget** (`tlog.WITNESS_BUDGET_S`, 2026-09-14); late answers are simply absent from that checkpoint | met |
+| **listing on a log list by a community maintainer** (participate page: "a community maintainer needs to approve your log") | application sent 2026-09-12 19:40Z to participate@lists.witness-network.org (staging, qpd 60); **no reply as of 2026-09-14 15:00Z**; other applicants in the archive were answered within about three days | **pending, outside our control** |
+
+Pre-configured and disabled until listed (`keys/WITNESSES.json`): `witness.stagemole.eu` (Mullvad), `staging.witness.transparency.goog/ring-any-bells`
+(TrustFabric), `witness.navigli.sunlight.geomys.org` (Geomys), `transparency.dev/DEV:witness-little-garden` (testing only). Enabling
+them is a one-word change once `notbefore.net/log` appears on a list they serve; until an operator we do not control has cosigned,
+CLAIMS.md keeps "witnessed" out of the copy.

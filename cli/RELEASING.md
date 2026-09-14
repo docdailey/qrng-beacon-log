@@ -183,3 +183,7 @@ hardware-event statement on the same instant, bounded event/issue/receive latenc
 v2 by default (`--timing-profile v1` for pulses before 0098); an absent or rejected trigger is NOT-SATISFIED. Verifier unchanged
 (vendored at `60f26a6`). Prompted by the 2026-09-14 review: "the timing profile does not enforce cadence provenance". Test 20.
 
+`notbefore 0.15.1` — re-vendor after `tlog.py` changed on the log side (witness submission in parallel with a 3 s total budget; the
+verifier-side functions the CLI uses are unchanged). Also `keys/WITNESSES.json` (vendored) now lists four Witness Network witnesses,
+disabled until `notbefore.net/log` is on a list. PATCH: vendored files changed, contract unchanged.
+
