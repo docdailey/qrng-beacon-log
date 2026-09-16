@@ -1,0 +1,64 @@
+{
+ "anchor": "qrng-beacon-log/anchor/1",
+ "anchor_key_file": "keys/anchor.pub",
+ "anchor_key_id": "0ba35c3f423663b799dd6ba6d24d8ff89f8cf799ccf664fdf2fb9ef81364ab20",
+ "anchored_by": {
+  "main_commit": "29f1cbf3c64a196cd77df83da1ffe2b219ddb040",
+  "run_url": "https://github.com/docdailey/qrng-beacon-log/actions/runs/35061791941",
+  "utc": "2026-09-16T06:00:28Z"
+ },
+ "ots": {
+  "file": "pulse-0186.stmt.json.ots",
+  "status": "pending"
+ },
+ "pulse_hash": "9b97b5b96f32f2b9c11a9ef9829390347ffe5ac7555e7cdc6e63669b81741966",
+ "rekor": {
+  "entry": {
+   "body": "eyJhcGlWZXJzaW9uIjoiMC4wLjEiLCJraW5kIjoiaGFzaGVkcmVrb3JkIiwic3BlYyI6eyJkYXRhIjp7Imhhc2giOnsiYWxnb3JpdGhtIjoic2hhMjU2IiwidmFsdWUiOiIwYjU0YmNiZTRjNDI0ZmNmNTIzMzg0N2Y5ZTMzOWFjYzI2OGFjODY0YzA1ZTU0NzRlNzY5ZGNkMjVkMDZkZjM5In19LCJzaWduYXR1cmUiOnsiY29udGVudCI6Ik1FUUNJR2h0SENuSWJvNE5QVnpxNDU2dk1XaHY5U280c0hQRGJLVGt0MC9lVU5GK0FpQXFnVVFBbmQ3RFRkaXQ0ZUNxek5TUkcvUkJ5THFoKzNMWFdDNldDdGV2bmc9PSIsInB1YmxpY0tleSI6eyJjb250ZW50IjoiTFMwdExTMUNSVWRKVGlCUVZVSk1TVU1nUzBWWkxTMHRMUzBLVFVacmQwVjNXVWhMYjFwSmVtb3dRMEZSV1VsTGIxcEplbW93UkVGUlkwUlJaMEZGTVc5RVJsaDVhek5yTVVnMmNHeHdWV2M0WVVadVMyRjZWVzVvV0FwdU5XTnBhR1pVTUVkNFdsaHFRbUpIZFhVeVp6VnVaV3BNY3pZeWVGQkphMFF2WkZReWJqbGhPRkZWVUM5ck5UVm9WekZsUTBaeE5FVm5QVDBLTFMwdExTMUZUa1FnVUZWQ1RFbERJRXRGV1MwdExTMHRDZz09In19fX0=",
+   "integratedTime": 1789538428,
+   "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+   "logIndex": 2856059162,
+   "verification": {
+    "inclusionProof": {
+     "checkpoint": "rekor.sigstore.dev - 1193050959916656506\n2734154910\nz4TtqKANFPMrU8U7B7/zc2YWQKMhRQWAUprtKLyfbiE=\n\n\u2014 rekor.sigstore.dev wNI9ajBFAiArCD0c82BTPH9+Jf6UvtKuX2X81NpPXmZ6+FpJp9ku0gIhAKzFmbwZyja8PFGIXQigd3HfnBCBa8MJd0KjExWCFcjN\n",
+     "hashes": [
+      "462f6938bfad6e272649bcda8d5a92e3fd61ee11cab9cecc2623a26a0847ca87",
+      "6e930a0d41f053b29d92170de5ffc6b28337b8826219073111d8344eecb3c747",
+      "f16194ebb8d4dee8df08d73e7cd9efb51c3f6bdd6e628b645cdf166228463461",
+      "9559f81e3a7156257957b01c299fae66e3b955928af4fc22d2f4d5531cb250b4",
+      "d0dbffbd192f3ded8c26b4301b0fbb131cb3799cb4211597da764400a875d0b3",
+      "23bb67899b0be8142dd6d2f7574d002c12b7108dfa86f91ed42a95300c364597",
+      "d19593f41c38f5a4feb72649302f0813840a4fbf27fd2e8f1d7012ab2f055894",
+      "674a752655ce6a78c2d0d0ebef13a9a0dbe37cf4e3f767f2b101fb43c94d29a5",
+      "abba30939a7a9d85219962c72c6760daadbf5a47cf807c6f535230da569eab0b",
+      "c17936b1c25ee360c629a5487161d8c89a65413a98267088c99923cad9b0fa4f",
+      "e5223367e7dfc5d7c61b5a7fb60e0a520bd412cb85da17889dcf15863bdd45f0",
+      "a295238b1f178dfb89eecdff2553c7afe2921a23f60bc86a44d7039b909063b8",
+      "63beb34b85290d5352f0cd56a52598cf943d96963d8a99f1d5f5ad626eb35f8c",
+      "838a710df18e9099f7b50bf025f4f6774682401c2cb84587332372f4576182f0",
+      "36ac86663494c0ab315a3fc96edfe79e009077469f237b7515a5d33cd4de898a",
+      "1aec5fa109e535420c3975d6886d5f5d0e5cb52cb91abf89d9238173312e40cb",
+      "5074c3e20a690e951bbe356de4996b475ce7baa905fc17bee42e7786a7159830",
+      "8e17af585389d9c594e92bf332701ed3ccc719c56ab9194fee001e777f7ec08e",
+      "ab1cc76a7033cf9ed20dd9897b407b6c92bbd8d4c805bc043060412af0ce44ec",
+      "c47fc30ac78b1ebf5e2a8613f2ab0e4592bbcd5744198587b95b6c56b0fde706"
+     ],
+     "logIndex": 2734154900,
+     "rootHash": "cf84eda8a00d14f32b53c53b07bff373661640a321450580529aed28bc9f6e21",
+     "treeSize": 2734154910
+    },
+    "signedEntryTimestamp": "MEUCIQDycSxrDx2NrdXNYEkt/KE79RQ13DKiVDXlZXF47UaWrAIgT2AaUYt53wqqbOy49KU2DU9xVwiuBM8ocJkXud7Y1Vs="
+   }
+  },
+  "integratedTime": 1789538428,
+  "integrated_utc": "2026-09-16T06:00:28Z",
+  "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+  "logIndex": 2856059162,
+  "server": "https://rekor.sigstore.dev",
+  "uuid": "108e9186e8c5677abdc2ed1ec920a93a75e4de9bf2578276f3f930d5eb61424b6fe86448397a1539"
+ },
+ "seq": 186,
+ "signature_b64": "MEQCIGhtHCnIbo4NPVzq456vMWhv9So4sHPDbKTkt0/eUNF+AiAqgUQAnd7DTdit4eCqzNSRG/RByLqh+3LXWC6WCtevng==",
+ "statement_sha256": "0b54bcbe4c424fcf5233847f9e339acc268ac864c05e5474e769dcd25d06df39",
+ "type": "skip"
+}
