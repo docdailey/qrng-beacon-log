@@ -1,0 +1,63 @@
+{
+ "anchor": "qrng-beacon-log/anchor/1",
+ "anchor_key_file": "keys/anchor.pub",
+ "anchor_key_id": "0ba35c3f423663b799dd6ba6d24d8ff89f8cf799ccf664fdf2fb9ef81364ab20",
+ "anchored_by": {
+  "main_commit": "dee8ff2741c001f9f136e70f3feecdefce6c93bd",
+  "run_url": "https://github.com/docdailey/qrng-beacon-log/actions/runs/36357203730",
+  "utc": "2026-09-27T23:00:39Z"
+ },
+ "ots": {
+  "file": "pulse-0457.stmt.json.ots",
+  "status": "pending"
+ },
+ "pulse_hash": "d058a6bf38bcfef5dbe12b7d19931242736de94ae5037f063912ee6f6ec09b81",
+ "rekor": {
+  "entry": {
+   "body": "eyJhcGlWZXJzaW9uIjoiMC4wLjEiLCJraW5kIjoiaGFzaGVkcmVrb3JkIiwic3BlYyI6eyJkYXRhIjp7Imhhc2giOnsiYWxnb3JpdGhtIjoic2hhMjU2IiwidmFsdWUiOiJhOTA5YTBiYWEzYWJkODVjNjVlMDkxOTkwMzdjNjAwYWFkZjM3MTE5YTgyYTc0OTBiMWViMTM0ZDMwOGVkNDllIn19LCJzaWduYXR1cmUiOnsiY29udGVudCI6Ik1FVUNJR3VlU0RBNk1IOHZtMk1jY25rak9KUzUrRVd1bHk1ZEd0ZVJIczJIVmlEakFpRUE4c1lZeGVVYkRGNUQ4cDd2MTN5SDdqU0luSlFWcXZuZzJUSmdjN0VRby9vPSIsInB1YmxpY0tleSI6eyJjb250ZW50IjoiTFMwdExTMUNSVWRKVGlCUVZVSk1TVU1nUzBWWkxTMHRMUzBLVFVacmQwVjNXVWhMYjFwSmVtb3dRMEZSV1VsTGIxcEplbW93UkVGUlkwUlJaMEZGTVc5RVJsaDVhek5yTVVnMmNHeHdWV2M0WVVadVMyRjZWVzVvV0FwdU5XTnBhR1pVTUVkNFdsaHFRbUpIZFhVeVp6VnVaV3BNY3pZeWVGQkphMFF2WkZReWJqbGhPRkZWVUM5ck5UVm9WekZsUTBaeE5FVm5QVDBLTFMwdExTMUZUa1FnVUZWQ1RFbERJRXRGV1MwdExTMHRDZz09In19fX0=",
+   "integratedTime": 1790550021,
+   "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+   "logIndex": 2980421507,
+   "verification": {
+    "inclusionProof": {
+     "checkpoint": "rekor.sigstore.dev - 1193050959916656506\n2858517514\nB/pOsTKJ2wjsZ551DT6J0lU538mYC2xm54DqBlix0ik=\n\n\u2014 rekor.sigstore.dev wNI9ajBGAiEAuft7zWW/Te3wVrZr60agy6bqVFtyoy6r0yTMYHOm4zUCIQDzh75HYn8fjqcmL9bu1JmI4vmjdMOJ6V0awl9culMHFQ==\n",
+     "hashes": [
+      "67d384c73b42fade4c44c13b8c5eb7f0021b0d72868372a70e93daa24548da21",
+      "72b09004213f57c84cbfa2c5bf8a7992bb16c95a12b32353250726ffb660bb31",
+      "f39a011d2b5cadd43dbe4ac8b873cd612db83d51db7a81ec041ee1f348a7f8b6",
+      "1320a5af3acdc4b95975cf979b3fcc0dc25de8cfbd41b70d44d64e986a6daac0",
+      "d27cb10f1f0bfef03425e8bbaf4ed2d514ca33ebae9c3b5a07354fee7bf7bc78",
+      "740fe5248e2d03da3f0900e7e3193fecb9ce9abd869ef6ee5139387225609a6a",
+      "760c9369225d1808e28c6c7fa929254fcea0bb32da4f51f19b0d83bed3ec1967",
+      "145fac258f20e311f16570e4dda13d498a461c8467653e86806d17736f3b75bb",
+      "2517625bb9fdc0edb0c3f7c3329b937b45ad78ee1935b22f8e1b419e2b73838e",
+      "efdd5af3d256b9c750d619bd9413ba4aa0d5916b2cfb7115c4d253ac5041e7c3",
+      "d1e6c8d228eed0f51b7152407be61e3485ae91aa5cf739ef8b932f9e0a130396",
+      "204fcd9ee339f83e1a0538b9860d0eb9afcb0f129ea37181d1302b058ab07e4f",
+      "6244977490eccdd0a34b21c5fa8bdfbd1d4c80f8ff7068b7a1f427c7759fa947",
+      "ea60edccf8c519a5694ae14d4c0f88bf6e9a46714527f73c9ce4caeeaf729766",
+      "68225f7a2d7c9cb18522a9ffaaedf09d1e1e1bef5533ddddefe0f70fe2e43645",
+      "07563dead41a80d927a49f3fb9f34e0c03ca90e8ef04b2c22931092df6e2e6b5",
+      "b6da717744c9a6b394b5bffc59fe43788cf036d530ef64346275c4d8b14c219a",
+      "ab1cc76a7033cf9ed20dd9897b407b6c92bbd8d4c805bc043060412af0ce44ec",
+      "c47fc30ac78b1ebf5e2a8613f2ab0e4592bbcd5744198587b95b6c56b0fde706"
+     ],
+     "logIndex": 2858517245,
+     "rootHash": "07fa4eb13289db08ec679e750d3e89d25539dfc9980b6c66e780ea0658b1d229",
+     "treeSize": 2858517514
+    },
+    "signedEntryTimestamp": "MEUCIQCLsxAA+FBlTyOmFFuQLTgW++J3t5joh9FuT6n8jwaWpgIgUqwlBDCefanLBjKkkWAW3BqwSJHwGakpFIlsZCFkXeU="
+   }
+  },
+  "integratedTime": 1790550021,
+  "integrated_utc": "2026-09-27T23:00:21Z",
+  "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+  "logIndex": 2980421507,
+  "server": "https://rekor.sigstore.dev",
+  "uuid": "108e9186e8c5677a84f33cdc9d5392399f431c4a5baa6b71b715dd205c47867209852d5f8f78a7c2"
+ },
+ "seq": 457,
+ "signature_b64": "MEUCIGueSDA6MH8vm2MccnkjOJS5+EWuly5dGteRHs2HViDjAiEA8sYYxeUbDF5D8p7v13yH7jSInJQVqvng2TJgc7EQo/o=",
+ "statement_sha256": "a909a0baa3abd85c65e09199037c600aadf37119a82a7490b1eb134d308ed49e",
+ "type": "commit"
+}
