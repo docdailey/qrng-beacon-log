@@ -245,7 +245,7 @@ def udp_listener(t0, until):
                 TRIGGER_ARRIVED.rx_ns = rx; TRIGGER_ARRIVED.kernel_rx_ns = krx; TRIGGER_ARRIVED.statement = st; TRIGGER_ARRIVED.record = rec; TRIGGER_ARRIVED.set(); return
             d = os.path.join(REPO, "trigger"); os.makedirs(d, mode=0o700, exist_ok=True); tmp = os.path.join(d, ".pending.tmp")
             json.dump(rec, open(tmp, "w")); os.replace(tmp, os.path.join(d, "pending.json"))
-            log(f"udp trigger from {addr[0]} for {t0}: p550 {st.get('hw_event', {}).get('source', 'clock')} trigger, p550 woke {st['wake']['late_ns'] / 1000:.1f} us after the instant, received {(rx - t0 * 10**9) / 1e6:.1f} ms after"); return
+            log(f"udp trigger from {addr[0]} for {t0}: p550 {(st.get('hw_event') or {}).get('source', 'clock')} trigger, p550 woke {st['wake']['late_ns'] / 1000:.1f} us after the instant, received {(rx - t0 * 10**9) / 1e6:.1f} ms after"); return
         log("no udp trigger arrived from the time host (the pulse will carry the aggregator's own wake record only)")
     threading.Thread(target=run_, daemon=True).start()
 
