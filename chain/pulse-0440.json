@@ -1,0 +1,39 @@
+{
+  "core": {
+    "v": "0.5",
+    "type": "skip",
+    "seq": 440,
+    "prev_hash": "d4a0ed6ce71235ee87903579f30711d8d448f86e366327bf6af46614f9ec832a",
+    "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+    "statements": {},
+    "derived": {
+      "reason": "commit refused: python3 pulse.py commit failed: REFUSING TO MINT: commit aborted before anything was written: f9t agentd: RuntimeError: Traceback (most recent call last):\n  File \"/home/beacon/beacon/gnss_probe.py\", line 93, in <module>\n    \"sawtooth_mean_ns\": float(mean), \"sawtooth_sd_ns\": float(sd),\n                        ~~~~~^^^^^^\nTypeError:",
+      "refused_by": "gnss",
+      "attempted_unix_s": 1790496033,
+      "attempted_utc": "2026-09-27T08:00:33Z",
+      "drand_round_seen": 32564222,
+      "published_head_confirmed": true,
+      "head_type_before": "skip",
+      "meaning": "No commit was minted this cycle. Nothing was selected and nothing was withheld: no commitment existed. This pulse only makes the gap, and the operator's stated cause, public at a timestamped moment."
+    },
+    "tooling": {},
+    "aggregator_host": "k3"
+  },
+  "pulse_hash": "900f8001b067939a52b3bd10422fa2c626ec61a5f7f5975e7567526f417502fa",
+  "signatures": {
+    "aggregator": {
+      "alg": "ed25519",
+      "key_id": "56c30593534ad116",
+      "public_key_b64": "q/Mx1IKvtgU56iq+JZKQba/R93qcleWdZp7xLl7eSIE=",
+      "signer": "k3",
+      "role": "aggregator",
+      "sig_b64": "1FGRz7Ylha9NLU6s3JoWNtWQ+v7QXg/bjfQW+KSaKJ6gYL+mlihkihq94j9kCBQl6DY0JfV6nPBOyj/wCH7zDw==",
+      "over": "pulse_hash bytes",
+      "attests": "assembly only; each host's facts are attested by that host's own signature inside core.statements"
+    }
+  },
+  "disclosure": {
+    "protocol": "PROTOCOL.md v0.5",
+    "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md."
+  }
+}
