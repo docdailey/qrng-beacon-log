@@ -1,0 +1,501 @@
+{
+  "core": {
+    "v": "0.5",
+    "type": "reveal",
+    "seq": 458,
+    "prev_hash": "d058a6bf38bcfef5dbe12b7d19931242736de94ae5037f063912ee6f6ec09b81",
+    "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+    "statements": {
+      "entropy": {
+        "statement": {
+          "v": "0.5",
+          "role": "entropy_signer",
+          "host": "protectli",
+          "seq": 457,
+          "phase": "reveal",
+          "binding": "d058a6bf38bcfef5dbe12b7d19931242736de94ae5037f063912ee6f6ec09b81",
+          "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+          "issued_unix_ns": "1790550062543332113",
+          "tools": [
+            {
+              "name": "entropy_host.py",
+              "sha256": "d2eaa923b7ac817f63b04a171abc667b0d56229c90b3e832ac787940710cd254"
+            },
+            {
+              "name": "attest_lib.py",
+              "sha256": "18a11753bed817f7615da01d295d2536a99b53b5c3b48cb230f1c2d4f7697b3d"
+            }
+          ],
+          "execution": {
+            "user": "beacon",
+            "uid": 996,
+            "via": "agentd",
+            "via_forced_command": false,
+            "ssh_original_command": "",
+            "beacon_cmd_sha256": "c6e1cb712b6dd550e2763fce90212327b917e1ac54d820fc15b8dc4c8ef25a4e",
+            "agentd_sha256": "3e3c1ba9ce117f1b4b971f1030fd2c2d71b08c3b4d50d23252c68f670a827674",
+            "request_nonce": "7ae43a1f17cb369e1f0b8917e6f659d3",
+            "host_config_sha256": "674865fc5d98b30d4d6d85bc1a81d0edda0896503c451c0a5847be16ce8fe1b0"
+          },
+          "commit_seq": 457,
+          "commit_pulse_hash": "d058a6bf38bcfef5dbe12b7d19931242736de94ae5037f063912ee6f6ec09b81",
+          "entropy_hex": "e858b5051b54dd231220b24da3e577fbe2958c9b70928383c8e3768ef682922b",
+          "entropy_commitment": "c1162d8f64b3fef3d0b5c41f567cdfcb75efefd350614726336e08ff8b4b5acc",
+          "target_round": 32582232,
+          "drand_latest_round_seen_by_host": 32582232,
+          "commit_statement_sig_b64": "wGCXY2+yd5mVchjIuSouHAj5A6syRIl+UiGM6LZ6PD0Z44DvQgn9eig8nSvhs14iWV2OQjcy3JYhQa1jRa57Cw=="
+        },
+        "signature": {
+          "alg": "ed25519",
+          "key_id": "1fc857c9f439ab9a",
+          "public_key_b64": "a2ANhyUVHQGpi1mQRKG+L7siT0ptYH9/MpLQ/UunILA=",
+          "sig_b64": "mLNfFSfe8sO2s8g7E7UH5Y0RMjULNNuDlWyuZ1KmMekbuJucDuoItzjgZ9ijHw8EIKndZhV45Xh7L+Al5tP9DQ==",
+          "over": "canon(statement)"
+        }
+      },
+      "gnss": {
+        "statement": {
+          "v": "0.5",
+          "role": "gnss_attester",
+          "host": "f9t",
+          "seq": 458,
+          "phase": "reveal",
+          "binding": "d058a6bf38bcfef5dbe12b7d19931242736de94ae5037f063912ee6f6ec09b81",
+          "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+          "issued_unix_ns": "1790550061795968559",
+          "tools": [
+            {
+              "name": "attest_host.py",
+              "sha256": "036cc9ca5e978fe9b3fb749a0ab7627fe1b18991ccfb05bbdeb3d1d4eec99a6a"
+            },
+            {
+              "name": "attest_lib.py",
+              "sha256": "18a11753bed817f7615da01d295d2536a99b53b5c3b48cb230f1c2d4f7697b3d"
+            },
+            {
+              "name": "gnss_probe.py",
+              "sha256": "25eb16e20208baa84b8ae36e5f5ce1ebda862657e272492b8f13d0620595c14f"
+            }
+          ],
+          "execution": {
+            "user": "beacon",
+            "uid": 999,
+            "via": "agentd",
+            "via_forced_command": false,
+            "ssh_original_command": "",
+            "beacon_cmd_sha256": "c6e1cb712b6dd550e2763fce90212327b917e1ac54d820fc15b8dc4c8ef25a4e",
+            "agentd_sha256": "3e3c1ba9ce117f1b4b971f1030fd2c2d71b08c3b4d50d23252c68f670a827674",
+            "request_nonce": "eedad6d7d95c374469d5de6984ea76aa",
+            "host_config_sha256": "ccf95f4e73636c4afdff7a0760c895455e64b2dcb022cbcb7df5ff002507ea13"
+          },
+          "probe_command": "python3 /home/beacon/beacon/gnss_probe.py",
+          "measurement": {
+            "database": {
+              "host": "192.168.69.133",
+              "port": 3309,
+              "schema": "timehat",
+              "receiver_src": "m8t",
+              "tables": [
+                "qerr_stream",
+                "rawx_stream"
+              ]
+            },
+            "anchor": {
+              "what": "A GNSS second as reported by the u-blox LEA-M8T timing receiver inside the GFS-8A GPSDO at timehat: UBX-TIM-TP week/tow and quantization error (qErr) for the next time pulse, logged to timehat.qerr_stream (src='m8t'). This epoch is the receiver's own time solution; it is NOT captured in hardware on the aggregator's clock path. (Through pulse 0155 the anchor was the ZED-F9T's TP1 edge captured by the p550 i210 via ts2phc; that path has been unavailable since 2026-09-14 - see ERR-022.)",
+              "gps_week": 2438,
+              "gps_tow_ms": 82878000,
+              "tow_time_base": "GPS",
+              "tow_time_base_flag_note": "UBX-TIM-TP flags bit0. When set, towMS is already UTC and no leap subtraction applies; subtracting one anyway is an 18 s error.",
+              "utc_available_flag": true,
+              "week_tow_seconds": "1474585278.0",
+              "utc_unix_s": "1790550060.0",
+              "tai_unix_s": "1790550097.0",
+              "leap_seconds_gps_minus_utc": 18,
+              "tai_minus_utc_s": 37,
+              "leap_note": "leapS is GPS-UTC as broadcast by the satellites; TAI-GPS is a fixed 19 s, so TAI-UTC = leapS + 19. Derived from the constellation, not from the host OS.",
+              "sawtooth_qerr_ns_this_epoch": "5.888",
+              "sawtooth_flags": 10,
+              "sawtooth_meaning": "Deviation of THIS epoch's time-pulse edge from its ideal instant, as reported by the receiver for this exact week/tow. Logged, NOT applied to any servo.",
+              "db_row_ts": "2026-09-27 23:00:59.392000",
+              "db_row_age_s": "2.35",
+              "db_row_minus_anchor_s": "-0.608",
+              "anchor_is_independent_of_software_read": true,
+              "hardware_captured_on_aggregator_path": false,
+              "sanity_check": "db_row_minus_anchor_s is the lag between the anchoring epoch and the moment the logger wrote the row. UBX-TIM-TP describes the NEXT pulse, so a value within about +/-2 s is expected (the probe refuses outside it). A value near 18 s would mean the leap handling is wrong."
+            },
+            "anchor_quality": {
+              "sawtooth_window": "15 min",
+              "samples": 899,
+              "expected_at_1Hz": 900,
+              "coverage_pct": "99.9",
+              "sawtooth_mean_ns": "-0.054",
+              "sawtooth_sd_ns": "5.927",
+              "sawtooth_min_ns": "-10.53",
+              "sawtooth_max_ns": "10.28",
+              "gnss_fix": {
+                "num_measurements": 7,
+                "constellations": {
+                  "GPS": 7
+                },
+                "rec_stat": "0x01",
+                "rawx_tow_ms": 82871999,
+                "rawx_week": 2438
+              }
+            }
+          },
+          "measurement_sha256": "8f8d97ab9ee233f677fd1c4c64f518de9d6dde62035397300296de138a46382e"
+        },
+        "signature": {
+          "alg": "ed25519",
+          "key_id": "5cde8565cdfaf793",
+          "public_key_b64": "FyqogtSEKkiatSjq4QByn7gpkmmf7VF98Nh769ITM5c=",
+          "sig_b64": "ktei/WXhLPY+qaj9Ca7+80N6iH1Hm6UCosP7JNXZ73t+sQ952+MlH0dDhA8/ZzZOTo6EFVpUqgkJKZUGNdHpBQ==",
+          "over": "canon(statement)"
+        }
+      },
+      "time": {
+        "statement": {
+          "v": "0.5",
+          "role": "time_attester",
+          "host": "p550",
+          "seq": 458,
+          "phase": "reveal",
+          "binding": "d058a6bf38bcfef5dbe12b7d19931242736de94ae5037f063912ee6f6ec09b81",
+          "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+          "issued_unix_ns": "1790550082278050484",
+          "tools": [
+            {
+              "name": "attest_host.py",
+              "sha256": "036cc9ca5e978fe9b3fb749a0ab7627fe1b18991ccfb05bbdeb3d1d4eec99a6a"
+            },
+            {
+              "name": "attest_lib.py",
+              "sha256": "18a11753bed817f7615da01d295d2536a99b53b5c3b48cb230f1c2d4f7697b3d"
+            },
+            {
+              "name": "stamp_probe.py",
+              "sha256": "259f02839d73e3144257d76762d9a4c8b9f58590097c0d665648f43dd27a2ae5"
+            }
+          ],
+          "execution": {
+            "user": "beacon",
+            "uid": 997,
+            "via": "agentd",
+            "via_forced_command": false,
+            "ssh_original_command": "",
+            "beacon_cmd_sha256": "c6e1cb712b6dd550e2763fce90212327b917e1ac54d820fc15b8dc4c8ef25a4e",
+            "agentd_sha256": "3e3c1ba9ce117f1b4b971f1030fd2c2d71b08c3b4d50d23252c68f670a827674",
+            "request_nonce": "492838028a447edbf816028945fa533b",
+            "host_config_sha256": "3ade498a97440cc76b532ea149146cfea8666cf6747757a9069d74bf751d99a0"
+          },
+          "probe_command": "python3 /home/beacon/beacon/stamp_probe.py /dev/ptp0 IPHC",
+          "measurement": {
+            "host": "p550",
+            "kernel": "6.6.138-rt74+",
+            "arch": "riscv64",
+            "stamp": {
+              "clock": "CLOCK_REALTIME",
+              "utc_ns": "1790550061828923557",
+              "meaning": "freshness/ordering of this statement only; the pulse's time is the hardware-captured GNSS epoch"
+            },
+            "tai_minus_utc_s": 37,
+            "tai_source": "adjtimex ret=0 status=0x0; kernel adjtimex",
+            "phc_crosscheck": {
+              "device": "/dev/ptp0",
+              "clock_name": "a0369f37b8e7",
+              "phc_minus_realtime_median_ns": 36999998285,
+              "phc_minus_realtime_spread_ns": 3528,
+              "meaning": "how closely CLOCK_REALTIME follows the PHC (chrony tracking); not a stamp accuracy"
+            },
+            "discipline": {
+              "servo": "ptp4l",
+              "reference": "P550-BMC GPS GM (domain 44, UDPv4)",
+              "samples": 481,
+              "window_s": "59.9",
+              "offset_ns_min": -29,
+              "offset_ns_max": 22,
+              "offset_ns_rms": "8.8",
+              "offset_ns_stdev": "8.8",
+              "path_delay_ns_last": 487,
+              "states": [
+                "s2"
+              ],
+              "source": "ring /run/beacon-clocklog/ptp4l.jsonl (beacon-clocklog, one row per ptp4l sync)",
+              "ring_used": true
+            },
+            "mesh_crosscheck": {},
+            "epoch_guard": {
+              "check": "PHC - CLOCK_REALTIME must equal TAI-UTC (+37 s) within 0.5 s",
+              "tai_minus_utc_used": 37,
+              "tai_source": "kernel adjtimex",
+              "expected_refid": "IPHC",
+              "why": "lab notebook entry 220: a link bounce wipes the i210 epoch while ts2phc still reports a healthy lock. Servo metrics cannot detect this; only this difference can.",
+              "self_heal": "iphc-epoch-check.service via udev 99-iphc-epoch.rules on enp1s0 change",
+              "phc_minus_realtime_minus_tai_s": "-2e-06",
+              "epoch_ok": true,
+              "iphc_epoch_check_status": null,
+              "chrony_refclock_line": "#* IPHC                          0   0   377     1     -4ns[   -3ns] +/- 1000ns",
+              "chrony_selects_refclock": true,
+              "chrony_selects_iphc": true
+            },
+            "chrony": {
+              "reference_id": "49504843 (IPHC)",
+              "stratum": "1",
+              "rms_offset": "0.000000007 seconds",
+              "root_delay": "0.000000001 seconds",
+              "root_dispersion": "0.000003183 seconds",
+              "leap_status": "Normal"
+            },
+            "kernel_error_bounds": {
+              "maxerror_us": 2,
+              "esterror_us": 0
+            }
+          },
+          "measurement_sha256": "4607b9e8a9fa678b986c05f0c8eba86838058743360c37484803977b1e679c07"
+        },
+        "signature": {
+          "alg": "ed25519",
+          "key_id": "6dae96e8faa9678a",
+          "public_key_b64": "XAsLFvZJFrZvYnqg7+t9AN8qgppLCfMa+iOQJc0f8U8=",
+          "sig_b64": "6KXeFQGJ37YAurEM+Uc0c3ljHnXlh8DjxFPivmDtS3S3ks7u/wjyM+N3O3u27kIwHLscKoDLRUERcJ7hLJYvDA==",
+          "over": "canon(statement)"
+        }
+      },
+      "witness": {
+        "statement": {
+          "v": "0.5",
+          "role": "time_witness",
+          "host": "k3",
+          "seq": 458,
+          "phase": "reveal",
+          "binding": "d058a6bf38bcfef5dbe12b7d19931242736de94ae5037f063912ee6f6ec09b81",
+          "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+          "issued_unix_ns": "1790550061982460596",
+          "tools": [
+            {
+              "name": "attest_host.py",
+              "sha256": "036cc9ca5e978fe9b3fb749a0ab7627fe1b18991ccfb05bbdeb3d1d4eec99a6a"
+            },
+            {
+              "name": "attest_lib.py",
+              "sha256": "18a11753bed817f7615da01d295d2536a99b53b5c3b48cb230f1c2d4f7697b3d"
+            },
+            {
+              "name": "stamp_probe.py",
+              "sha256": "259f02839d73e3144257d76762d9a4c8b9f58590097c0d665648f43dd27a2ae5"
+            }
+          ],
+          "execution": {
+            "user": "beacon",
+            "uid": 994,
+            "via": "agentd",
+            "via_forced_command": false,
+            "ssh_original_command": "",
+            "beacon_cmd_sha256": "c6e1cb712b6dd550e2763fce90212327b917e1ac54d820fc15b8dc4c8ef25a4e",
+            "agentd_sha256": "3e3c1ba9ce117f1b4b971f1030fd2c2d71b08c3b4d50d23252c68f670a827674",
+            "request_nonce": "64a99e681562dfd99e376635bfa41f03",
+            "host_config_sha256": "d27cb841acf624c11f8c92e947ba8abb00dc16a7dae942f276cfd971a72fa6d5"
+          },
+          "probe_command": "python3 /home/beacon/beacon/stamp_probe.py /dev/ptp1 PHC",
+          "measurement": {
+            "host": "k3",
+            "kernel": "6.18.3-generic",
+            "arch": "riscv64",
+            "stamp": {
+              "clock": "CLOCK_REALTIME",
+              "utc_ns": "1790550061733341850",
+              "meaning": "freshness/ordering of this statement only; the pulse's time is the hardware-captured GNSS epoch"
+            },
+            "tai_minus_utc_s": 37,
+            "tai_source": "adjtimex ret=0 status=0x0; kernel adjtimex",
+            "phc_crosscheck": {
+              "device": "/dev/ptp1",
+              "clock_name": "stmmac ptp",
+              "phc_minus_realtime_median_ns": 37000000047,
+              "phc_minus_realtime_spread_ns": 2491,
+              "meaning": "how closely CLOCK_REALTIME follows the PHC (chrony tracking); not a stamp accuracy"
+            },
+            "discipline": {
+              "servo": "ptp4l",
+              "reference": "P550-BMC GPS GM (domain 44, UDPv4)",
+              "samples": 482,
+              "window_s": "60.0",
+              "offset_ns_min": -31,
+              "offset_ns_max": 33,
+              "offset_ns_rms": "10.6",
+              "offset_ns_stdev": "10.6",
+              "path_delay_ns_last": 890,
+              "states": [
+                "s2"
+              ],
+              "source": "ring /run/beacon-clocklog/ptp4l.jsonl (beacon-clocklog, one row per ptp4l sync)",
+              "ring_used": true
+            },
+            "mesh_crosscheck": {},
+            "epoch_guard": {
+              "check": "PHC - CLOCK_REALTIME must equal TAI-UTC (+37 s) within 0.5 s",
+              "tai_minus_utc_used": 37,
+              "tai_source": "kernel adjtimex",
+              "expected_refid": "PHC",
+              "why": "lab notebook entry 220: a link bounce wipes the i210 epoch while ts2phc still reports a healthy lock. Servo metrics cannot detect this; only this difference can.",
+              "self_heal": "iphc-epoch-check.service via udev 99-iphc-epoch.rules on enp1s0 change",
+              "phc_minus_realtime_minus_tai_s": "0.0",
+              "epoch_ok": true,
+              "iphc_epoch_check_status": null,
+              "chrony_refclock_line": "#* PHC                           0   0   377     0     -0ns[   +0ns] +/-   42ns",
+              "chrony_selects_refclock": true,
+              "chrony_selects_iphc": true
+            },
+            "chrony": {
+              "reference_id": "50484300 (PHC)",
+              "stratum": "1",
+              "rms_offset": "0.000000008 seconds",
+              "root_delay": "0.000000001 seconds",
+              "root_dispersion": "0.000001522 seconds",
+              "leap_status": "Normal"
+            },
+            "kernel_error_bounds": {
+              "maxerror_us": 0,
+              "esterror_us": 0
+            }
+          },
+          "measurement_sha256": "bc93bcc394c8117c0d53c6b3c4e08333ab172238f464bad22690395bc7a95c63"
+        },
+        "signature": {
+          "alg": "ed25519",
+          "key_id": "817a5238d784c4b4",
+          "public_key_b64": "Y7uoa5a7ctiX+kN3P9SEbRbRKX49fF1thOUSqj+PmT0=",
+          "sig_b64": "c/SZBkNgDAYj2ozbhGhPjgTnsD7IDw+qlpqiACaykwf1k7GV9la9+w2jKRUKmzbqvrClL2ox4/dvjHXMf69DBQ==",
+          "over": "canon(statement)"
+        }
+      }
+    },
+    "drand": {
+      "network": "drand League of Entropy \u2014 quicknet",
+      "beacon_id": "quicknet",
+      "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+      "scheme": "bls-unchained-g1-rfc9380",
+      "period_s": 3,
+      "genesis_time": 1692803367,
+      "round": 32582232,
+      "randomness": "8e26be0f8081254c989c2a1544dcd6564b81451242adbe8fd7b93efee3c6c7ca",
+      "signature": "8c5bd9e406c184ab40a49e25218d315ef7e1471e35c8469ee87957d7f37a2d3fd5b027833f48392f903ce3429f5df256",
+      "round_release_unix_s": 1790550060,
+      "randomness_equals_sha256_signature": true,
+      "fetched_from": "https://api.drand.sh",
+      "fetch_unix_s": "1790550061.053",
+      "fetch_latency_s": "0.533",
+      "reverify": "curl -s https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/32582232  -> must return this exact round/randomness/signature. randomness == sha256(signature) is checkable offline. Full BLS threshold verification requires a drand client and the chain public key from https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/info",
+      "bls_verified_by_aggregator": true
+    },
+    "derived": {
+      "commit_seq": 457,
+      "commit_pulse_hash": "d058a6bf38bcfef5dbe12b7d19931242736de94ae5037f063912ee6f6ec09b81",
+      "entropy_commitment": "c1162d8f64b3fef3d0b5c41f567cdfcb75efefd350614726336e08ff8b4b5acc",
+      "attested_value": "6289a22e17ea357543f0755bd5528fd90984fb62bf92e7f7fa2734a01492bb39",
+      "mix": {
+        "algorithm": "SHA256(domain || E || drand_randomness || chain_hash || round_be8)",
+        "domain_tag": "grok_antics/pulse-mix/v1"
+      },
+      "round_release_unix_s": 1790550060,
+      "anchor_utc_unix_s": "1790550060.0",
+      "anchor_after_release_s": "0.0",
+      "commit_anchor_before_release_s": "60.0"
+    },
+    "tooling": {
+      "aggregator": [
+        {
+          "name": "pulse.py",
+          "sha256": "6beef967122641fc53caced94e10584647b3ee0b97f28d4a8c7fc2ee2c7ff4b7"
+        },
+        {
+          "name": "attest_lib.py",
+          "sha256": "18a11753bed817f7615da01d295d2536a99b53b5c3b48cb230f1c2d4f7697b3d"
+        },
+        {
+          "name": "schema.py",
+          "sha256": "008f524cb4d914985a6203c6518c0ec1c66f73de267fe2c67b25cc5513ef3642"
+        },
+        {
+          "name": "verify.py",
+          "sha256": "b3f6285257ed64018bfd82ad1a9cb1a6109b9690ac2075fd4be439be76657a52"
+        }
+      ],
+      "entropy": [
+        {
+          "name": "entropy_host.py",
+          "sha256": "d2eaa923b7ac817f63b04a171abc667b0d56229c90b3e832ac787940710cd254"
+        },
+        {
+          "name": "attest_lib.py",
+          "sha256": "18a11753bed817f7615da01d295d2536a99b53b5c3b48cb230f1c2d4f7697b3d"
+        }
+      ],
+      "gnss": [
+        {
+          "name": "attest_host.py",
+          "sha256": "036cc9ca5e978fe9b3fb749a0ab7627fe1b18991ccfb05bbdeb3d1d4eec99a6a"
+        },
+        {
+          "name": "attest_lib.py",
+          "sha256": "18a11753bed817f7615da01d295d2536a99b53b5c3b48cb230f1c2d4f7697b3d"
+        },
+        {
+          "name": "gnss_probe.py",
+          "sha256": "25eb16e20208baa84b8ae36e5f5ce1ebda862657e272492b8f13d0620595c14f"
+        }
+      ],
+      "time": [
+        {
+          "name": "attest_host.py",
+          "sha256": "036cc9ca5e978fe9b3fb749a0ab7627fe1b18991ccfb05bbdeb3d1d4eec99a6a"
+        },
+        {
+          "name": "attest_lib.py",
+          "sha256": "18a11753bed817f7615da01d295d2536a99b53b5c3b48cb230f1c2d4f7697b3d"
+        },
+        {
+          "name": "stamp_probe.py",
+          "sha256": "259f02839d73e3144257d76762d9a4c8b9f58590097c0d665648f43dd27a2ae5"
+        }
+      ],
+      "witness": [
+        {
+          "name": "attest_host.py",
+          "sha256": "036cc9ca5e978fe9b3fb749a0ab7627fe1b18991ccfb05bbdeb3d1d4eec99a6a"
+        },
+        {
+          "name": "attest_lib.py",
+          "sha256": "18a11753bed817f7615da01d295d2536a99b53b5c3b48cb230f1c2d4f7697b3d"
+        },
+        {
+          "name": "stamp_probe.py",
+          "sha256": "259f02839d73e3144257d76762d9a4c8b9f58590097c0d665648f43dd27a2ae5"
+        }
+      ]
+    },
+    "aggregator_host": "k3",
+    "cadence": {
+      "aggregator_start_unix_ns": "1790550061291766644",
+      "started_after_release_s": "1.291766644",
+      "meaning": "when the aggregator began the reveal, on its own (NTP) clock; the attested ordering is the GNSS anchor, not this"
+    }
+  },
+  "pulse_hash": "ba82dae16ed06853ed05fedc2ad47d6ad1c01b6ddf409cfbbccdd1ba64e2f74e",
+  "signatures": {
+    "aggregator": {
+      "alg": "ed25519",
+      "key_id": "56c30593534ad116",
+      "public_key_b64": "q/Mx1IKvtgU56iq+JZKQba/R93qcleWdZp7xLl7eSIE=",
+      "signer": "k3",
+      "role": "aggregator",
+      "sig_b64": "JobRgw5DkzfVMX8/vxar2pK00b+w3DJR8jWHqQieLwEe5lVDGq3d3MC+7sQp4jcjkms2HgxtAmt5pEuxHjRNBg==",
+      "over": "pulse_hash bytes",
+      "attests": "assembly only; each host's facts are attested by that host's own signature inside core.statements"
+    }
+  },
+  "disclosure": {
+    "protocol": "PROTOCOL.md v0.5",
+    "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md."
+  }
+}
