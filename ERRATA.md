@@ -6,6 +6,40 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-022 — 297 hours skipped: the F9T's serial link died and the GNSS probe crashed on its absence instead of refusing; the anchor moves to the GFS-8A's LEA-M8T (2026-09-14 23:12Z – 2026-09-27)
+
+**What happened.** The ZED-F9T's only data path to the fleet was a Sipeed USB-UART bridge on f9t. It stopped delivering
+at 2026-09-14 23:12Z (last `rawx_stream` row for `src='f9t'`) and 23:21:56Z (last `qerr_stream` row); rebinds did not
+recover it and the bridge has since been retired. `gnss_probe.py` then had no rows in its 15-minute window and crashed
+on `float(None)` (`TypeError`), so every commit from the 00:00Z cycle of 2026-09-15 onward was refused by `gnss`.
+**Skip pulses 0156–0452** were minted, one per hour. All carry `refused_by: gnss` except 0219 and 0281 (refuser
+recorded as unknown), 0370 (`aggregator`: a socket failure during recovery) and 0388–0393 (`entropy`, with
+`attempted_utc` in 1970 because k3's own clock was broken on 2026-09-24/25 — a separate incident). The refusals were
+correct: no pulse was minted without its GNSS statement. The crash was not: a missing source must refuse with a reason.
+
+**A second, latent defect.** From pulse 0016 the anchor text said the F9T's TP1 edge "was captured by the i210
+timestamping unit on SDP0 (ts2phc EXTTS)". On 2026-09-25 the fleet moved to the P550 BMC as sole PTP grandmaster and
+`ts2phc-f9t` was disabled, so that sentence stopped being true. No pulse was minted between then and this fix, so **no
+published pulse carries the false claim**; it is recorded here so the wording is not reused.
+
+**What was done (2026-09-27).** `hosts/gnss_probe.py` (sha256 `25eb16e20208baa84b8ae36e5f5ce1ebda862657e272492b8f13d0620595c14f`,
+deployed on f9t, identical to this commit):
+* reads receiver `m8t` — the u-blox LEA-M8T inside the GFS-8A GPSDO at timehat, which logs UBX-TIM-TP (qErr) and
+  RXM-RAWX to the same tables at 1 Hz;
+* `anchor.what` now says what it is: the receiver's own time solution for the next pulse, **not** captured in hardware
+  on the aggregator's clock path; new field `anchor.hardware_captured_on_aggregator_path: false`; new `db_row_age_s`;
+* refuses (non-zero exit, reason in the message) if there are no rows, the newest qErr row is older than 10 s,
+  |qErr| > 50 ns, RAWX `recStat` says leap seconds are undetermined, or the row is more than ±2 s from its epoch.
+  The 50 ns and freshness checks matter here: timehat's M8T logger does not yet verify UBX checksums, so a mis-framed
+  row is possible and must never become an anchor.
+
+Effective from the **first pulse minted after 0452**. Verified before deployment: 899/900 samples in 15 min, sawtooth
+mean −0.4 ns, SD 5.9 ns, GPS−UTC 18 s from RAWX (TAI−UTC 37), row-to-epoch lag −0.7 s.
+
+**Still open.** The F9T is to be re-attached through the Pi 5's own UART (f9t `/dev/ttyAMA0`; software prepared,
+serial console removed from that pin pair). Switching the probe back to `f9t` will be its own erratum, and must not
+revive the i210-capture wording unless that capture path is actually running again.
+
 ## ERR-021 — the 19:00Z hour was skipped: a bouncing receiver connector fed ts2phc bogus edges, the servo railed and stepped the i210 PHC by 2.1 s, chrony stepped the time host's clock, and the cycle refused to mint (2026-09-14 18:58–19:03Z)
 
 **What happened.** From 18:58:44Z p550's `ts2phc` (F9T 1 PPS → i210 PHC) began receiving edges that were not on the
