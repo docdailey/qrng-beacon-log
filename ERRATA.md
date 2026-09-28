@@ -23,6 +23,15 @@ second event; issued after the 20 ms limit): **NOT-SATISFIED**. 0453 was minted 
 self-trigger record (**NOT-EVALUABLE** under v2/v3). The cause is under investigation; this erratum will record the fix
 and the first commit that satisfies the cadence rules again.
 
+**Cadence fix (2026-09-28 15:42Z).** The i210 PHC's PPS output (`PTP_CLK_REQ_PPS`) had never been enabled. The igb driver
+then turns the once-a-second SYSTIM wrap into a `/dev/pps1` event only when some OTHER timesync interrupt makes it read
+the cause register: until 2026-09-25 that was ts2phc's EXTTS interrupt from the F9T pulse, ~20 us after each second, so
+the stamps looked right by coincidence; after ts2phc was disabled, only ptp4l's transmit-timestamp interrupts remained, at
+arbitrary points in the second. `iphc-pps-enable.service` on p550 now writes `pps_enable` at boot (the driver re-applies
+it after a NIC reset); stamps are back to +16-21 us. **Commit 0490** (16:00Z) is the first to fire on the hardware event
+again (edge +17.5 us, issued +0.08 ms) and, with its reveal 0491, SATISFIES v3. Commits 0453-0488 remain NOT-SATISFIED
+or NOT-EVALUABLE under v3 on the cadence rules, as published.
+
 **Also changed: ptp4l evidence is now its own 1 s summary.** The BMC v21 firmware (2026-09-27) raised Sync to 8 Hz, and
 ptp4l ran `summary_interval -3` so that one offset line per sync could be logged. From **0463** ptp4l reports once a second
 (`summary_interval 0`: rms and max |offset| of that second's syncs), clocklog keeps one row per summary with the port state
