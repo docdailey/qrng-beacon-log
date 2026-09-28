@@ -187,3 +187,12 @@ v2 by default (`--timing-profile v1` for pulses before 0098); an absent or rejec
 verifier-side functions the CLI uses are unchanged). Also `keys/WITNESSES.json` (vendored) now lists four Witness Network witnesses,
 disabled until `notbefore.net/log` is on a list. Re-vendored a second time for ERR-020 (2026-09-14): `tsa.py` retries each TSA request on a fresh socket (3 x 8 s) and `schema.py` classifies a TSA refusal as `tsa` before the entropy words can claim it (pulse 0140 was published as `entropy`). `ci/TIMING_PROFILE_EXCEPTIONS.json` gained the open range 0126- (f9t sawtooth-log coverage below 95 %, ERR-019 addendum), which is what turned test 35 green again. PATCH: vendored files changed, contract unchanged.
 
+
+`notbefore 0.16.0` — tag `cli-v0.16.0` on `e0812f1`, verifier vendored at `5217bee`, workflow run 36441717455 (test 3.10 + 3.12,
+live, Worker conformance, publish), published 2026-09-28 15:1x UTC; confirmed by a fresh-venv install verifying pair 0488/0489 from a
+fresh cache (VERIFIED, log e0812f1299dc). MINOR, spec 0.13: timing profile `notbefore/timing/v3` (ERRATA ERR-023) — v2's cadence
+rules with the BMC-grandmaster host rules (p550 and k3 as ptp4l slaves, per-sync or 1 s-summary evidence, no mesh); default for new
+contracts; re-vendors `hosts/stamp_probe.py` (ERR-023) and `hosts/gnss_probe.py` (ERR-022). Test 36. **The first tag, on the tested
+commit `7ce322e` (run 36433679794), failed the live partition and published nothing:** that commit was 13 h old, its log copy
+(462 pulses) was 25 behind the site (487) and the site cross-check reconciles at most 12 — step 0 again: tag a freshly pulled head.
+The tag was deleted and re-created on `e0812f1`, whose cli/verifier files are identical to `7ce322e`.
