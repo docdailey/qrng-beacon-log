@@ -124,28 +124,32 @@ try:
               "note":"offset_ns_rms is null when fewer than 3 samples fell in the window; last_offset_ns is signed and instantaneous"}
 except StopIteration: pass
 except Exception: pass
+# ptp4l (since 2026-09-28, ERR-023): ptp4l reports once a second (summary_interval 0: rms and max |offset| of that second's
+# syncs); clocklog keeps one row per summary with the port state it last announced. The GM syncs at 8 Hz, so a 60 s window
+# summarises ~480 syncs. Signed min/max and the servo state are not in ptp4l's summary and are not claimed.
+def ptp4l_disc(rows, source, ring_used):
+    return {"servo":"ptp4l","reference":"P550-BMC GPS GM (domain 44, UDPv4)",
+            "summaries":len(rows),"summary_interval_s":1,"window_s":ring_span(rows) if ring_used else None,
+            "offset_ns_rms":round((sum(r["rms_ns"]**2 for r in rows)/len(rows))**0.5,1),
+            "offset_ns_max_abs":max(r["max_abs_ns"] for r in rows),
+            "path_delay_ns_last":rows[-1].get("path_delay_ns"),"port_states":sorted({r["port_state"] for r in rows if r.get("port_state")}),
+            "source":source,"ring_used":ring_used,
+            "note":"ptp4l's own once-a-second summaries; offset_ns_rms combines the window's per-second RMS values, offset_ns_max_abs is the largest per-second max |offset|"}
 if not disc:
-    rows=ring_rows("ptp4l")
-    if rows:
-        offs=[r["offset_ns"] for r in rows]
-        disc={"servo":"ptp4l","reference":"P550-BMC GPS GM (domain 44, UDPv4)",
-            "samples":len(offs),"window_s":ring_span(rows),"offset_ns_min":min(offs),"offset_ns_max":max(offs),
-            "offset_ns_rms":round((sum(x*x for x in offs)/len(offs))**0.5,1),
-            "offset_ns_stdev":round(statistics.pstdev(offs),1),
-            "path_delay_ns_last":rows[-1]["path_delay_ns"],"states":sorted({r["state"] for r in rows}),
-            "source":"ring /run/beacon-clocklog/ptp4l.jsonl (beacon-clocklog, one row per ptp4l sync)","ring_used":True}
+    rows=[r for r in ring_rows("ptp4l") if "rms_ns" in r]
+    if rows: disc=ptp4l_disc(rows,"ring /run/beacon-clocklog/ptp4l.jsonl (beacon-clocklog, one row per ptp4l 1 s summary)",True)
 if not disc:
     try:
-        j=subprocess.run(["journalctl","-u","ptp4l-bmc","--since","-5min","-o","cat"],
+        j=subprocess.run(["journalctl","-u","ptp4l-bmc","-u","ptp4l-slave","--since","-2min","-o","cat"],
                          capture_output=True,text=True,timeout=10).stdout
-        offs=[int(x) for x in re.findall(r"master offset\s+(-?\d+)", j)][-60:]
-        pd=[int(x) for x in re.findall(r"path delay\s+(-?\d+)", j)][-10:]
-        states=sorted(set(re.findall(r"offset\s+-?\d+\s+(s\d)", j)))[-2:]
-        if offs: disc={"servo":"ptp4l","reference":"P550-BMC GPS GM (domain 44, UDPv4)",
-            "samples":len(offs),"offset_ns_min":min(offs),"offset_ns_max":max(offs),
-            "offset_ns_rms":round((sum(x*x for x in offs)/len(offs))**0.5,1),
-            "offset_ns_stdev":round(statistics.pstdev(offs),1),
-            "path_delay_ns_last":pd[-1] if pd else None,"states":states,"ring_used":False}
+        seen={}; port=None
+        for l in j.splitlines():
+            ps=re.search(r"port \d+(?: \([^)]*\))?: \S+ to (\S+)", l)
+            if ps: port=ps.group(1); continue
+            m=re.search(r"\[([\d.]+)\]:? rms\s+(\d+)\s+max\s+(\d+)\s+freq\s+([-+]?\d+)\s+\+/-\s+\d+(?:\s+delay\s+(-?\d+))?", l)
+            if m: seen[m.group(1)]={"rms_ns":int(m.group(2)),"max_abs_ns":int(m.group(3)),"path_delay_ns":int(m.group(5)) if m.group(5) else None,"port_state":port}
+        rows=list(seen.values())[-60:]
+        if rows: disc=ptp4l_disc(rows,"journal (ptp4l 1 s summaries, last 60)",False)
     except Exception as e: disc={"error":str(e)}
 
 # Mesh cross-check: on p550 the i210 continuously MEASURES the BMC PHC (free_running,
