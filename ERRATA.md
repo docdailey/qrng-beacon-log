@@ -6,6 +6,46 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-023 — from 0453 the timing profile no longer described the fleet: p550 is a ptp4l slave of the BMC grandmaster (no ts2phc, no mesh), and p550's hardware cadence trigger has fallen back to its clock; timing profile v3 and 1 s ptp4l evidence (2026-09-28)
+
+**What happened.** On 2026-09-25 the fleet moved to the P550 BMC as sole PTP grandmaster and `ts2phc-f9t` was disabled
+(ERR-022 records the wording consequence). From **0453**, the first pulse minted since, p550's `discipline` block says
+`servo: ptp4l` and its `mesh_crosscheck` is empty, because the i210 is now itself a slave of the BMC grandmaster and no
+longer an independent observer of it. `notbefore/timing/v1` and `v2` require `servo: ts2phc` and a mesh block, so **every
+pulse from 0453 is NOT-EVALUABLE or NOT-SATISFIED under v1 and v2**. The profiles detected this correctly; they no longer
+described the fleet. Found 2026-09-28 by re-running the verifier's profile over 0453–0462.
+
+**A second, independent failure (open).** Since the 21:00Z cycle of 2026-09-26, the i210's once-a-second PPS event on p550
+(`/dev/pps1`) is stamped at an arbitrary point in the second (observed 2026-09-28: successive events 0.4–1.4 s apart by the
+system clock, with the CPU idle), so `beacon-cadence` rejects it and falls back to its clock (`wake.how = clock-fallback`,
+statement issued ~50 ms after the instant). Every commit from **0455** therefore fails v2's cadence rules (no hardware
+second event; issued after the 20 ms limit): **NOT-SATISFIED**. 0453 was minted by the :02 fallback cycle and has no
+self-trigger record (**NOT-EVALUABLE** under v2/v3). The cause is under investigation; this erratum will record the fix
+and the first commit that satisfies the cadence rules again.
+
+**Also changed: ptp4l evidence is now its own 1 s summary.** The BMC v21 firmware (2026-09-27) raised Sync to 8 Hz, and
+ptp4l ran `summary_interval -3` so that one offset line per sync could be logged. From **0463** ptp4l reports once a second
+(`summary_interval 0`: rms and max |offset| of that second's syncs), clocklog keeps one row per summary with the port state
+ptp4l last announced, and nothing is logged at the sync rate. The `discipline` block of a ptp4l host now carries
+`summaries`, `offset_ns_rms` (the RMS over the window's per-second RMS values), `offset_ns_max_abs` and `port_states`;
+signed `offset_ns_min/max` and servo `states` are no longer published, because ptp4l's summary does not contain them.
+
+**What was done (2026-09-28).**
+* Timing profile **`notbefore/timing/v3`** (spec 0.13, `notbefore` 0.16.0): v2's cadence rules unchanged, with the host
+  rules of the grandmaster era — p550 and k3 each a ptp4l slave of the BMC grandmaster, accepted on per-sync evidence
+  (0453–0462: states `["s2"]`, ≥ 10 samples, RMS and |min|,|max| within limits) or on 1 s summaries (from 0463: port
+  states `["SLAVE"]`, ≥ 10 summaries, RMS and max |offset| within limits); limits p550 100 ns RMS / 250 ns, k3 250 ns RMS
+  / 1000 ns; the mesh cross-check is not required. `default_profile` returns v3 from 0453, and new contracts declare v3.
+* Under v3, reveals 0454, 0456, 0460 and 0462 are SATISFIED; 0458 is NOT-SATISFIED (7 raw measurements in the GNSS fix,
+  8 required); commits 0455–0461 are NOT-SATISFIED on the cadence rules only.
+* `hosts/stamp_probe.py` (sha256 `527effa591a9e167990b1c62bfb5eefd1099a43dd8087c7aaf66f7fe253bd9fd`, deployed on p550 and
+  k3) and `hosts/clocklog.py` (sha256 `14a18d004277d055c4a16a84d9ef529bd31767fc9891971f32c8f12928e3f723`, deployed on p550,
+  k3 and f9t) read the 1 s summaries; ptp4l runs `summary_interval 0` and `use_syslog 0` on all three hosts.
+* `ci/TIMING_PROFILE_EXCEPTIONS.json`: the ERR-019 range is closed at 0452 (the F9T left the fleet); a new open range from
+  0453 (ERR-023) lists the grandmaster era as expected-not-SATISFIED under v1.
+
+---
+
 ## ERR-022 — 297 hours skipped: the F9T's serial link died and the GNSS probe crashed on its absence instead of refusing; the anchor moves to the GFS-8A's LEA-M8T (2026-09-14 23:12Z – 2026-09-27)
 
 **What happened.** The ZED-F9T's only data path to the fleet was a Sipeed USB-UART bridge on f9t. It stopped delivering

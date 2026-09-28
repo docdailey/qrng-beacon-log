@@ -523,5 +523,26 @@ def test_20_timing_v2_cadence_provenance():
     gone = copy.deepcopy(com); del gone["cadence"]["trigger"]
     r = TM.evaluate(gone, TM.PROFILE_V2); assert r.verdict == "NOT-SATISFIED" and any("bound to this commit" in f for f in r.failed), r.failed
     assert TM.default_profile(112) == TM.PROFILE_V2 and TM.default_profile(97) == TM.PROFILE_V1
-    import notbefore.contract as C
-    assert C.TIMING_PROFILE == TM.PROFILE_V2
+
+def test_36_timing_v3_bmc_grandmaster_era():
+    """spec 0.13 (ERR-023): v3 = v2 with the host rules of the BMC-grandmaster fleet - p550 and k3 both ptp4l slaves of the BMC GM,
+    judged on per-sync evidence (0453-0462) or ptp4l's 1 s summaries (from 0463) with the same limits, no mesh required. Reveal
+    0454 satisfies v3 and not v2; its evidence re-expressed as summaries also satisfies v3; an unlocked port, a non-ptp4l servo,
+    an excursion, too few summaries or a malformed number do not; commit 0461 fails v3 only on cadence (the hardware trigger)."""
+    import copy, notbefore.timing as TM, notbefore.contract as C
+    rev = json.load(open(os.path.join(LOG, "chain", "pulse-0454.json")))["core"]
+    assert TM.evaluate(rev, TM.PROFILE_V3).verdict == "SATISFIED", TM.evaluate(rev, TM.PROFILE_V3).lines
+    assert TM.evaluate(rev, TM.PROFILE_V2).verdict != "SATISFIED"                  # v2 expects ts2phc + the mesh monitor
+    def summ(core, role, **kw):
+        st = core["statements"][role].get("statement", core["statements"][role])
+        d = {"servo": "ptp4l", "summaries": 60, "summary_interval_s": 1, "window_s": "59.0", "offset_ns_rms": "9.0", "offset_ns_max_abs": 30, "port_states": ["SLAVE"]}
+        d.update(kw); st["measurement"]["discipline"] = d
+    ok = copy.deepcopy(rev); summ(ok, "time"); summ(ok, "witness")
+    assert TM.evaluate(ok, TM.PROFILE_V3).verdict == "SATISFIED", TM.evaluate(ok, TM.PROFILE_V3).lines
+    for role, kw, want in (("witness", {"port_states": ["SLAVE", "UNCALIBRATED"]}, "NOT-SATISFIED"), ("time", {"offset_ns_max_abs": 300}, "NOT-SATISFIED"),
+                           ("time", {"summaries": 5}, "NOT-SATISFIED"), ("time", {"servo": "ts2phc"}, "NOT-SATISFIED"),
+                           ("witness", {"offset_ns_rms": "NaN"}, "NOT-EVALUABLE")):
+        bad = copy.deepcopy(ok); summ(bad, role, **kw); assert TM.evaluate(bad, TM.PROFILE_V3).verdict == want, (role, kw, TM.evaluate(bad, TM.PROFILE_V3).lines)
+    com = json.load(open(os.path.join(LOG, "chain", "pulse-0461.json")))["core"]
+    r = TM.evaluate(com, TM.PROFILE_V3); assert r.verdict == "NOT-SATISFIED" and r.failed and all(f.startswith("cadence:") for f in r.failed), r.failed
+    assert TM.default_profile(452) == TM.PROFILE_V2 and TM.default_profile(453) == TM.PROFILE_V3 and C.TIMING_PROFILE == TM.PROFILE_V3

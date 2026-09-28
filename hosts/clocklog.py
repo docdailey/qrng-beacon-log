@@ -5,12 +5,12 @@ already exists (Bill, 2026-09-13: "if something isn't logged we need for stats, 
   p550 (ROLE=time):    ts2phc discipline (offset/state/freq per PPS)   -> ring ts2phc.jsonl  + DB timehat.ts2phc_stream
                        i210's observation of the BMC GM (bmc-phc.status) -> ring mesh.jsonl  + DB timehat.gmmon_stream (existing table)
                        epoch guard (PHC - CLOCK_REALTIME - TAI, chrony refclock selection) -> ring epoch.jsonl + DB timehat.epoch_stream
-  k3   (ROLE=witness): ptp4l discipline (master offset/state/freq/path delay per sync) -> ring ptp4l.jsonl + DB timehat.ptp4l_stream
+  k3   (ROLE=witness): ptp4l discipline (below)
                        epoch guard as above
-  every host running ptp4l (p550 ptp4l-slave, k3/f9t ptp4l-bmc; 2026-09-27): per-sync rows -> ring ptp4l.jsonl, and a
-                       once-a-second aggregate (n, rms, max, mean, last state/freq/path delay) -> DB timehat.ptp4l_summary.
-                       Per-sync DB rows (ptp4l_stream) stay on for k3 only (PTP4L_PER_SAMPLE_DB). The GM syncs at 8 Hz since
-                       2026-09-27, so ptp4l runs summary_interval -3 to keep printing one 'master offset' line per sync.
+  every host running ptp4l (p550 ptp4l-slave, k3/f9t ptp4l-bmc): ptp4l's own once-a-second summary (summary_interval 0:
+                       rms and max |offset| of that second's syncs, mean freq, path delay) plus the port state it last announced
+                       -> ring ptp4l.jsonl and DB timehat.ptp4l_summary, one row per second (2026-09-28, ERR-023: nothing at the
+                       8 Hz sync rate is kept; ptp4l_stream is no longer written).
 
 Rings live in /run/beacon-clocklog/<name>.jsonl (tmpfs, world-readable, trimmed to RING_S seconds); the probe reads the
 trailing window from them and falls back to live sampling only if a ring is missing or stale. The DB is the long-term
@@ -64,7 +64,7 @@ class DB:
             cur = self.c.cursor()
             cur.execute("CREATE TABLE IF NOT EXISTS ts2phc_stream (id BIGINT AUTO_INCREMENT PRIMARY KEY, ts DATETIME(3) NOT NULL, host VARCHAR(16) NOT NULL, offset_ns INT NOT NULL, state VARCHAR(4) NOT NULL, freq_ppb INT, KEY k_ts (ts), KEY k_host_ts (host, ts))")
             cur.execute("CREATE TABLE IF NOT EXISTS ptp4l_stream (id BIGINT AUTO_INCREMENT PRIMARY KEY, ts DATETIME(3) NOT NULL, host VARCHAR(16) NOT NULL, offset_ns INT NOT NULL, state VARCHAR(4) NOT NULL, freq_ppb INT, path_delay_ns INT, KEY k_ts (ts), KEY k_host_ts (host, ts))")
-            cur.execute("CREATE TABLE IF NOT EXISTS ptp4l_summary (id BIGINT AUTO_INCREMENT PRIMARY KEY, ts DATETIME(3) NOT NULL, host VARCHAR(16) NOT NULL, n SMALLINT NOT NULL, rms_ns INT, max_abs_ns INT, mean_ns INT, state VARCHAR(4), freq_ppb INT, path_delay_ns INT, KEY k_ts (ts), KEY k_host_ts (host, ts))")
+            cur.execute("CREATE TABLE IF NOT EXISTS ptp4l_summary (id BIGINT AUTO_INCREMENT PRIMARY KEY, ts DATETIME(3) NOT NULL, host VARCHAR(16) NOT NULL, n SMALLINT NULL, rms_ns INT, max_abs_ns INT, mean_ns INT, state VARCHAR(16), freq_ppb INT, path_delay_ns INT, KEY k_ts (ts), KEY k_host_ts (host, ts))")
             cur.execute("CREATE TABLE IF NOT EXISTS epoch_stream(id BIGINT AUTO_INCREMENT PRIMARY KEY, ts DATETIME(3) NOT NULL, host VARCHAR(16) NOT NULL, phc_minus_rt_ns BIGINT, tai_minus_utc_s INT, epoch_ok TINYINT, refclock_selected TINYINT, KEY k_ts (ts), KEY k_host_ts (host, ts))")
         return self.c
     def insert(self, sql, args):
@@ -143,36 +143,37 @@ def ptp4l_unit():
         if subprocess.run(["systemctl", "is-active", "--quiet", u]).returncode == 0: return u
     return None
 
+def ptp4l_port_state(unit):
+    """The port state this ptp4l run last announced ('port 1 (end0): UNCALIBRATED to SLAVE on ...'), from its own journal."""
+    inv = subprocess.run(["systemctl", "show", "-p", "InvocationID", "--value", unit], capture_output=True, text=True).stdout.strip()
+    if not inv: return None
+    j = subprocess.run(["journalctl", "-o", "cat", "_SYSTEMD_INVOCATION_ID=" + inv], capture_output=True, text=True).stdout
+    st = PORT_PAT.findall(j)
+    return st[-1] if st else None
+
+PORT_PAT = re.compile(r"port \d+(?: \([^)]*\))?: \S+ to (\S+)")
+
 def loop_ptp4l():
-    """Follow ptp4l's journal (ptp4l -m): one ring row per 'master offset' line, plus a 1 s aggregate to the DB.
-    ptp4l -m writes every line twice (stdout '[t] ...' and syslog 'ptp4l[t]: ...'); only the syslog copy is used."""
-    pat = re.compile(r"^ptp4l\[[\d.]+\]: master offset\s+(-?\d+)\s+(s\d)\s+freq\s+([-+]?\d+)\s+path delay\s+(-?\d+)")
-    per_sample_db = os.environ.get("PTP4L_PER_SAMPLE_DB", "1" if host == "k3" else "0") == "1"
-    agg = []; agg_sec = None
-    def flush_agg():
-        if not agg: return
-        offs = [r["offset_ns"] for r in agg]; last = agg[-1]
-        db.insert("INSERT INTO ptp4l_summary (ts,host,n,rms_ns,max_abs_ns,mean_ns,state,freq_ppb,path_delay_ns) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                  (datetime.fromtimestamp(agg_sec, timezone.utc).strftime("%Y-%m-%d %H:%M:%S.000"), host, len(offs),
-                   round((sum(x * x for x in offs) / len(offs)) ** 0.5), max(abs(x) for x in offs), round(sum(offs) / len(offs)),
-                   last["state"], last["freq_ppb"], last["path_delay_ns"]))
-        agg.clear()
+    """Follow ptp4l's journal: one ring row and one ptp4l_summary row per 1 s summary line. Accepts both the stdout
+    ('[t] rms ...') and syslog ('ptp4l[t]: rms ...') forms and keeps one copy per ptp4l timestamp."""
+    pat = re.compile(r"^(?:ptp4l)?\[([\d.]+)\]:? rms\s+(\d+)\s+max\s+(\d+)\s+freq\s+([-+]?\d+)\s+\+/-\s+(\d+)(?:\s+delay\s+(-?\d+)\s+\+/-\s+\d+)?")
     while True:
         try:
             unit = ptp4l_unit()
             if unit is None: time.sleep(10); continue
+            state = ptp4l_port_state(unit); last = None
             p = subprocess.Popen(["journalctl", "-f", "-n", "0", "-u", unit, "-o", "cat"], stdout=subprocess.PIPE, text=True)
             for line in p.stdout:
+                ps = PORT_PAT.search(line)
+                if ps: state = ps.group(1); continue
                 m = pat.search(line)
-                if not m: continue
-                now = time.time()
-                row = {"t": now, "host": host, "offset_ns": int(m.group(1)), "state": m.group(2), "freq_ppb": int(m.group(3)), "path_delay_ns": int(m.group(4))}
+                if not m or m.group(1) == last: continue
+                last = m.group(1)
+                row = {"t": time.time(), "host": host, "rms_ns": int(m.group(2)), "max_abs_ns": int(m.group(3)), "freq_ppb": int(m.group(4)),
+                       "freq_sd_ppb": int(m.group(5)), "path_delay_ns": int(m.group(6)) if m.group(6) else None, "port_state": state}
                 ring_append("ptp4l", row)
-                if per_sample_db:
-                    db.insert("INSERT INTO ptp4l_stream (ts,host,offset_ns,state,freq_ppb,path_delay_ns) VALUES (%s,%s,%s,%s,%s,%s)", (now_ms(), host, row["offset_ns"], row["state"], row["freq_ppb"], row["path_delay_ns"]))
-                sec = int(now)
-                if agg_sec is not None and sec != agg_sec: flush_agg()
-                agg_sec = sec; agg.append(row)
+                db.insert("INSERT INTO ptp4l_summary (ts,host,n,rms_ns,max_abs_ns,mean_ns,state,freq_ppb,path_delay_ns) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                          (now_ms(), host, None, row["rms_ns"], row["max_abs_ns"], None, state, row["freq_ppb"], row["path_delay_ns"]))
         except Exception as e: print("ptp4l:", e, flush=True)
         time.sleep(2)
 

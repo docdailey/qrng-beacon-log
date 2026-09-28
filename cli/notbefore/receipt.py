@@ -238,9 +238,12 @@ def render(F):
         t_ = F["timing"]; fx = t_.get("facts") or {}
         out += ["", "## The clocks (timing profile, evaluated separately from the cryptography)", "",
                 f"- Profile `{t_['profile']}`: **{t_['verdict']}** ({'required by the contract' if t_['required'] else 'reported; not required by this contract'})."]
-        if fx.get("time_discipline"): td = fx["time_discipline"]; out.append(f"- F9T→i210 discipline {td['rms_ns']:g} ns RMS over {td['samples']} samples ({td.get('window_s')} s), min {td['min_ns']:g} / max {td['max_ns']:g} ns.")
+        def _disc(d): return (f"{d['rms_ns']:g} ns RMS over {d['summaries']} one-second summaries ({d.get('window_s')} s), max |offset| {d['max_abs_ns']:g} ns" if "summaries" in d
+                              else f"{d['rms_ns']:g} ns RMS over {d['samples']} samples, min {d['min_ns']:g} / max {d['max_ns']:g} ns")
+        gm = t_["profile"].endswith("/v3")
+        if fx.get("time_discipline"): out.append(f"- {'BMC→p550' if gm else 'F9T→i210'} discipline {_disc(fx['time_discipline'])}.")
         if fx.get("mesh"): m = fx["mesh"]; out.append(f"- i210's observation of the BMC grandmaster: {m['rms_ns']:g} ns RMS over {m['samples']} samples ({m.get('window_s')} s), min {m['min_ns']:g} / max {m['max_ns']:g} ns, path delay {m['path_delay_ns']:g} ns.")
-        if fx.get("witness_discipline"): w = fx["witness_discipline"]; out.append(f"- BMC→k3 discipline {w['rms_ns']:g} ns RMS over {w['samples']} samples, min {w['min_ns']:g} / max {w['max_ns']:g} ns.")
+        if fx.get("witness_discipline"): out.append(f"- BMC→k3 discipline {_disc(fx['witness_discipline'])}.")
         if fx.get("gnss"): g = fx["gnss"]; out.append(f"- F9T qErr {g['qerr_ns']:g} ns this epoch (sd {g['sawtooth_sd_ns']:g} ns, coverage {g['coverage_pct']:g} %), {g['measurements']} raw measurements in the fix.")
         if t_.get("failed") or t_.get("missing"): out.append("- Not met: " + "; ".join(t_.get("failed", []) + t_.get("missing", [])))
         out.append("- These are windowed precision figures authenticated by host signatures and now checked against the profile's limits; they are not absolute UTC accuracy.")

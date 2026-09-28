@@ -19,6 +19,9 @@ within 30 s of the instant; the reveal must begin within 60 s of the release. An
 a contract consumes: a failed or unevaluable profile reports (required=false) or REFUSES on the selected commit
 (required=true) — it does not advance to another known random value (this extends R2/R5: no timing-triggered reroll).
 
+**v3** (spec 0.13, ERRATA ERR-023) is v2 with the host rules of the BMC-grandmaster fleet from 0453: p550 and k3 are both ptp4l
+slaves of the BMC grandmaster, judged on per-sync evidence or on ptp4l's 1 s summaries with the same limits; no mesh required.
+
 Profile v1 (the numbers are chosen from the published record: every healthy v0.5 pulse since 0018 passes; a link bounce,
 a free-running disciplining servo, a stale statement or a missing mesh does not):
 
@@ -44,9 +47,14 @@ import math, json
 from decimal import Decimal, InvalidOperation
 
 PROFILE_ID = "notbefore/timing/v1"                       # v1: clock-health statements (spec 0.10)
-PROFILE_V1, PROFILE_V2 = "notbefore/timing/v1", "notbefore/timing/v2"
-PROFILES = (PROFILE_V1, PROFILE_V2)
+PROFILE_V1, PROFILE_V2, PROFILE_V3 = "notbefore/timing/v1", "notbefore/timing/v2", "notbefore/timing/v3"
+PROFILES = (PROFILE_V1, PROFILE_V2, PROFILE_V3)
 FIRST_V2_SEQ = 98                                         # the aggregator's own wake record (cadence.self_trigger) exists from 0098 (k3)
+FIRST_V3_SEQ = 453                                        # first pulse of the BMC-grandmaster era (ERR-022/ERR-023): p550 is a ptp4l slave, no ts2phc, no mesh monitor
+# v3 (spec 0.13, 2026-09-28) = v2 with the host rules of the fleet as it now runs: both p550 and k3 are ptp4l slaves of the P550 BMC
+# GPS grandmaster (domain 44). Their discipline is accepted in either published form - per-sync (states ["s2"], samples, signed
+# min/max; pulses 0453-0462) or ptp4l's 1 s summaries (port_states ["SLAVE"], summaries, max |offset|; from 0463) - with the same
+# limits. The mesh cross-check is not required (the i210 is no longer disciplined by an independent reference it could compare).
 # v2 = v1 + cadence provenance (spec 0.12, 2026-09-14): the hour was declared by the aggregator's own disciplined clock AND
 # corroborated by the time host's i210 hardware second event, both naming the same drand-boundary instant, with bounded
 # event -> issue -> receive latency and timely signed host statements. Limits from the record (0098-0118): edge stamp
@@ -57,11 +65,12 @@ CADENCE = {"k3_wake_late_max_ns": 100_000_000, "edge_min_ns": -1_000_000, "edge_
 GENESIS, PERIOD = 1692803367, 3
 
 def default_profile(commit_seq):
-    """The strongest profile defined for a pulse's era: v2 from 0098 (self-trigger record + hardware trigger), v1 before."""
-    try: return PROFILE_V2 if int(commit_seq) >= FIRST_V2_SEQ else PROFILE_V1
+    """The profile matching a pulse's era: v3 from 0453 (BMC grandmaster), v2 from 0098 (self-trigger record + hardware trigger), v1 before."""
+    try: s = int(commit_seq); return PROFILE_V3 if s >= FIRST_V3_SEQ else (PROFILE_V2 if s >= FIRST_V2_SEQ else PROFILE_V1)
     except Exception: return PROFILE_V1
 LIMITS = {"time": {"disc_rms_max": 100, "disc_abs_max": 250, "disc_samples_min": 3, "mesh_rms_max": 250, "mesh_abs_max": 1000, "mesh_samples_min": 3, "path_delay_max": 10000},
           "witness": {"disc_rms_max": 250, "disc_abs_max": 1000, "disc_samples_min": 10},
+          "time_gm": {"disc_rms_max": 100, "disc_abs_max": 250, "disc_samples_min": 10},
           "gnss": {"coverage_min": 95, "sawtooth_sd_max": 10, "qerr_abs_max": 50, "nmeas_min": 8},
           "freshness_s": 600}
 FIRST_PROFILED_SEQ = 18          # v0.5 statements begin at 0018; earlier pulses are NOT-EVALUABLE by construction
@@ -90,8 +99,27 @@ def _get(d, *path):
         d = d[p]
     return d
 
+def _gm_discipline(T, d, key, who, lim, fact):
+    """v3: the host is a ptp4l slave of the BMC grandmaster; per-sync or 1 s-summary evidence, held to the same limits."""
+    if not d: T.absent(f"{key}.discipline"); return
+    if d.get("servo") != "ptp4l":
+        T.req(False, f"{who}: disciplined by ptp4l following the BMC grandmaster (servo {d.get('servo')!r})"); return
+    rms = _num(d.get("offset_ns_rms")); R, A, N = lim["disc_rms_max"], lim["disc_abs_max"], lim["disc_samples_min"]
+    if "summaries" in d:
+        n, mx = _num(d.get("summaries")), _num(d.get("offset_ns_max_abs"))
+        if None in (n, rms, mx): T.absent(f"{key}.discipline numbers (summaries/rms/max_abs well-formed)"); return
+        T.req(d.get("port_states") == ["SLAVE"], f"{who}: ptp4l port is SLAVE to the BMC GM throughout the window (port states {d.get('port_states')})")
+        T.req(n >= N and rms <= R and mx <= A, f"{who}: BMC GM discipline {rms:g} ns RMS over {int(n)} one-second summaries, max |offset| {mx:g} ns (limits {R} RMS, {A} max, >= {N} summaries)")
+        T.facts[fact] = {"rms_ns": rms, "summaries": int(n), "max_abs_ns": mx, "window_s": _num(d.get("window_s"))}
+    else:
+        n, lo, hi = _num(d.get("samples")), _num(d.get("offset_ns_min")), _num(d.get("offset_ns_max"))
+        if None in (n, rms, lo, hi): T.absent(f"{key}.discipline numbers (samples/rms/min/max well-formed)"); return
+        T.req(d.get("states") == ["s2"], f"{who}: ptp4l servo locked to the BMC GM (states {d.get('states')})")
+        T.req(n >= N and rms <= R and abs(lo) <= A and abs(hi) <= A, f"{who}: BMC GM discipline {rms:g} ns RMS over {int(n)} samples, min {lo:g} / max {hi:g} ns (limits {R} RMS, +/-{A}, >= {N} samples)")
+        T.facts[fact] = {"rms_ns": rms, "samples": int(n), "min_ns": lo, "max_ns": hi, "window_s": _num(d.get("window_s"))}
+
 def evaluate(core, profile=PROFILE_V1):
-    """Evaluate a profile over one pulse core (commit or reveal). Returns a Timing. v2 = v1 + cadence provenance."""
+    """Evaluate a profile over one pulse core (commit or reveal). Returns a Timing. v2 = v1 + cadence provenance; v3 = v2 with GM-era host rules."""
     if profile not in PROFILES: raise ValueError(f"unknown timing profile {profile!r}")
     T = Timing(profile); L = LIMITS
     sts = core.get("statements") if isinstance(core, dict) else None
@@ -107,7 +135,8 @@ def evaluate(core, profile=PROFILE_V1):
     if _get(t, "epoch_guard", "epoch_ok") is None: T.absent("time.epoch_guard.epoch_ok")
     else: T.req(_get(t, "epoch_guard", "epoch_ok") is True and _get(t, "epoch_guard", "chrony_selects_iphc") is True, "time host: PHC epoch intact and chrony selects the i210 PHC (notebook-220 invariant)")
     d = t.get("discipline") if isinstance(t.get("discipline"), dict) else None
-    if not d: T.absent("time.discipline")
+    if profile == PROFILE_V3: _gm_discipline(T, d, "time", "time host", L["time_gm"], "time_discipline")
+    elif not d: T.absent("time.discipline")
     else:
         n, rms, lo, hi = _num(d.get("samples")), _num(d.get("offset_ns_rms")), _num(d.get("offset_ns_min")), _num(d.get("offset_ns_max"))
         if None in (n, rms, lo, hi): T.absent("time.discipline numbers (samples/rms/min/max well-formed)")
@@ -117,7 +146,8 @@ def evaluate(core, profile=PROFILE_V1):
                   f"time host: F9T->i210 discipline {rms:g} ns RMS over {int(n)} samples, min {lo:g} / max {hi:g} ns (limits {L['time']['disc_rms_max']} RMS, +/-{L['time']['disc_abs_max']})")
             T.facts["time_discipline"] = {"rms_ns": rms, "samples": int(n), "min_ns": lo, "max_ns": hi, "window_s": _num(d.get("window_s"))}
     m = t.get("mesh_crosscheck") if isinstance(t.get("mesh_crosscheck"), dict) else None
-    if not m: T.absent("time.mesh_crosscheck (i210 observation of the BMC grandmaster)")
+    if profile == PROFILE_V3: pass
+    elif not m: T.absent("time.mesh_crosscheck (i210 observation of the BMC grandmaster)")
     else:
         n, rms, lo, hi, pd = _num(m.get("samples")), _num(m.get("offset_ns_rms")), _num(m.get("offset_ns_min")), _num(m.get("offset_ns_max")), _num(m.get("path_delay_ns"))
         if None in (n, rms, lo, hi, pd): T.absent("time.mesh_crosscheck numbers (samples/rms/min/max/path_delay well-formed)")
@@ -132,7 +162,8 @@ def evaluate(core, profile=PROFILE_V1):
     if _get(w, "epoch_guard", "epoch_ok") is None: T.absent("witness.epoch_guard.epoch_ok")
     else: T.req(_get(w, "epoch_guard", "epoch_ok") is True and _get(w, "epoch_guard", "chrony_selects_refclock") is True, "witness: PHC epoch intact and chrony selects its PHC")
     d = w.get("discipline") if isinstance(w.get("discipline"), dict) else None
-    if not d: T.absent("witness.discipline")
+    if profile == PROFILE_V3: _gm_discipline(T, d, "witness", "witness", L["witness"], "witness_discipline")
+    elif not d: T.absent("witness.discipline")
     else:
         n, rms, lo, hi = _num(d.get("samples")), _num(d.get("offset_ns_rms")), _num(d.get("offset_ns_min")), _num(d.get("offset_ns_max"))
         if None in (n, rms, lo, hi): T.absent("witness.discipline numbers well-formed")
@@ -167,7 +198,7 @@ def evaluate(core, profile=PROFILE_V1):
         for r, ns in stamps.items():
             dt = ns / 1e9 - anchor_utc; T.req(abs(dt) <= L["freshness_s"], f"{r} statement stamped {dt:+.1f} s from the GNSS anchor epoch (freshness only; limit +/-{L['freshness_s']} s)")
         if own is not None: T.req(abs(own - anchor_utc) <= L["freshness_s"], f"pulse anchor {own - anchor_utc:+.1f} s from the GNSS statement's epoch")
-    if profile == PROFILE_V2: _cadence_v2(core, T)
+    if profile in (PROFILE_V2, PROFILE_V3): _cadence_v2(core, T)
     return T
 
 def _cadence_v2(core, T):

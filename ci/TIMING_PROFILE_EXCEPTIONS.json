@@ -57,10 +57,17 @@
     },
     {
       "from": 126,
-      "to": null,
+      "to": 452,
       "erratum": "ERR-019",
       "verdict_v1_not": "SATISFIED",
-      "why": "from 06:00Z 2026-09-14 the F9T receiver's loose connector (ERR-018/ERR-019/ERR-021; replacement plug on order) drops serial rows (sawtooth-log coverage 67-91 % against the 95 % the profile requires) and, on the same connector, bounces the PPS so that the F9T->i210 discipline RMS exceeds 100 ns in the affected windows; every pulse is NOT-SATISFIED by design until the plug is replaced. Close this range (set `to`) at the first pulse whose gnss statement reports coverage >= 95 % and whose time statement is back within the discipline limits."
+      "why": "from 06:00Z 2026-09-14 the F9T receiver's loose connector (ERR-018/ERR-019/ERR-021; replacement plug on order) drops serial rows (sawtooth-log coverage 67-91 % against the 95 % the profile requires) and, on the same connector, bounces the PPS so that the F9T->i210 discipline RMS exceeds 100 ns in the affected windows; every pulse is NOT-SATISFIED by design until the plug is replaced. Close this range (set `to`) at the first pulse whose gnss statement reports coverage >= 95 % and whose time statement is back within the discipline limits. CLOSED at 0452: the F9T left the fleet (ERR-022; skip pulses 0156-0452); from 0453 the open condition is ERR-023."
+    },
+    {
+      "from": 453,
+      "to": null,
+      "erratum": "ERR-023",
+      "verdict_v1_not": "SATISFIED",
+      "why": "from 0453 p550 is a ptp4l slave of the BMC grandmaster (no ts2phc, no mesh monitor), which v1 and v2 do not describe: every pulse is NOT-EVALUABLE or NOT-SATISFIED under v1 by design. Profile v3 (spec 0.13) is the profile for this era. This range stays open while the fleet runs on the BMC grandmaster."
     }
   ]
 }

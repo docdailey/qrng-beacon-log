@@ -75,7 +75,7 @@ def build_parser():
     pl.add_argument("--disclose", action="store_true", help="publish the contract body in the decision log, not just its hash")
     pl.add_argument("--timing-required", action="store_true", help="refuse execution unless the selected commit's signed timing evidence satisfies the declared timing profile (default: evaluate and report; never changes which commit is used)")
     pl.add_argument("--no-timing", action="store_true", help="declare no timing profile in the contract")
-    pl.add_argument("--timing-profile", choices=["v1", "v2"], default="v2", help="timing profile to declare: v2 (default; clock health + cadence provenance, pulses from 0098) or v1 (clock health only; use for pulses before 0098)")
+    pl.add_argument("--timing-profile", choices=["v1", "v2", "v3"], default="v3", help="timing profile to declare: v3 (default; v2 with the BMC-grandmaster host rules, pulses from 0453), v2 (clock health + cadence provenance, pulses 0098-0452) or v1 (clock health only; pulses before 0098)")
     pl.add_argument("--after", required=True, help="ISO-8601 UTC: use the first eligible reveal whose drand round released at or after this instant (e.g. 2026-10-01T00:00Z)")
     pl.add_argument("--purpose", required=True); pl.add_argument("--out", default=None, help="contract path (default notbefore-plan-<purpose>.json)")
     for name, kw in (("--sample", dict(type=int, metavar="K")), ("--split", dict(type=float, metavar="FRAC")), ("--assign", dict(type=int, metavar="ARMS")), ("--shuffle", dict(action="store_true")),

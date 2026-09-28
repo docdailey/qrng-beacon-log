@@ -350,7 +350,7 @@ A user can still timestamp several and publish one; §7.12 closes that with the 
 the defence was the same as for any preregistration — publish the hash where it cannot be quietly withdrawn.)
 
 ### 7.14 Timing profile — enforcing the evidence the pulse already carries (spec 0.10)
-A `contract/3` MAY declare `timing: {profile: "notbefore/timing/v1" | "notbefore/timing/v2", required: bool}` (the CLI declares
+A `contract/3` MAY declare `timing: {profile: "notbefore/timing/v1" | "notbefore/timing/v2" | "notbefore/timing/v3", required: bool}` (the CLI declares
 **v2** by default since 0.15.0, `required: false`; `--timing-profile v1|v2`; `--timing-required`; `--no-timing`). **v2 (spec 0.12)**
 adds cadence provenance to v1: the commit must carry the aggregator's own wake record and the time host's i210 hardware-event
 statement, both naming the same drand-boundary instant, with bounded event → issue → receive latency, timely host statements
@@ -611,6 +611,8 @@ The log already runs. NotBefore is the name of the contract and the derive layer
 ---
 
 ## 16. Changelog
+
+**0.13 (2026-09-28).** Timing profile `notbefore/timing/v3` (§7.14, PROTOCOL §"Timing profile", ERRATA ERR-023): v2's cadence rules with the host rules of the BMC-grandmaster fleet - p550 and k3 each a ptp4l slave of the BMC grandmaster, judged on per-sync evidence (0453-0462) or ptp4l's 1 s summaries (from 0463) with the same limits; no mesh cross-check required. Default for new contracts; v2 remains the profile for 0098-0452 and v1 before 0098. No change to any value or derivation. `notbefore` 0.16.0.
 
 **0.12 (2026-09-14).** Timing profile `notbefore/timing/v2` (§7.14, PROTOCOL §"Timing profile"): v1 plus cadence provenance - the
 aggregator's self-trigger record and the time host's i210 hardware-event statement must both be present, name the same instant,

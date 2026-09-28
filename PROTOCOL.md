@@ -348,6 +348,22 @@ statements ≤ 12.7 s); the think-era commits 0092/0094 carry a trigger but no s
 commit whose datagram never arrived would be NOT-SATISFIED. With v2 enforced the site may say the verifier checks
 **dual-path timing provenance**; under v1 it authenticates timing data and checks clock health only.
 
+`notbefore/timing/v3` (spec 0.13, 2026-09-28; the CLI's default for new contracts since 0.16.0; ERRATA ERR-023) is **v2 with
+the host rules of the grandmaster era**: from 0453 p550 and k3 are both ptp4l slaves of the P550 BMC GPS grandmaster
+(domain 44), and there is no ts2phc servo and no mesh monitor. Cadence rules are exactly v2's.
+
+| role | required observations | limits |
+|---|---|---|
+| time (p550) | `epoch_guard.epoch_ok`, `chrony_selects_iphc`; `discipline.servo = ptp4l`; per-sync evidence: states `["s2"]`, or 1 s-summary evidence: `port_states = ["SLAVE"]` | ≥ 10 samples or summaries, RMS ≤ 100 ns, \|min\|,\|max\| (or max \|offset\|) ≤ 250 ns |
+| witness (k3) | as v1/v2, with the same two accepted evidence forms | ≥ 10 samples or summaries, RMS ≤ 250 ns, \|min\|,\|max\| (or max \|offset\|) ≤ 1000 ns |
+| gnss, cross-statement, cadence | as v2 | as v2 |
+
+Per-sync evidence is what 0453–0462 carry; from 0463 ptp4l reports its own once-a-second summary (rms and max \|offset\|
+of that second's syncs) and the statement publishes `summaries`, `offset_ns_rms`, `offset_ns_max_abs` and `port_states`.
+The mesh cross-check is not required under v3: the i210 is itself a slave of the grandmaster it used to observe.
+`default_profile` gives v3 from 0453, v2 from 0098, v1 before. Calibration: reveals 0454/0456/0460/0462 satisfy v3; commits
+0455–0461 do not, on the cadence rules only (ERR-023: p550's hardware second event has fallen back to the clock).
+
 Pulses a published erratum says must NOT satisfy the profile are listed in `ci/TIMING_PROFILE_EXCEPTIONS.json` with the
 verdict expected of them (first entries: 0116–0119, ERR-018); the CLI suite requires every other v0.5 pulse from 0020 to satisfy
 v1 and each listed pulse to fail exactly as documented, so the list cannot hide anything. An open **range** (`to: null`) covers a
