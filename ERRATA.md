@@ -27,6 +27,15 @@ fields `phc_minus_realtime_median_ns` / `phc_minus_realtime_spread_ns` are gone.
 EXTENDED), 250 ns window. Effective from the first pulse minted after deployment; earlier `phc_minus_realtime_median_ns` values
 should be read as carrying the bias above.
 
+**Correction (same day, lab notebook #228).** On p550 both edges of every bracket are the 1 µs system clock (`riscv_clocksource`,
+`timebase-frequency` 1 MHz): the i210 is the fine side. So p550's `phc_minus_realtime_ns` is bounded by ± `window_ns`/2
+(± 1000 ns), not by the tens of ns quoted above. Averaging tied 2000 ns windows removes the tick's dither, not a constant
+sub-tick phase, and the small values it returns are largely chrony's own servo residual (chrony steers CLOCK_REALTIME with the
+same EXTENDED brackets). The −1000 ns of the old userspace sandwich is one tick. Read p550's figure as "within one system tick
+of the PHC". k3 (250 ns window) and f9t (~1 µs window) have fine-grained system clocks and are not affected. A finer p550
+clocksource (interpolating the `cycle` CSR) was considered and declined in #228. clocklog now logs the same reading to
+`epoch_stream` with `window_ns`, `method` and `tightest_samples` (from 2026-09-29 10:48Z; earlier rows came from `phc_ctl cmp`).
+
 ---
 
 ## ERR-023 — from 0453 the timing profile no longer described the fleet: p550 is a ptp4l slave of the BMC grandmaster (no ts2phc, no mesh), and p550's hardware cadence trigger has fallen back to its clock; timing profile v3 and 1 s ptp4l evidence (2026-09-28)

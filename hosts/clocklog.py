@@ -65,7 +65,7 @@ class DB:
             cur.execute("CREATE TABLE IF NOT EXISTS ts2phc_stream (id BIGINT AUTO_INCREMENT PRIMARY KEY, ts DATETIME(3) NOT NULL, host VARCHAR(16) NOT NULL, offset_ns INT NOT NULL, state VARCHAR(4) NOT NULL, freq_ppb INT, KEY k_ts (ts), KEY k_host_ts (host, ts))")
             cur.execute("CREATE TABLE IF NOT EXISTS ptp4l_stream (id BIGINT AUTO_INCREMENT PRIMARY KEY, ts DATETIME(3) NOT NULL, host VARCHAR(16) NOT NULL, offset_ns INT NOT NULL, state VARCHAR(4) NOT NULL, freq_ppb INT, path_delay_ns INT, KEY k_ts (ts), KEY k_host_ts (host, ts))")
             cur.execute("CREATE TABLE IF NOT EXISTS ptp4l_summary (id BIGINT AUTO_INCREMENT PRIMARY KEY, ts DATETIME(3) NOT NULL, host VARCHAR(16) NOT NULL, n SMALLINT NULL, rms_ns INT, max_abs_ns INT, mean_ns INT, state VARCHAR(16), freq_ppb INT, path_delay_ns INT, KEY k_ts (ts), KEY k_host_ts (host, ts))")
-            cur.execute("CREATE TABLE IF NOT EXISTS epoch_stream(id BIGINT AUTO_INCREMENT PRIMARY KEY, ts DATETIME(3) NOT NULL, host VARCHAR(16) NOT NULL, phc_minus_rt_ns BIGINT, tai_minus_utc_s INT, epoch_ok TINYINT, refclock_selected TINYINT, KEY k_ts (ts), KEY k_host_ts (host, ts))")
+            cur.execute("CREATE TABLE IF NOT EXISTS epoch_stream(id BIGINT AUTO_INCREMENT PRIMARY KEY, ts DATETIME(3) NOT NULL, host VARCHAR(16) NOT NULL, phc_minus_rt_ns BIGINT, window_ns INT, method VARCHAR(32), tightest_samples SMALLINT, tai_minus_utc_s INT, epoch_ok TINYINT, refclock_selected TINYINT, KEY k_ts (ts), KEY k_host_ts (host, ts))")
         return self.c
     def insert(self, sql, args):
         """Never blocks the caller: enqueue, dropping the oldest row if the DB has been away long enough to fill the queue."""
@@ -84,10 +84,57 @@ class DB:
                 self.c = None; time.sleep(5)          # back off; this row is lost (best-effort sink), the ring has it
 db = DB(); host = os.uname().nodename.split(".")[0]
 
-def phc_minus_realtime_ns():
-    """phc_ctl <dev> cmp -> 'offset from CLOCK_REALTIME is <n>ns' (sign: PHC - REALTIME)."""
-    out = subprocess.run(["phc_ctl", PHC, "cmp"], capture_output=True, text=True, timeout=5).stdout
-    m = re.search(r"offset from CLOCK_REALTIME is (-?\d+)ns", out); return -int(m.group(1)) if m else None   # phc_ctl reports REALTIME - PHC
+# PHC - CLOCK_REALTIME from one kernel call that brackets each PHC read with system-clock reads (tightest window kept,
+# samples within 1 % of it averaged): PTP_SYS_OFFSET_PRECISE, else _EXTENDED, else PTP_SYS_OFFSET; same code as stamp_probe
+# (ERR-024). On p550 both edges come from the 1 us system clock, so the value is bounded by +/- window/2 (notebook #228).
+import fcntl, struct
+PTP_MAX_SAMPLES = 25
+CT = struct.Struct("qII")                                 # struct ptp_clock_time {s64 sec; u32 nsec; u32 reserved}
+def _ioc(d, nr, size): return (d << 30) | (size << 16) | (ord("=") << 8) | nr
+SZ_BASIC, SZ_EXT, SZ_PREC = 16 + (2 * PTP_MAX_SAMPLES + 1) * 16, 16 + PTP_MAX_SAMPLES * 3 * 16, 3 * 16 + 16
+PTP_SYS_OFFSET = _ioc(1, 5, SZ_BASIC)
+PTP_SYS_OFFSET_PRECISE = _ioc(3, 8, SZ_PREC)
+PTP_SYS_OFFSET_EXTENDED = _ioc(3, 9, SZ_EXT)
+def _ns(buf, off): s, n, _ = CT.unpack_from(buf, off); return s * 10**9 + n
+def _tightest(samples):
+    """samples: [(pre, phc, post)]. Keep the tightest window; samples within 1 % of it tie (a coarse system tick, e.g.
+    p550's 1 us, makes 1999 vs 2000 ns meaningless) and are averaged, since their midpoints are dithered by the tick.
+    Returns (offset_ns, window_ns, n_used)."""
+    w = min(post - pre for pre, _, post in samples)
+    offs = [phc - (pre + post) / 2 for pre, phc, post in samples if post - pre <= w * 1.01]
+    return round(sum(offs) / len(offs)), w, len(offs)
+
+def phc_minus_realtime(fd, n=25):
+    """PHC - CLOCK_REALTIME in ns: (offset_ns, window_ns, n_tightest, method, samples). PRECISE (hardware cross-timestamp, window 0),
+    else the tightest kernel bracket from EXTENDED or basic PTP_SYS_OFFSET, else a userspace sandwich."""
+    try:
+        b = bytearray(SZ_PREC); fcntl.ioctl(fd, PTP_SYS_OFFSET_PRECISE, b)
+        return _ns(b, 0) - _ns(b, 16), 0, 1, "PTP_SYS_OFFSET_PRECISE", 1
+    except OSError: pass
+    try:
+        b = bytearray(SZ_EXT); struct.pack_into("I", b, 0, n); fcntl.ioctl(fd, PTP_SYS_OFFSET_EXTENDED, b)
+        k = struct.unpack_from("I", b, 0)[0]                            # ts[i] = {sys_before, phc, sys_after}
+        return (*_tightest([tuple(_ns(b, 16 + (i * 3 + j) * 16) for j in range(3)) for i in range(k)]), "PTP_SYS_OFFSET_EXTENDED", k)
+    except OSError: pass
+    try:
+        b = bytearray(SZ_BASIC); struct.pack_into("I", b, 0, n); fcntl.ioctl(fd, PTP_SYS_OFFSET, b)
+        k = struct.unpack_from("I", b, 0)[0]; ts = [_ns(b, 16 + i * 16) for i in range(2 * k + 1)]   # sys, phc, sys, ..., sys
+        return (*_tightest([(ts[2 * i], ts[2 * i + 1], ts[2 * i + 2]) for i in range(k)]), "PTP_SYS_OFFSET", k)
+    except OSError: pass
+    clk = ((~fd) << 3) | 3; smp = []
+    for _ in range(n):
+        smp.append((time.clock_gettime_ns(time.CLOCK_REALTIME), time.clock_gettime_ns(clk), time.clock_gettime_ns(time.CLOCK_REALTIME)))
+    return (*_tightest(smp), "userspace-sandwich", n)
+
+_PHC_FD = None
+def phc_offset():
+    """(offset_ns, window_ns, method, tightest_samples)."""
+    global _PHC_FD
+    if _PHC_FD is None: _PHC_FD = os.open(PHC, os.O_RDONLY)
+    try: off, win, tied, method, _n = phc_minus_realtime(_PHC_FD)
+    except Exception:
+        os.close(_PHC_FD); _PHC_FD = None; raise
+    return off, win, method, tied
 def tai_minus_utc():
     """struct timex.tai (int at byte 160 on 64-bit Linux; verified on p550: adjtimex long index 20 == 37). 0 (unset, k3) -> 37 constant."""
     try:
@@ -104,10 +151,11 @@ def refclock_selected():
 def loop_epoch():
     while True:
         try:
-            d = phc_minus_realtime_ns(); tai = tai_minus_utc(); sel = refclock_selected()
-            ok = None if d is None else (abs(d / 1e9 - tai) < 0.5)
-            row = {"t": time.time(), "host": host, "phc_minus_rt_ns": d, "tai_minus_utc_s": tai, "epoch_ok": ok, "refclock_selected": sel}
-            ring_append("epoch", row); db.insert("INSERT INTO epoch_stream (ts,host,phc_minus_rt_ns,tai_minus_utc_s,epoch_ok,refclock_selected) VALUES (%s,%s,%s,%s,%s,%s)", (now_ms(), host, d, tai, None if ok is None else int(ok), None if sel is None else int(sel)))
+            d, win, method, tied = phc_offset(); tai = tai_minus_utc(); sel = refclock_selected()
+            ok = abs(d / 1e9 - tai) < 0.5
+            row = {"t": time.time(), "host": host, "phc_minus_rt_ns": d, "window_ns": win, "method": method, "tightest_samples": tied,
+                   "tai_minus_utc_s": tai, "epoch_ok": ok, "refclock_selected": sel}
+            ring_append("epoch", row); db.insert("INSERT INTO epoch_stream (ts,host,phc_minus_rt_ns,window_ns,method,tightest_samples,tai_minus_utc_s,epoch_ok,refclock_selected) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)", (now_ms(), host, d, win, method, tied, tai, int(ok), None if sel is None else int(sel)))
         except Exception as e: print("epoch:", e, flush=True)
         time.sleep(1.0)
 
