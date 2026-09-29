@@ -196,3 +196,8 @@ contracts; re-vendors `hosts/stamp_probe.py` (ERR-023) and `hosts/gnss_probe.py`
 commit `7ce322e` (run 36433679794), failed the live partition and published nothing:** that commit was 13 h old, its log copy
 (462 pulses) was 25 behind the site (487) and the site cross-check reconciles at most 12 — step 0 again: tag a freshly pulled head.
 The tag was deleted and re-created on `e0812f1`, whose cli/verifier files are identical to `7ce322e`.
+
+`notbefore 0.16.1` — tag `cli-v0.16.1` on `b920f1d` (freshly pulled head), verifier vendored at `2359081`, workflow run 36557857801
+(test 3.10 + 3.12, live, Worker conformance, publish), published 2026-09-29 ~10:55 UTC; confirmed by a fresh-venv install verifying pair
+0526/0527 from a fresh cache (VERIFIED, log 0da300493449; the first install attempt right after publish was "unsatisfiable" — PyPI had
+not yet served the file). PATCH: re-vendors `hosts/stamp_probe.py` (ERR-024: `phc_crosscheck` from the tightest kernel PHC bracket).
