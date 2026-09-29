@@ -48,20 +48,58 @@ tai_source_note = ("kernel adjtimex" if tai_kernel > 0 else
 # Freshness reading: one CLOCK_REALTIME read. Not a precision term (ERR-012).
 stamp_ns=gettime(CLOCK_REALTIME)
 
-# Cross-check: does CLOCK_REALTIME actually track the PHC?
+# Cross-check: does CLOCK_REALTIME actually track the PHC? (2026-09-29, ERR-024) One kernel call brackets each PHC read with
+# system-clock reads, and the tightest bracket is kept: a hardware cross-timestamp (PTP_SYS_OFFSET_PRECISE) if the NIC has
+# one, else PTP_SYS_OFFSET_EXTENDED, else PTP_SYS_OFFSET; a userspace sandwich only if the ioctls are missing. The old
+# userspace sandwich (separate syscalls, 7-21 us windows) put the PHC read off-centre: -1000 ns on p550, +350 ns on k3.
+import fcntl, struct
+PTP_MAX_SAMPLES = 25
+CT = struct.Struct("qII")                                 # struct ptp_clock_time {s64 sec; u32 nsec; u32 reserved}
+def _ioc(d, nr, size): return (d << 30) | (size << 16) | (ord("=") << 8) | nr
+SZ_BASIC, SZ_EXT, SZ_PREC = 16 + (2 * PTP_MAX_SAMPLES + 1) * 16, 16 + PTP_MAX_SAMPLES * 3 * 16, 3 * 16 + 16
+PTP_SYS_OFFSET = _ioc(1, 5, SZ_BASIC)
+PTP_SYS_OFFSET_PRECISE = _ioc(3, 8, SZ_PREC)
+PTP_SYS_OFFSET_EXTENDED = _ioc(3, 9, SZ_EXT)
+def _ns(buf, off): s, n, _ = CT.unpack_from(buf, off); return s * 10**9 + n
+def _tightest(samples):
+    """samples: [(pre, phc, post)]. Keep the tightest window; samples within 1 % of it tie (a coarse system tick, e.g.
+    p550's 1 us, makes 1999 vs 2000 ns meaningless) and are averaged, since their midpoints are dithered by the tick.
+    Returns (offset_ns, window_ns, n_used)."""
+    w = min(post - pre for pre, _, post in samples)
+    offs = [phc - (pre + post) / 2 for pre, phc, post in samples if post - pre <= w * 1.01]
+    return round(sum(offs) / len(offs)), w, len(offs)
+
+def phc_minus_realtime(fd, n=25):
+    """PHC - CLOCK_REALTIME in ns: (offset_ns, window_ns, n_tightest, method, samples). PRECISE (hardware cross-timestamp, window 0),
+    else the tightest kernel bracket from EXTENDED or basic PTP_SYS_OFFSET, else a userspace sandwich."""
+    try:
+        b = bytearray(SZ_PREC); fcntl.ioctl(fd, PTP_SYS_OFFSET_PRECISE, b)
+        return _ns(b, 0) - _ns(b, 16), 0, 1, "PTP_SYS_OFFSET_PRECISE", 1
+    except OSError: pass
+    try:
+        b = bytearray(SZ_EXT); struct.pack_into("I", b, 0, n); fcntl.ioctl(fd, PTP_SYS_OFFSET_EXTENDED, b)
+        k = struct.unpack_from("I", b, 0)[0]                            # ts[i] = {sys_before, phc, sys_after}
+        return (*_tightest([tuple(_ns(b, 16 + (i * 3 + j) * 16) for j in range(3)) for i in range(k)]), "PTP_SYS_OFFSET_EXTENDED", k)
+    except OSError: pass
+    try:
+        b = bytearray(SZ_BASIC); struct.pack_into("I", b, 0, n); fcntl.ioctl(fd, PTP_SYS_OFFSET, b)
+        k = struct.unpack_from("I", b, 0)[0]; ts = [_ns(b, 16 + i * 16) for i in range(2 * k + 1)]   # sys, phc, sys, ..., sys
+        return (*_tightest([(ts[2 * i], ts[2 * i + 1], ts[2 * i + 2]) for i in range(k)]), "PTP_SYS_OFFSET", k)
+    except OSError: pass
+    clk = ((~fd) << 3) | 3; smp = []
+    for _ in range(n):
+        smp.append((time.clock_gettime_ns(time.CLOCK_REALTIME), time.clock_gettime_ns(clk), time.clock_gettime_ns(time.CLOCK_REALTIME)))
+    return (*_tightest(smp), "userspace-sandwich", n)
+
 phc_x={}
 try:
-    fd=os.open(phc_dev, os.O_RDONLY); clkid=((~fd)<<3)|3
-    d=[]
-    for _ in range(21):
-        a=gettime(CLOCK_REALTIME); p=gettime(clkid); b=gettime(CLOCK_REALTIME)
-        d.append(p-(a+b)//2)
-    ds=sorted(d)
+    fd=os.open(phc_dev, os.O_RDONLY)
+    off, win, tied, method, n = phc_minus_realtime(fd)
     phc_x={"device":phc_dev,
            "clock_name":open(f"/sys/class/ptp/{os.path.basename(phc_dev)}/clock_name").read().strip(),
-           "phc_minus_realtime_median_ns":ds[len(ds)//2],
-           "phc_minus_realtime_spread_ns":ds[-1]-ds[0],
-           "meaning":"how closely CLOCK_REALTIME follows the PHC (chrony tracking); not a stamp accuracy"}
+           "phc_minus_realtime_ns":off, "window_ns":win, "method":method, "samples":n, "tightest_samples":tied,
+           "meaning":"PHC - CLOCK_REALTIME at the midpoint of the tightest kernel bracket (samples within 1 % of it averaged); "
+                     "window_ns bounds the read, not a stamp accuracy; how closely CLOCK_REALTIME follows the PHC"}
     os.close(fd)
 except Exception as e:
     phc_x={"device":phc_dev,"error":str(e)}
@@ -208,8 +246,8 @@ guard={"check":"PHC - CLOCK_REALTIME must equal TAI-UTC (+%d s) within 0.5 s" % 
              "reports a healthy lock. Servo metrics cannot detect this; only this difference can.",
        "self_heal":"iphc-epoch-check.service via udev 99-iphc-epoch.rules on enp1s0 change"}
 try:
-    if phc_x.get("phc_minus_realtime_median_ns") is not None:
-        delta = phc_x["phc_minus_realtime_median_ns"] / 1e9 - tai
+    if phc_x.get("phc_minus_realtime_ns") is not None:
+        delta = phc_x["phc_minus_realtime_ns"] / 1e9 - tai
         guard["phc_minus_realtime_minus_tai_s"] = round(delta, 6)
         guard["epoch_ok"] = abs(delta) < 0.5
         if not guard["epoch_ok"]:

@@ -6,6 +6,29 @@ affected pulses should read the affected field as described below. Newest first.
 
 ---
 
+## ERR-024 — `phc_crosscheck` read the PHC with a userspace sandwich and published an off-centre offset (−1 µs on p550, +0.35 µs on k3); now the tightest kernel bracket (2026-09-29)
+
+**What happened.** Every v0.5 time and witness statement carries `phc_crosscheck`, the host's reading of PHC − CLOCK_REALTIME
+("how closely CLOCK_REALTIME follows the PHC"). `stamp_probe.py` took it in userspace: CLOCK_REALTIME, then the PHC clockid,
+then CLOCK_REALTIME again — three separate syscalls, windows of 7–21 µs — and published the median of 21 midpoints as
+`phc_minus_realtime_median_ns`. The PHC read does not sit at the midpoint of such a window, so the figure was biased:
+measured 2026-09-29, **p550 −983 to −1007 ns, k3 +328 to +378 ns** (f9t +55 to +80 ns, not a statement host), while a
+kernel-bracketed read of the same clocks (`phc_ctl cmp`, which clocklog's `epoch_stream` uses) gave tens of ns. The field was
+informational; its only other use is the epoch guard (± 0.5 s), which it never misjudged. No verdict of any timing profile
+reads it.
+
+**What was done.** `hosts/stamp_probe.py` (sha256 `221f4a0de2d86881648ec880e2bda644b292ac6e7cc24de1beab21e4b130b274`) reads it the way linuxptp's `sysoff.c` does: one ioctl that
+brackets each PHC read with system-clock reads — `PTP_SYS_OFFSET_PRECISE` (a hardware cross-timestamp) if the NIC has one,
+else `PTP_SYS_OFFSET_EXTENDED`, else `PTP_SYS_OFFSET`; a userspace sandwich only if the ioctls are missing — keeps the tightest
+window of 25, averages samples within 1 % of it (p550's 1 µs system tick makes every window 2000 ns, so single midpoints are
+dithered by the tick), and publishes `phc_minus_realtime_ns`, `window_ns`, `method`, `samples`, `tightest_samples`. The old
+fields `phc_minus_realtime_median_ns` / `phc_minus_realtime_spread_ns` are gone. On the day: p550 `PTP_SYS_OFFSET_EXTENDED`
+(the i210 has no hardware cross-timestamp here), 2000 ns window, −47…+58 ns over 60 reads; k3 `PTP_SYS_OFFSET` (stmmac has no
+EXTENDED), 250 ns window. Effective from the first pulse minted after deployment; earlier `phc_minus_realtime_median_ns` values
+should be read as carrying the bias above.
+
+---
+
 ## ERR-023 — from 0453 the timing profile no longer described the fleet: p550 is a ptp4l slave of the BMC grandmaster (no ts2phc, no mesh), and p550's hardware cadence trigger has fallen back to its clock; timing profile v3 and 1 s ptp4l evidence (2026-09-28)
 
 **What happened.** On 2026-09-25 the fleet moved to the P550 BMC as sole PTP grandmaster and `ts2phc-f9t` was disabled
