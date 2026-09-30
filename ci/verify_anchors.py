@@ -17,6 +17,7 @@ whole layer exists to produce. Missing anchors are a failure once a pulse is old
 import sys, os, json, glob, re, time, subprocess, base64
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); sys.path.insert(0, ROOT)
+import re
 import anchor_lib as L
 try:
     import schema as S
@@ -32,11 +33,34 @@ T = dict(pulses=0, anchored=0, missing_in_grace=0, missing_overdue=0, statement_
          rekor_entries_under_key=None, rekor_entries_in_flight=None, unexplained_rekor_entries=None, failures=0)
 lines = []
 def say(s): print(s); lines.append(s)
-def published_time(pf):
+# ---- reference clock (ERR-024). Ages are measured against the moment the anchors snapshot was taken, NOT the wall clock
+# when a line happens to be evaluated. The verify job checks out `anchors` at job start, then runs verify_chain (10+ min,
+# growing with the chain) and the Rekor refetch (15-70 min): by the end, the newest pulse looked "overdue" although its
+# anchor had been on the branch for most of that time. Every failure 2026-09-24..30 (11 runs) was this race in one of
+# three shapes. In REFETCH mode the snapshot is refreshed here first, so a record pushed while verify_chain ran is seen.
+def _refresh(dir_, ref):
     try:
-        out = subprocess.run(["git", "log", "-1", "--format=%ct", "--", os.path.relpath(pf, ROOT)], cwd=ROOT, capture_output=True, text=True).stdout.strip()
-        return int(out) if out else os.path.getmtime(pf)
-    except Exception: return os.path.getmtime(pf)
+        if subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=dir_, capture_output=True, timeout=30).returncode != 0: return False
+        r = subprocess.run(["git", "fetch", "-q", "origin", ref], cwd=dir_, capture_output=True, timeout=120)
+        if r.returncode != 0: return False
+        return subprocess.run(["git", "reset", "-q", "--hard", "FETCH_HEAD"], cwd=dir_, capture_output=True, timeout=60).returncode == 0
+    except Exception: return False
+if REFETCH:
+    say(f"[INFO] anchors snapshot {'refreshed from origin/anchors' if _refresh(A, 'anchors') else 'NOT refreshed (offline or not a checkout); using it as found'}")
+    try: subprocess.run(["git", "fetch", "-q", "origin", "main"], cwd=ROOT, capture_output=True, timeout=120)
+    except Exception: pass
+NOW = time.time()                 # the snapshot instant; all ages below are relative to this
+def published_time(pf):
+    """Publication instant of a pulse: the commit time that introduced it. Falls back to the file mtime (a fresh checkout
+    writes files at checkout time) when git has no answer, and clamps anything implausible: a value before 2026-09-01 or
+    after NOW (seen 2026-09-25, six runs reporting '29838422 min after publication')."""
+    t = None
+    try:
+        out = subprocess.run(["git", "log", "-1", "--format=%ct", "--", os.path.relpath(pf, ROOT)], cwd=ROOT, capture_output=True, text=True, timeout=60).stdout.strip()
+        t = int(out) if out else None
+    except Exception: t = None
+    if t is None or t < 1756684800 or t > NOW + 300: t = os.path.getmtime(pf)
+    return min(t, NOW)
 known_uuids = {}; expected_hash = {}; in_flight = {}
 for pf in L.pulse_files(os.path.join(ROOT, "chain")):
     seq = int(L.PULSE_RE.search(pf).group(1)); T["pulses"] += 1
@@ -44,7 +68,7 @@ for pf in L.pulse_files(os.path.join(ROOT, "chain")):
     statement, st = L.statement_for(pf)
     expected_hash[L.sha256(statement)] = seq          # what a legitimate Rekor entry for this pulse MUST record
     if not os.path.exists(rec_path):
-        age = time.time() - published_time(pf); in_flight[seq] = age
+        age = NOW - published_time(pf); in_flight[seq] = age
         if age > GRACE_S: say(f"[FAIL] {seq:04d}: no anchor {age/60:.0f} min after publication (grace {GRACE_S//60} min)"); T["missing_overdue"] += 1; T["failures"] += 1
         else: say(f"[WAIT] {seq:04d}: anchor pending ({age:.0f} s since publication)"); T["missing_in_grace"] += 1
         continue
@@ -100,7 +124,7 @@ for cf in L.checkpoint_files(ROOT) + L.decision_checkpoint_files(ROOT):
     statement, st = L.checkpoint_statement_for(cf); expected_hash[L.sha256(statement)] = label
     stem = os.path.join(A, label.replace(" ", "-")); rec_path = stem + ".anchor.json"
     if not os.path.exists(rec_path):
-        age = time.time() - os.path.getmtime(cf); in_flight[label] = age
+        age = NOW - min(os.path.getmtime(cf), NOW); in_flight[label] = age
         say(f"[{'FAIL' if age > GRACE_S else 'WAIT'}] {label}: no anchor ({age/60:.0f} min)"); T["failures"] += age > GRACE_S; continue
     rec = json.load(open(rec_path)); entry = rec["rekor"]["entry"]; h, k = L.entry_hash_and_key(entry)
     ok = open(stem + ".stmt.json", "rb").read() == statement and h == L.sha256(statement) and k is not None and L.key_id(L.load_pub(k)) == L.key_id(anchor_pub) \
@@ -130,7 +154,6 @@ if REFETCH:
                 # This checkout may be OLDER than what is anchored (the verify job checked out main before a pulse
                 # that was pushed seconds later got anchored). Look at the LIVE chain before calling it a hidden branch.
                 try:
-                    subprocess.run(["git", "fetch", "-q", "origin", "main"], cwd=ROOT, capture_output=True, timeout=60)
                     for s_ in range(T["pulses"] + 1, T["pulses"] + 12):
                         r = subprocess.run(["git", "show", f"origin/main:chain/pulse-{s_:04d}.json"], cwd=ROOT, capture_output=True)
                         if r.returncode != 0: break
@@ -138,11 +161,25 @@ if REFETCH:
                         st_, _ = L.statement_for(tmp); os.remove(tmp)
                         if L.sha256(st_) == h:
                             say(f"[WAIT] Rekor entry logIndex {e['logIndex']} ({when}) is pulse {s_:04d}'s anchor; that pulse is newer than this checkout"); flight.append(u); break
-                    else: pass
+                    if u not in flight:
+                        # same for checkpoints published after this checkout (2026-09-24 and -26: a live checkpoint's
+                        # anchor was reported as a hidden branch because only pulses were looked up here)
+                        for d_ in ("checkpoints", "decisions/checkpoints"):
+                            r = subprocess.run(["git", "ls-tree", "--name-only", "origin/main", d_ + "/"], cwd=ROOT, capture_output=True, text=True)
+                            names = [os.path.basename(n) for n in r.stdout.split() if re.fullmatch(r"\d{6}|\d{8}", os.path.basename(n))]
+                            have = {os.path.basename(c) for c in (L.checkpoint_files(ROOT) if d_ == "checkpoints" else L.decision_checkpoint_files(ROOT))}
+                            for n in sorted(set(names) - have):
+                                r = subprocess.run(["git", "show", f"origin/main:{d_}/{n}"], cwd=ROOT, capture_output=True)
+                                if r.returncode != 0: continue
+                                tmp = os.path.join(A, f".live-{d_.replace('/', '-')}-{n}"); open(tmp, "wb").write(r.stdout)
+                                st_, _ = L.checkpoint_statement_for(tmp); os.remove(tmp)
+                                if L.sha256(st_) == h:
+                                    say(f"[WAIT] Rekor entry logIndex {e['logIndex']} ({when}) is {d_}/{n}'s anchor; that checkpoint is newer than this checkout"); flight.append(u); break
+                            if u in flight: break
                 except Exception: pass
                 if u in flight: continue
-                if time.time() - e["integratedTime"] < GRACE_S:
-                    say(f"[WAIT] Rekor entry logIndex {e['logIndex']} ({when}) under the anchor key matches nothing published yet ({(time.time()-e['integratedTime'])/60:.0f} min old; alarm if still unexplained after {GRACE_S//60} min)"); flight.append(u); continue
+                if NOW - e["integratedTime"] < GRACE_S:
+                    say(f"[WAIT] Rekor entry logIndex {e['logIndex']} ({when}) under the anchor key matches nothing published yet ({(NOW-e['integratedTime'])/60:.0f} min old; alarm if still unexplained after {GRACE_S//60} min)"); flight.append(u); continue
             if h in expected_hash:
                 s_ = expected_hash[h]; age = in_flight.get(s_)   # seq (int) for pulses, 'checkpoint NNNNNN' for checkpoints
                 if age is None:                                   # the object already has an anchor record: this is a second signature over the same statement
