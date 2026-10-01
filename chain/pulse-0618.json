@@ -1,0 +1,39 @@
+{
+  "core": {
+    "v": "0.5",
+    "type": "skip",
+    "seq": 618,
+    "prev_hash": "05662ca0bf0a6c7aa5021638478ab07d484d463ccfc7c94abaf65279b2e9aa72",
+    "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+    "statements": {},
+    "derived": {
+      "reason": "commit refused: python3 pulse.py commit failed: REFUSING TO MINT: commit aborted before anything was written: f9t agentd: Runtim ...     if age_s is None or float(age_s) > MAX_ROW_AGE_S: refuse(\"newest %s qErr row is %s s old (> %d s)\" % (RECEIVER, age_s, MAX_ROW_AGE_S))\n                                                      ~~~~~~^",
+      "refused_by": "gnss",
+      "attempted_unix_s": 1790848821,
+      "attempted_utc": "2026-10-01T10:00:21Z",
+      "drand_round_seen": 32681818,
+      "published_head_confirmed": true,
+      "head_type_before": "skip",
+      "meaning": "No commit was minted this cycle. Nothing was selected and nothing was withheld: no commitment existed. This pulse only makes the gap, and the operator's stated cause, public at a timestamped moment."
+    },
+    "tooling": {},
+    "aggregator_host": "k3"
+  },
+  "pulse_hash": "349e67463a17d2362eb5727339486114fc342997c7ad7518899fa261f8fb3d3e",
+  "signatures": {
+    "aggregator": {
+      "alg": "ed25519",
+      "key_id": "56c30593534ad116",
+      "public_key_b64": "q/Mx1IKvtgU56iq+JZKQba/R93qcleWdZp7xLl7eSIE=",
+      "signer": "k3",
+      "role": "aggregator",
+      "sig_b64": "xa5vyBHjFgObmTqoka6nm/Hzb6ZTxUzDizrupFAfhlWbS2xdfc30S4j+H69INHXwvrIHeMlVl354KWYEv+rGCA==",
+      "over": "pulse_hash bytes",
+      "attests": "assembly only; each host's facts are attested by that host's own signature inside core.statements"
+    }
+  },
+  "disclosure": {
+    "protocol": "PROTOCOL.md v0.5",
+    "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md."
+  }
+}
