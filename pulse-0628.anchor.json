@@ -1,0 +1,65 @@
+{
+ "anchor": "qrng-beacon-log/anchor/1",
+ "anchor_key_file": "keys/anchor.pub",
+ "anchor_key_id": "0ba35c3f423663b799dd6ba6d24d8ff89f8cf799ccf664fdf2fb9ef81364ab20",
+ "anchored_by": {
+  "main_commit": "9bb1f4dbbcf5bc38fa6b9b9ca1829673e63f85b6",
+  "run_url": "https://github.com/docdailey/qrng-beacon-log/actions/runs/36888682283",
+  "utc": "2026-10-01T16:00:42Z"
+ },
+ "ots": {
+  "file": "pulse-0628.stmt.json.ots",
+  "status": "pending"
+ },
+ "pulse_hash": "fa8d68fe46ba3f8492cda2bb4e2d3a62a5c05bb398679af0892a82506f160f22",
+ "rekor": {
+  "entry": {
+   "body": "eyJhcGlWZXJzaW9uIjoiMC4wLjEiLCJraW5kIjoiaGFzaGVkcmVrb3JkIiwic3BlYyI6eyJkYXRhIjp7Imhhc2giOnsiYWxnb3JpdGhtIjoic2hhMjU2IiwidmFsdWUiOiJkZGQ3OTQ5NjA4YjhiYmFmMzVkNzZjOTI4NTJjNTgyNjRjNWFhNWE4MWZmMDBhNDMxYmNmNWE2NGYyNzgxNzgyIn19LCJzaWduYXR1cmUiOnsiY29udGVudCI6Ik1FVUNJRGZyZFFRaFNsczcycExHTnNWeTAzOVJlTVJTQWtvOVdwNzRqUmgxRWpGK0FpRUF0SmtwOEpFU2F1MlprTHhMcVhycmxFNWxEMUsxZVlBOFB3dWErY1ZEdE5NPSIsInB1YmxpY0tleSI6eyJjb250ZW50IjoiTFMwdExTMUNSVWRKVGlCUVZVSk1TVU1nUzBWWkxTMHRMUzBLVFVacmQwVjNXVWhMYjFwSmVtb3dRMEZSV1VsTGIxcEplbW93UkVGUlkwUlJaMEZGTVc5RVJsaDVhek5yTVVnMmNHeHdWV2M0WVVadVMyRjZWVzVvV0FwdU5XTnBhR1pVTUVkNFdsaHFRbUpIZFhVeVp6VnVaV3BNY3pZeWVGQkphMFF2WkZReWJqbGhPRkZWVUM5ck5UVm9WekZsUTBaeE5FVm5QVDBLTFMwdExTMUZUa1FnVUZWQ1RFbERJRXRGV1MwdExTMHRDZz09In19fX0=",
+   "integratedTime": 1790870421,
+   "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+   "logIndex": 3037078097,
+   "verification": {
+    "inclusionProof": {
+     "checkpoint": "rekor.sigstore.dev - 1193050959916656506\n2915178596\nVBzAgpDGqrEiPMexU554mzBj3vqf/UeSLpw6UPj5+Sc=\n\n\u2014 rekor.sigstore.dev wNI9ajBGAiEAxH80Ixi3jiydFbJ7mywiIvULzIUGpdGn/yn528Y9nD0CIQC142ecSFN0yaek+wzrZHMft5OVcNb8ewEW1s2tGbdIqw==\n",
+     "hashes": [
+      "38304399f85bb672f2c3a4bf74184ea610aec33539e3b974aa1916f20b74c6aa",
+      "8a1cb0112f0f51f43eb84f040a1f5e55481672aaecd60bb6e69aad7a0d698e3a",
+      "d9139ccf036c2f1f4a011514ca4744073be8f13ae77c36427d6c4ab87ec58b8a",
+      "0320f129f85d60a3c4b1177a1afa5b9d268a702f409837b263100ade992ecce4",
+      "0d93a053df30d71cbdf7cfc2189ca5c390e2e245d37864104470c740c0ed9ee8",
+      "043379e1ac3af52ab60a532e7dfbf9e668680a3ce1330d9f595c53d79ba6dbe7",
+      "fc553569fbc52f4a88f45611d28170f0424d0ac316ad54e806fa7d18cbffeceb",
+      "f444be9c8115609ba5227b760096d8d7a9ba918a9ef257122026d55caad2aeee",
+      "d14e083ff19e0e406b617f817a3e6c2d06e9f2a4551a6cb33e6de2c8487a9a6a",
+      "ab6223183c060d49623df680cd4fceb57756538b79e85b73ff918ad0697576d9",
+      "de49e1053a51374bf633390b516f96cff3a3d5a7df52a971545fe942d48ce59d",
+      "46c6f6df1df529a78d50dbb8ba1dbdc5e942a77004071e4d4c3a4424118c2cb4",
+      "511de3791a2fc93b5ef84cce6a0e6491f0a3d441ce45d4eb6c8c9b44e3d0437d",
+      "6d46e48c1246aaa47fe45a9ebd0e5e0bc1273e4a3210e066c5e9927216f876b3",
+      "6b0c19a2b0ac87bac550b6aedfc7ba03ca8cb6caca44f7e96cc70fce2a0af1f0",
+      "86399595630753c4e1ca159d66b3dd80dd9208eacbff92cec618300d7d0616be",
+      "708cf5398dad3bc715120a744e601f7cf029a6cda126e01c00dfa9112ae91c76",
+      "e25624edc5fc3eccd92e8c903168cc0c1d413819f87fb85e86d1621e8f767b96",
+      "b6da717744c9a6b394b5bffc59fe43788cf036d530ef64346275c4d8b14c219a",
+      "ab1cc76a7033cf9ed20dd9897b407b6c92bbd8d4c805bc043060412af0ce44ec",
+      "c47fc30ac78b1ebf5e2a8613f2ab0e4592bbcd5744198587b95b6c56b0fde706"
+     ],
+     "logIndex": 2915173835,
+     "rootHash": "541cc08290c6aab1223cc7b1539e789b3063defa9ffd47922e9c3a50f8f9f927",
+     "treeSize": 2915178596
+    },
+    "signedEntryTimestamp": "MEQCIFObiaxRTXptM1ZMQmxzhmF4dGj0IOZdoFqIaRuA63E7AiAfxQkdPRosRujyXvgFfRSEMiJ28i3fJMvjPkaoyNdvEA=="
+   }
+  },
+  "integratedTime": 1790870421,
+  "integrated_utc": "2026-10-01T16:00:21Z",
+  "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+  "logIndex": 3037078097,
+  "server": "https://rekor.sigstore.dev",
+  "uuid": "108e9186e8c5677afd4eb17bb0f57e5183811e306eb701850d0ff5070d2d45761c279fb474eaa544"
+ },
+ "seq": 628,
+ "signature_b64": "MEUCIDfrdQQhSls72pLGNsVy039ReMRSAko9Wp74jRh1EjF+AiEAtJkp8JESau2ZkLxLqXrrlE5lD1K1eYA8Pwua+cVDtNM=",
+ "statement_sha256": "ddd7949608b8bbaf35d76c92852c58264c5aa5a81ff00a431bcf5a64f2781782",
+ "type": "commit"
+}
