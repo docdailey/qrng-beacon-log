@@ -84,7 +84,26 @@ for p in pulses:
     nxt = [q for q in pulses if json.load(open(q))["core"]["seq"] == seq + 1]
     resolved = bool(nxt) and json.load(open(nxt[0]))["core"].get("type") in ("reveal", "failure")
     if not resolved and time.time() > rel + S.REVEAL_DEADLINE_S:
-        say(f"[FAIL] commit {seq}: reveal deadline passed with neither a reveal nor a signed failure pulse (withheld reveal)"); T["failures"] += 1
+        # ERR-026: this job verifies the commit it checked out, but the deadline is judged on the wall clock at the END of a
+        # 10+ min run. The resolving pulse may have been pushed after the checkout (2026-10-01: commit 619 was resolved by
+        # failure pulse 620 at 11:01:43Z, after run 36852636354 checked out 27e6fb8). Before calling it withheld, look at
+        # the LIVE chain: a reveal/failure at seq+1 on origin/main that binds to THIS commit is in flight, not withheld --
+        # the run triggered by its own push verifies it in full.
+        live = None
+        try:
+            subprocess.run(["git", "fetch", "-q", "origin", "main"], cwd=ROOT, capture_output=True, timeout=120)
+            r = subprocess.run(["git", "show", f"origin/main:chain/pulse-{seq + 1:04d}.json"], cwd=ROOT, capture_output=True, timeout=60)
+            if r.returncode == 0:
+                lc = json.loads(r.stdout)["core"]; ld = lc.get("derived") or {}
+                if (lc.get("type") in ("reveal", "failure") and lc.get("seq") == seq + 1 and ld.get("commit_seq") == seq
+                        and ld.get("commit_pulse_hash") == json.load(open(p))["pulse_hash"]):
+                    live = lc["type"]
+        except Exception:
+            live = None
+        if live:
+            say(f"[WAIT] commit {seq}: resolved by a {live} pulse {seq + 1:04d} published after this checkout (verified by its own run)")
+        else:
+            say(f"[FAIL] commit {seq}: reveal deadline passed with neither a reveal nor a signed failure pulse (withheld reveal)"); T["failures"] += 1
 stale = [f for f in glob.glob(f"{ROOT}/chain/pulse-*.FAILED.json") if int(re.search(r"pulse-(\d{4})", f).group(1)) >= V05_FROM]
 if stale: say(f"[FAIL] unsigned legacy FAILED.json markers exist in the v0.5 era: {[os.path.basename(x) for x in stale]}"); T["failures"] += 1
 rc, _ = run("python3", "merkle/merkle_proof.py", "root"); say(f"[{'PASS' if rc == 0 else 'FAIL'}] sidecar-manifest root recomputes from leaves.tsv (labelled, ERR-006)"); T["failures"] += rc != 0
