@@ -1,0 +1,63 @@
+{
+ "anchor": "qrng-beacon-log/anchor/1",
+ "anchor_key_file": "keys/anchor.pub",
+ "anchor_key_id": "0ba35c3f423663b799dd6ba6d24d8ff89f8cf799ccf664fdf2fb9ef81364ab20",
+ "anchored_by": {
+  "main_commit": "8ac8a5bf23e1496276a6c2e6ef6c7024d4668166",
+  "run_url": "https://github.com/docdailey/qrng-beacon-log/actions/runs/36827856316",
+  "utc": "2026-10-01T07:00:37Z"
+ },
+ "ots": {
+  "file": "pulse-0614.stmt.json.ots",
+  "status": "pending"
+ },
+ "pulse_hash": "1e09638f45664d7f3f3b371b63845c84820b69e5394a2265575fa777c2116fc8",
+ "rekor": {
+  "entry": {
+   "body": "eyJhcGlWZXJzaW9uIjoiMC4wLjEiLCJraW5kIjoiaGFzaGVkcmVrb3JkIiwic3BlYyI6eyJkYXRhIjp7Imhhc2giOnsiYWxnb3JpdGhtIjoic2hhMjU2IiwidmFsdWUiOiI3MDkwZGNmOGFmOGIyYzY5OTVmNmFhYzBhYjY2YTc2M2U5MjE4ZGFiMWZhZjU4YWJmMGVmYzk0MTllYzQwYzMyIn19LCJzaWduYXR1cmUiOnsiY29udGVudCI6Ik1FUUNJQkg5K1pabGU4Z1p0QksxajZ6NlNCWFlnOFJUZW1wdjhnZnpzYjhWNm81aEFpQjVoY1k1dEdyQ2NGN2NINFRIbmEzdHRmZFdNM0w3YTE0QzRxMEtLbjloS2c9PSIsInB1YmxpY0tleSI6eyJjb250ZW50IjoiTFMwdExTMUNSVWRKVGlCUVZVSk1TVU1nUzBWWkxTMHRMUzBLVFVacmQwVjNXVWhMYjFwSmVtb3dRMEZSV1VsTGIxcEplbW93UkVGUlkwUlJaMEZGTVc5RVJsaDVhek5yTVVnMmNHeHdWV2M0WVVadVMyRjZWVzVvV0FwdU5XTnBhR1pVTUVkNFdsaHFRbUpIZFhVeVp6VnVaV3BNY3pZeWVGQkphMFF2WkZReWJqbGhPRkZWVUM5ck5UVm9WekZsUTBaeE5FVm5QVDBLTFMwdExTMUZUa1FnVUZWQ1RFbERJRXRGV1MwdExTMHRDZz09In19fX0=",
+   "integratedTime": 1790838037,
+   "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+   "logIndex": 3031544587,
+   "verification": {
+    "inclusionProof": {
+     "checkpoint": "rekor.sigstore.dev - 1193050959916656506\n2909640336\n244tzW2IQqt0joOjR35s8gy109Tb4aF/CUhszwgyiOk=\n\n\u2014 rekor.sigstore.dev wNI9ajBGAiEA0NfePR6FM2wws3POJrHq4wx0bujhH9DjYBxC24q6mDYCIQDTET04Ed/FQ+e1OVPfegbptacO4veAyKn044NueKGZ0w==\n",
+     "hashes": [
+      "f9e9698ba2690b8d107e6e880ddc7c659f00c13ad9f1dea5cb32c3886a2f1348",
+      "031b5d7773ff0fa7c8c381efcb837b66a711df147ed9b56304afa7800a1d5411",
+      "6609cd3c53a75aa6769a93f7f3db670673dab24e98e75fef9b257ebd67e8bfbd",
+      "3f8dadf451557a2f30969d2f01c06b4834c9bba61c9c330b72ab613ad6dabe7f",
+      "d260c41520cd35f36c9a6d53c74d401ccfb76b366b465b36bb4f193952523ddf",
+      "ec3c683aac6cd4a09ca241eb2dc32364cff39eac4d0b983783324c68d388671d",
+      "a32c077a1f8921036b1f69728667954053f7f42760655ef1373ecec566a9e723",
+      "55538f74621a1248cf85f2757e0de33f4f6984263027e20e2d0294f618f71ff8",
+      "0e752dfb3088edac95adff284e5b5a2fbf9e45976d28870cecab697376501f54",
+      "522b2cb44c4d1d5d8ecda2e894d064e559b1210006995724f7a127134b01fd47",
+      "38aac0a6f277c7ed5a110c758c17db72b4965bde5ba031dcbc7ad7b55e610f56",
+      "4a5376eba1b81c7ce034409185366c24ee6d4bfbf06b0e049da0a2e3e1d018d8",
+      "d622c4ebaec1fd73aaf151fa1c4a4e94f5c154471c41f43035b0336c9e436d6d",
+      "ed2facbc3bd853b346e04ecc20009cef5ef2d7b04bc29dd65e72c3598f992288",
+      "708cf5398dad3bc715120a744e601f7cf029a6cda126e01c00dfa9112ae91c76",
+      "e25624edc5fc3eccd92e8c903168cc0c1d413819f87fb85e86d1621e8f767b96",
+      "b6da717744c9a6b394b5bffc59fe43788cf036d530ef64346275c4d8b14c219a",
+      "ab1cc76a7033cf9ed20dd9897b407b6c92bbd8d4c805bc043060412af0ce44ec",
+      "c47fc30ac78b1ebf5e2a8613f2ab0e4592bbcd5744198587b95b6c56b0fde706"
+     ],
+     "logIndex": 2909640325,
+     "rootHash": "db8e2dcd6d8842ab748e83a3477e6cf20cb5d3d4dbe1a17f09486ccf083288e9",
+     "treeSize": 2909640336
+    },
+    "signedEntryTimestamp": "MEUCIQDE+pwcrGNS6Ow18aS0PRyZ1JISyOMBF48KyVTIf+mp5QIgA3TwQVfo/klq/ptesWHbpKijXGQ+mWCpBmmHTAZ6gGw="
+   }
+  },
+  "integratedTime": 1790838037,
+  "integrated_utc": "2026-10-01T07:00:37Z",
+  "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+  "logIndex": 3031544587,
+  "server": "https://rekor.sigstore.dev",
+  "uuid": "108e9186e8c5677a38088e7d24bab10c8f36a615fe0bb1d840d17338b906bd24b6aac5447fcc08a5"
+ },
+ "seq": 614,
+ "signature_b64": "MEQCIBH9+ZZle8gZtBK1j6z6SBXYg8RTempv8gfzsb8V6o5hAiB5hcY5tGrCcF7cH4THna3ttfdWM3L7a14C4q0KKn9hKg==",
+ "statement_sha256": "7090dcf8af8b2c6995f6aac0ab66a763e9218dab1faf58abf0efc9419ec40c32",
+ "type": "skip"
+}
