@@ -1,0 +1,100 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>NotBefore — How the beacon works</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --fg:#111; --dim:#555; --bg:#fafafa; --line:#ddd; --acc:#0b5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg:#e6e6e6; --dim:#999; --bg:#111; --line:#333; --acc:#3d8; }
+  }
+  body { background:var(--bg); color:var(--fg); margin:0;
+         font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:46rem; margin:0 auto; padding:3rem 1.25rem 5rem; }
+  h1 { font-size:1.6rem; margin:0 0 .25rem; letter-spacing:-.01em; }
+  .sub { color:var(--dim); margin:0 0 2.5rem; }
+  h2 { font-size:1rem; text-transform:uppercase; letter-spacing:.08em;
+       color:var(--dim); margin:2.5rem 0 .75rem; font-weight:600; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.875rem; }
+  a { color:var(--acc); }
+  table { border-collapse:collapse; width:100%; font-size:.95rem; }
+  th, td { text-align:left; vertical-align:top; padding:.4rem .6rem; border-bottom:1px solid var(--line); }
+  th { color:var(--dim); font-weight:600; }
+  ol li, ul li { margin:.3rem 0; }
+  .note { color:var(--dim); font-size:.9rem; }
+</style>
+<main>
+  <h1>How the beacon works</h1>
+  <p class="sub">A plain-language description, written in Simplified Technical English. The normative text is
+     <a href="/PROTOCOL.md">PROTOCOL.md</a>; where this page and PROTOCOL.md differ, PROTOCOL.md is correct.
+     <a href="/">Back to the front page.</a></p>
+
+  <p class="note">Simplified Technical English (ASD-STE100) limits the vocabulary and the sentence length. This page keeps
+     the technical names that have no approved substitute: drand, Rekor, OpenTimestamps, commit, reveal, pulse, hash.</p>
+
+  <h2>1. Purpose</h2>
+  <p>The beacon makes one random number each hour. Any person can verify the number. Nobody can know the number
+     before its release time. Nobody, including the operator, can change the number after its release.</p>
+
+  <h2>2. Main parts</h2>
+  <table>
+    <tr><th>Part</th><th>Function</th></tr>
+    <tr><td>Entropy source</td><td>Makes the quantum random value. Keeps it secret until the reveal.</td></tr>
+    <tr><td>Time witness</td><td>Measures the time with a GPS-locked clock. Signs the time statement.</td></tr>
+    <tr><td>GNSS witness</td><td>Confirms that a GPS receiver has a fresh fix.</td></tr>
+    <tr><td>Witness</td><td>Makes a second, independent signed statement.</td></tr>
+    <tr><td>Aggregator</td><td>Collects the statements. Makes the pulse. Pushes the pulse to the public log.</td></tr>
+    <tr><td><a href="https://drand.love/">drand</a> (external)</td><td>Supplies a public random value at a known future time.</td></tr>
+    <tr><td>Timestamp authorities (external)</td><td>Sign the time of each commit (RFC&nbsp;3161).</td></tr>
+  </table>
+  <p class="note">The hosts, their clocks and their keys are described in <a href="/HARDWARE.md">HARDWARE.md</a>.</p>
+
+  <h2>3. Hourly cycle</h2>
+  <ol>
+    <li>At the top of the hour, the time witness sends a trigger. The trigger starts the cycle on the aggregator.</li>
+    <li>The entropy source makes a random value. It sends only a hash of the value (the commitment). It does not send the value.</li>
+    <li>Each host signs a statement. The aggregator checks each statement.</li>
+    <li>The aggregator selects a future drand round. The round releases in approximately 40 seconds.</li>
+    <li>The aggregator makes a <strong>commit pulse</strong>. The pulse contains the commitment, the drand round number,
+        the signed statements and two timestamp tokens.</li>
+    <li>The aggregator pushes the commit pulse to the public log.</li>
+    <li>The drand round releases its public value.</li>
+    <li>The entropy source releases its secret value. The aggregator makes a <strong>reveal pulse</strong>.</li>
+    <li>The final random number comes from the secret value and the drand value together. Thus, neither party alone
+        controls the result.</li>
+    <li>The aggregator pushes the reveal pulse. The cycle is complete. It takes approximately 85 seconds.</li>
+  </ol>
+
+  <h2>4. Why nobody can cheat</h2>
+  <ul>
+    <li>The commitment is public before the drand value exists. Thus, the operator cannot select a value after it sees drand.</li>
+    <li>drand is public and unpredictable. Thus, the operator cannot calculate the result before the release time.</li>
+    <li>Each pulse contains the hash of the previous pulse. Thus, a change to an old pulse breaks the chain.</li>
+    <li>External logs record each pulse: Sigstore Rekor and OpenTimestamps (Bitcoin). Thus, the operator cannot publish
+        two different chains. This is the "split-view" check (<a href="/TLOG.md">TLOG.md</a>).</li>
+  </ul>
+
+  <h2>5. When a cycle fails</h2>
+  <p>The beacon does not hide a failure. It always publishes a signed pulse.</p>
+  <ul>
+    <li><strong>Skip pulse:</strong> a dependency refused before the commit. Example: the public log was not reachable.
+        No commit occurred.</li>
+    <li><strong>Failure pulse:</strong> the commit occurred, but the reveal did not. Example: a witness refused because its
+        data was too old. The failure pulse closes the commit. Consumers must treat that commit as failed.</li>
+  </ul>
+  <p>A missing reveal with no failure pulse is a "withheld reveal". The verifier treats it as a fault.
+     See <a href="/FALLBACK.md">FALLBACK.md</a>.</p>
+
+  <h2>6. Verification</h2>
+  <p>Two automatic checks run after each push to the log, and also each hour:</p>
+  <ol>
+    <li><strong>verify-chain</strong> checks each pulse, each link, each signature, each timestamp token and each drand value.</li>
+    <li><strong>verify-anchors</strong> checks each Rekor and OpenTimestamps record. It also does the split-view check.</li>
+  </ol>
+  <p>Any person can do the same checks with the <code>notbefore</code> command-line tool
+     (<a href="/USAGE.md">USAGE.md</a>), or read the results in <a href="/VERIFICATIONS.md">VERIFICATIONS.md</a>.</p>
+
+  <h2>7. What this does not promise</h2>
+  <p>The beacon proves <em>when</em> a value was fixed and that nobody steered it. It does not make the value secret
+     after the reveal, and it does not prove anything about how a consumer uses the value. The full contract, with its
+     limits, is <a href="/NOTBEFORE.md">NOTBEFORE.md</a>; every correction is in <a href="/ERRATA.md">ERRATA.md</a>.</p>
+</main>
