@@ -1,0 +1,61 @@
+{
+ "anchor": "qrng-beacon-log/anchor/1",
+ "anchor_key_file": "keys/anchor.pub",
+ "anchor_key_id": "0ba35c3f423663b799dd6ba6d24d8ff89f8cf799ccf664fdf2fb9ef81364ab20",
+ "anchored_by": {
+  "main_commit": "a7da6ec5c565097cd48b09d477b16f445ca83841",
+  "run_url": "https://github.com/docdailey/qrng-beacon-log/actions/runs/36953705045",
+  "utc": "2026-10-02T02:02:05Z"
+ },
+ "origin": "notbefore.net/log",
+ "rekor": {
+  "entry": {
+   "body": "eyJhcGlWZXJzaW9uIjoiMC4wLjEiLCJraW5kIjoiaGFzaGVkcmVrb3JkIiwic3BlYyI6eyJkYXRhIjp7Imhhc2giOnsiYWxnb3JpdGhtIjoic2hhMjU2IiwidmFsdWUiOiI1ODliNmYxMTQyNjVlNmE4MTk2NTUxZjY0NzI4ODE1NzRhM2YxMDIxZGFlZmUzZTllM2Y2ZGY3ZTA4ZDc2ZjJlIn19LCJzaWduYXR1cmUiOnsiY29udGVudCI6Ik1FVUNJUUR2NWUvL21YdWg4aW12RGZZdnFCWWpjcmc0S1lQdmRRV3dqN0hiNUZSeW1BSWdFcEEwNDZ6SGNtNi9MREFzb3YvSWlGMmE1a3Jhb0ZqRjB5Q003Z2tTb2tzPSIsInB1YmxpY0tleSI6eyJjb250ZW50IjoiTFMwdExTMUNSVWRKVGlCUVZVSk1TVU1nUzBWWkxTMHRMUzBLVFVacmQwVjNXVWhMYjFwSmVtb3dRMEZSV1VsTGIxcEplbW93UkVGUlkwUlJaMEZGTVc5RVJsaDVhek5yTVVnMmNHeHdWV2M0WVVadVMyRjZWVzVvV0FwdU5XTnBhR1pVTUVkNFdsaHFRbUpIZFhVeVp6VnVaV3BNY3pZeWVGQkphMFF2WkZReWJqbGhPRkZWVUM5ck5UVm9WekZsUTBaeE5FVm5QVDBLTFMwdExTMUZUa1FnVUZWQ1RFbERJRXRGV1MwdExTMHRDZz09In19fX0=",
+   "integratedTime": 1790906525,
+   "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+   "logIndex": 3045786015,
+   "verification": {
+    "inclusionProof": {
+     "checkpoint": "rekor.sigstore.dev - 1193050959916656506\n2923881819\nCbBhrTwoK4+dJYhVhUT6mcnrjk4Hv1jfq0Kk7ySUHKs=\n\n\u2014 rekor.sigstore.dev wNI9ajBEAiBUe9Fda0hdj298yxrRuAecYHiMDO3RezmO8CXP97C8NwIgUtAIucdebehqhaa82rT6m0eA45RMz9WqDhV56vwtMhw=\n",
+     "hashes": [
+      "cf39def8e1ee2ca55466f84a6b7500ce2909da9c265798030325f4a104ab9322",
+      "def25277d11666bf7488a0e16ee736c30fe8c827627d4995fa014e20c555ffd5",
+      "d7a7a5f45ab0defcc9fd918e2488adc02ebf331336bd96ed48083e0f3f9295f3",
+      "dd2d5654ccf5fbf9b4199e531db685cb452f079a755f43c225c619cb80a90239",
+      "8991612e4fbe799d42f534f777507519844a826d9d8f5655d9079da52965eaf9",
+      "3ec5314a7dd1ecffff722e9de583040a9e31b8f8c82b7221e6705080f507fefd",
+      "491e64960c1bf3129d15e0996ea70eef9d9209b97a33f38ab63998e6463f8b52",
+      "5368e4cdc79355aee0f09be0ce381f550a621dd7430e9530eeb8a3bfeeb8bebc",
+      "3033177425a688d39ed43d1a0ef53c155bbc7f4f3625dd4dc23dc432d62b929e",
+      "b85006bdcaf908106e78f3eda318b916187e4456db9315291b1d63ef64ff408b",
+      "5ff7db631838db6a01146a25a078631adbed58267fbbdbb1a1b80983a1b9e945",
+      "ddefa9a0e38d93a42cfc7ae7e8bae94fccf8f1bb1f4553a32d1a55ffbf4ff22a",
+      "bbb23d45e5bdbc55cadab98da5de86bdbea79207801c9fe6a23e815ec686deca",
+      "377f4b343abe7d27eb4ae6a96a3d9459cc292c1b32e6621f17a86ced00519693",
+      "60414d285da0c93bf9af967b1f412d679b8576582b216387ced39b1ed57c1c44",
+      "cf70de2de9f3cec506052c271339c2461d533cbc0d52428eb72d3980b4e66f9f",
+      "e25624edc5fc3eccd92e8c903168cc0c1d413819f87fb85e86d1621e8f767b96",
+      "b6da717744c9a6b394b5bffc59fe43788cf036d530ef64346275c4d8b14c219a",
+      "ab1cc76a7033cf9ed20dd9897b407b6c92bbd8d4c805bc043060412af0ce44ec",
+      "c47fc30ac78b1ebf5e2a8613f2ab0e4592bbcd5744198587b95b6c56b0fde706"
+     ],
+     "logIndex": 2923881753,
+     "rootHash": "09b061ad3c282b8f9d2588558544fa99c9eb8e4e07bf58dfab42a4ef24941cab",
+     "treeSize": 2923881819
+    },
+    "signedEntryTimestamp": "MEUCIQC+zArpJEJPZOjV++znU2Xlz16Z9QZy8UeNINcoI1Bw9gIgaZ3DYAdzh2UFGAO2XT7+tkgl1dYoDAYjgiZC3hgwe/E="
+   }
+  },
+  "integratedTime": 1790906525,
+  "integrated_utc": "2026-10-02T02:02:05Z",
+  "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+  "logIndex": 3045786015,
+  "server": "https://rekor.sigstore.dev",
+  "uuid": "108e9186e8c5677a3dff09060f4ca39c4db791dfee3594f203ab79f24268c3c1c1a601c1d10e543c"
+ },
+ "root_b64": "+C7AdQCrxhkwIiKPfKLf5ROKZJB16HM/h+1Kul73uho=",
+ "signature_b64": "MEUCIQDv5e//mXuh8imvDfYvqBYjcrg4KYPvdQWwj7Hb5FRymAIgEpA046zHcm6/LDAsov/IiF2a5kraoFjF0yCM7gkSoks=",
+ "statement_sha256": "589b6f114265e6a8196551f6472881574a3f1021daefe3e9e3f6df7e08d76f2e",
+ "tree_size": 649,
+ "type": "checkpoint"
+}
