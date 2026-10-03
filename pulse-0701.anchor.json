@@ -1,0 +1,63 @@
+{
+ "anchor": "qrng-beacon-log/anchor/1",
+ "anchor_key_file": "keys/anchor.pub",
+ "anchor_key_id": "0ba35c3f423663b799dd6ba6d24d8ff89f8cf799ccf664fdf2fb9ef81364ab20",
+ "anchored_by": {
+  "main_commit": "73900bfff925cb76f5d83d883fb6d6c16344e469",
+  "run_url": "https://github.com/docdailey/qrng-beacon-log/actions/runs/37095143846",
+  "utc": "2026-10-03T04:01:39Z"
+ },
+ "ots": {
+  "file": "pulse-0701.stmt.json.ots",
+  "status": "pending"
+ },
+ "pulse_hash": "163ab7d1664da3a0103aac05cd5e29d8d1c15e1697c158a8998cbe18bb7ca2e0",
+ "rekor": {
+  "entry": {
+   "body": "eyJhcGlWZXJzaW9uIjoiMC4wLjEiLCJraW5kIjoiaGFzaGVkcmVrb3JkIiwic3BlYyI6eyJkYXRhIjp7Imhhc2giOnsiYWxnb3JpdGhtIjoic2hhMjU2IiwidmFsdWUiOiI3M2E4NTM2NGMyNzU5ZTI2NDE3YWJiNjZmMDlhMjI1Mzk4NGYzNmY1MzNkMmQxYThkZGNmNTc4MTAxZjBjY2MxIn19LCJzaWduYXR1cmUiOnsiY29udGVudCI6Ik1FVUNJUURnbVlNSTlRMkQyNnhmdzlBQlVQSURuTEc1RkMwUzVqZC9kQWF6bGVqNVl3SWdCeHZ6emxSbml2OWtjeUFEcUdicU9FTkc1VUNOdkpXd0Njci9haFpjQjBZPSIsInB1YmxpY0tleSI6eyJjb250ZW50IjoiTFMwdExTMUNSVWRKVGlCUVZVSk1TVU1nUzBWWkxTMHRMUzBLVFVacmQwVjNXVWhMYjFwSmVtb3dRMEZSV1VsTGIxcEplbW93UkVGUlkwUlJaMEZGTVc5RVJsaDVhek5yTVVnMmNHeHdWV2M0WVVadVMyRjZWVzVvV0FwdU5XTnBhR1pVTUVkNFdsaHFRbUpIZFhVeVp6VnVaV3BNY3pZeWVGQkphMFF2WkZReWJqbGhPRkZWVUM5ck5UVm9WekZsUTBaeE5FVm5QVDBLTFMwdExTMUZUa1FnVUZWQ1RFbERJRXRGV1MwdExTMHRDZz09In19fX0=",
+   "integratedTime": 1791000099,
+   "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+   "logIndex": 3068222750,
+   "verification": {
+    "inclusionProof": {
+     "checkpoint": "rekor.sigstore.dev - 1193050959916656506\n2946318514\noSR0O0CAjsOuOo9Ihqbu95XrPwceMzTPuRJadRISmyM=\n\n\u2014 rekor.sigstore.dev wNI9ajBGAiEAsq0zBydtMcHYMZRsiJbnR55Vkh36zejtwuyjrvjW2I0CIQCgCEgP7W6vtJ0QLSXG0z5YFqtVDAlPNUMsCIu8EA3z3Q==\n",
+     "hashes": [
+      "a2cafba0434ef8b0ce0bd91035e4a9e28a1055b06961386047ebe30c109e7300",
+      "3f2bb47ab7029a0d2e95e0aa9bf665deed9563a919d12e4480da1d44951d8e15",
+      "b0f54f597a3ec1c8f141e13f61e674dea11067c95708cc8aaddd41d72786d369",
+      "12c66800e1cadbb62df718274886f8e5170492ee6c1949c344369333bb9e7de8",
+      "28f4f07bfa34a2f8f7742c4f0296ddf6fad188c7b57f201cafe1c0e8237b4033",
+      "4cc4b26165dd3d21f7aa32d132318781eac5370b00ec2174d401b1760dc1e082",
+      "d31160c1a424347517fd23cde05662acb86a95d2bfc1a71bb96929ebfe4f459a",
+      "0114974d0a260eaf85574789b6c5928069f57f78d5f3841197369486dd196d8b",
+      "697158413b3725d186c38b94f39654cf29d58101e100cd37174ae2db1bcb591d",
+      "6fd673c5c2a0f779f5b02ebc9d8e1039caac5c1ce4695aab6f556c111a47d41e",
+      "98aaeb7207fdb946455379949e2ff3f44fc2ff1064f9031b3b2fe482a8732cf5",
+      "159890af2e46222e1b0e0e67cf38592c2f848beaa3276c1aef9cecf404c50033",
+      "895f9f66797ce3558ffa8504e3dd0922f49e875eebfa0858fac2f14d1c24e55c",
+      "2542d469ea75412bce8944e6658335e1840ff2ed254cd33f84dd4e9ad761eeb2",
+      "cf70de2de9f3cec506052c271339c2461d533cbc0d52428eb72d3980b4e66f9f",
+      "e25624edc5fc3eccd92e8c903168cc0c1d413819f87fb85e86d1621e8f767b96",
+      "b6da717744c9a6b394b5bffc59fe43788cf036d530ef64346275c4d8b14c219a",
+      "ab1cc76a7033cf9ed20dd9897b407b6c92bbd8d4c805bc043060412af0ce44ec",
+      "c47fc30ac78b1ebf5e2a8613f2ab0e4592bbcd5744198587b95b6c56b0fde706"
+     ],
+     "logIndex": 2946318488,
+     "rootHash": "a124743b40808ec3ae3a8f4886a6eef795eb3f071e3334cfb9125a7512129b23",
+     "treeSize": 2946318514
+    },
+    "signedEntryTimestamp": "MEYCIQDGbFIcMCCti0UacBj/spGAnG9oAc0vf73jjZUFiAhVvAIhAOoGNTGJXnW+dzoAKG7XI/TPM6ranqslN5eGDIpoaX9J"
+   }
+  },
+  "integratedTime": 1791000099,
+  "integrated_utc": "2026-10-03T04:01:39Z",
+  "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+  "logIndex": 3068222750,
+  "server": "https://rekor.sigstore.dev",
+  "uuid": "108e9186e8c5677aa04791d6348f52562c071d1ce6fce5db8710657139b1d449832a58113db5a941"
+ },
+ "seq": 701,
+ "signature_b64": "MEUCIQDgmYMI9Q2D26xfw9ABUPIDnLG5FC0S5jd/dAazlej5YwIgBxvzzlRniv9kcyADqGbqOENG5UCNvJWwCcr/ahZcB0Y=",
+ "statement_sha256": "73a85364c2759e26417abb66f09a2253984f36f533d2d1a8ddcf578101f0ccc1",
+ "type": "reveal"
+}
