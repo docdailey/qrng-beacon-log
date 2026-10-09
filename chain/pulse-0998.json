@@ -1,0 +1,39 @@
+{
+  "core": {
+    "v": "0.5",
+    "type": "skip",
+    "seq": 998,
+    "prev_hash": "f09363e56910058e6d7a53f98717dfbc997b882ade0eae2cdd5a593b680c5295",
+    "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+    "statements": {},
+    "derived": {
+      "reason": "commit refused: python3 pulse.py commit failed: REFUSING TO MINT: commit aborted before anything was written: protectli agentd: RuntimeError: entropy_host: seq 998 already resolved a PUBLISHED commit (abandoned, resolver abababababab); a second commit at this seq would fork the chain",
+      "refused_by": "entropy",
+      "attempted_unix_s": 1791547201,
+      "attempted_utc": "2026-10-09T12:00:01Z",
+      "drand_round_seen": 32914612,
+      "published_head_confirmed": true,
+      "head_type_before": "reveal",
+      "meaning": "No commit was minted this cycle. Nothing was selected and nothing was withheld: no commitment existed. This pulse only makes the gap, and the operator's stated cause, public at a timestamped moment."
+    },
+    "tooling": {},
+    "aggregator_host": "k3"
+  },
+  "pulse_hash": "c57c771387954cabb073abf3544f28db912aea1b17b7010d9088df707caa4c23",
+  "signatures": {
+    "aggregator": {
+      "alg": "ed25519",
+      "key_id": "56c30593534ad116",
+      "public_key_b64": "q/Mx1IKvtgU56iq+JZKQba/R93qcleWdZp7xLl7eSIE=",
+      "signer": "k3",
+      "role": "aggregator",
+      "sig_b64": "1yWAe4GPvJ6jf4D5GDkI2EDg/uiOcdL0/b64jaMypAtS2ICb6uWLNdCxS7kkJR8JNmNSG/6/C0j8RnWGs/AzCA==",
+      "over": "pulse_hash bytes",
+      "attests": "assembly only; each host's facts are attested by that host's own signature inside core.statements"
+    }
+  },
+  "disclosure": {
+    "protocol": "PROTOCOL.md v0.5",
+    "not_certified": "Not NIST/FIPS/CC validated. Not an accredited service. See CLAIMS.md."
+  }
+}
