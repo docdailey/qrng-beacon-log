@@ -1,0 +1,60 @@
+{
+ "anchor": "qrng-beacon-log/anchor/1",
+ "anchor_key_file": "keys/anchor.pub",
+ "anchor_key_id": "0ba35c3f423663b799dd6ba6d24d8ff89f8cf799ccf664fdf2fb9ef81364ab20",
+ "anchored_by": {
+  "main_commit": "0623fc7f4c78a57b0bf62ce3968dde7ad6c85121",
+  "run_url": "https://github.com/docdailey/qrng-beacon-log/actions/runs/38877482862",
+  "utc": "2026-10-16T09:00:47Z"
+ },
+ "origin": "notbefore.net/log",
+ "rekor": {
+  "entry": {
+   "body": "eyJhcGlWZXJzaW9uIjoiMC4wLjEiLCJraW5kIjoiaGFzaGVkcmVrb3JkIiwic3BlYyI6eyJkYXRhIjp7Imhhc2giOnsiYWxnb3JpdGhtIjoic2hhMjU2IiwidmFsdWUiOiI5NDg1MmI1YmQxNmYzZDM0Mzk3OGQ5ZWFjYWJmYWExYTkzMzYyNzU0YzU5NzBjN2ZkMTQyNmQ4MWY0YzZkOWFjIn19LCJzaWduYXR1cmUiOnsiY29udGVudCI6Ik1FVUNJUUN3bExTT2w2UE1YVDh5VzlNV1YvR0lNcjNmNVczdE4wK3FMUzRoMC9nMGNnSWdDMmU3c1Bjckdlb3RNL0FrL2NTamd4UHlDUDBSb0FydUQvRXVoRno1eDhjPSIsInB1YmxpY0tleSI6eyJjb250ZW50IjoiTFMwdExTMUNSVWRKVGlCUVZVSk1TVU1nUzBWWkxTMHRMUzBLVFVacmQwVjNXVWhMYjFwSmVtb3dRMEZSV1VsTGIxcEplbW93UkVGUlkwUlJaMEZGTVc5RVJsaDVhek5yTVVnMmNHeHdWV2M0WVVadVMyRjZWVzVvV0FwdU5XTnBhR1pVTUVkNFdsaHFRbUpIZFhVeVp6VnVaV3BNY3pZeWVGQkphMFF2WkZReWJqbGhPRkZWVUM5ck5UVm9WekZsUTBaeE5FVm5QVDBLTFMwdExTMUZUa1FnVUZWQ1RFbERJRXRGV1MwdExTMHRDZz09In19fX0=",
+   "integratedTime": 1792141246,
+   "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+   "logIndex": 3276731581,
+   "verification": {
+    "inclusionProof": {
+     "checkpoint": "rekor.sigstore.dev - 1193050959916656506\n3154827431\nOsAzqbiQQRiXPMsHCNVwxrloG24rYvCN6NcB4Kbc3/U=\n\n\u2014 rekor.sigstore.dev wNI9ajBFAiEAvyMIpsXpFDznR2b+zyHZrSITGOXdnCnABMPQhW17LC4CIDU2Zh48gSyWyiNw2opQ2bvPTlJM+LllO8urldRpnPCk\n",
+     "hashes": [
+      "56d696629cc9efbaba46ea5205f5744077482c3c13230bc673cbf190831542ac",
+      "d19b1f20310e55f9b29298ccda9f85a935e2713f20bc2be5682b1eb81913453e",
+      "c4ec624698c9e843d7ad7ce4c4b6978638c896a8eab267d6579f904d28f9071d",
+      "957816ec067af169356b0834565096b9155058e13e904c0b01a1c00ec1afef50",
+      "c4b0d411900178d7c802a6662d90fad9a4a776fff947f0ab716321bed7d2c7e9",
+      "45acd529d9244d18f1868f51fcdcc53844bd1a295665626be1312011dbc5cd5a",
+      "c3cb5502766f5e600277e66d040392c0e834b9b254b92bf53e79b8131eecca52",
+      "71c192015e02bd619b1b33dff0dc5bded205689271b14c24218faf4d16308f2d",
+      "e3ce97dce503f03e7d828f1fd6fb458c03413fa2db40d4e184bd5d0643662b96",
+      "15a6051194e7966b467a2489dd849934d8d6bc5a2d72470f98548951ec5498de",
+      "a717c9ba5f29a413e4146fc4b16a3d744333ba840805198e6ff5f3e95dfc56bf",
+      "cd0adb272da4ad354264e2f094d1092317ddc50e5befb3a9991b256569583271",
+      "98268cf1cdeda012939d417204882f6b897e86eea280b3f344296a75511c3709",
+      "9b566a70745f12365f3ca8e6ed081bc7f090df19f5d8e513e0747e53a214a545",
+      "aa54d6343cc44674c14157071d75d53e38943f44ac8a41b17dcc55960a95143a",
+      "820f46340a4d91edfeccd865e2db16b6623270216b38c081de5cace97b9240d4",
+      "36539c96576628f035b4c288b24a87030b900d81e9df5630a4af8e38cacc71c7",
+      "ab1cc76a7033cf9ed20dd9897b407b6c92bbd8d4c805bc043060412af0ce44ec",
+      "c47fc30ac78b1ebf5e2a8613f2ab0e4592bbcd5744198587b95b6c56b0fde706"
+     ],
+     "logIndex": 3154827319,
+     "rootHash": "3ac033a9b8904118973ccb0708d570c6b9681b6e2b62f08de8d701e0a6dcdff5",
+     "treeSize": 3154827431
+    },
+    "signedEntryTimestamp": "MEUCICGYRBhkOhwTGJSoLCy0tne9m6oLgXEcddZ8zw4k0F57AiEA/KgDkWQWroF6rLbc3FIMfHUNPvQVkOW+eAgMAs+3LnM="
+   }
+  },
+  "integratedTime": 1792141246,
+  "integrated_utc": "2026-10-16T09:00:46Z",
+  "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+  "logIndex": 3276731581,
+  "server": "https://rekor.sigstore.dev",
+  "uuid": "108e9186e8c5677a6bc7b8530c4242e8a095fd31fd7e3dc1825978c96e00b0753615c5b60c2c4b77"
+ },
+ "root_b64": "ql2N4Yf4nleq0C3obEPdeNR+HTashB5wMQmIPqnN9IE=",
+ "signature_b64": "MEUCIQCwlLSOl6PMXT8yW9MWV/GIMr3f5W3tN0+qLS4h0/g0cgIgC2e7sPcrGeotM/Ak/cSjgxPyCP0RoAruD/EuhFz5x8c=",
+ "statement_sha256": "94852b5bd16f3d343978d9eacabfaa1a93362754c5970c7fd1426d81f4c6d9ac",
+ "tree_size": 1325,
+ "type": "checkpoint"
+}
