@@ -1,0 +1,63 @@
+{
+ "anchor": "qrng-beacon-log/anchor/1",
+ "anchor_key_file": "keys/anchor.pub",
+ "anchor_key_id": "0ba35c3f423663b799dd6ba6d24d8ff89f8cf799ccf664fdf2fb9ef81364ab20",
+ "anchored_by": {
+  "main_commit": "793ef8651529e87d59e856c8aa71062004a2f24a",
+  "run_url": "https://github.com/docdailey/qrng-beacon-log/actions/runs/39030906326",
+  "utc": "2026-10-17T12:01:41Z"
+ },
+ "ots": {
+  "file": "pulse-1380.stmt.json.ots",
+  "status": "pending"
+ },
+ "pulse_hash": "657c21b9fadeb6dcd20331d7dde2489a7e72b5b7ea658815c9ee6389436a8010",
+ "rekor": {
+  "entry": {
+   "body": "eyJhcGlWZXJzaW9uIjoiMC4wLjEiLCJraW5kIjoiaGFzaGVkcmVrb3JkIiwic3BlYyI6eyJkYXRhIjp7Imhhc2giOnsiYWxnb3JpdGhtIjoic2hhMjU2IiwidmFsdWUiOiI5NWU4NmJiYTQ5MzM3MDAyYjk1ODQ3YWY4MTA5MDEwY2I2OTgwNWRjODljMzAyYWZlZDg0YzM2YTYzYTYzYmU0In19LCJzaWduYXR1cmUiOnsiY29udGVudCI6Ik1FVUNJQXVxQUN1dWhvU2c0NkRWRXhmVG1DcWo0U2NVNnlvWCtMN0tpT1RLWnhGZkFpRUEwbGlPcE9ZcWdkRHR4OGlrUzdWYXFIOGZpcStNZTVUa2dpUHdJM3FuckZvPSIsInB1YmxpY0tleSI6eyJjb250ZW50IjoiTFMwdExTMUNSVWRKVGlCUVZVSk1TVU1nUzBWWkxTMHRMUzBLVFVacmQwVjNXVWhMYjFwSmVtb3dRMEZSV1VsTGIxcEplbW93UkVGUlkwUlJaMEZGTVc5RVJsaDVhek5yTVVnMmNHeHdWV2M0WVVadVMyRjZWVzVvV0FwdU5XTnBhR1pVTUVkNFdsaHFRbUpIZFhVeVp6VnVaV3BNY3pZeWVGQkphMFF2WkZReWJqbGhPRkZWVUM5ck5UVm9WekZsUTBaeE5FVm5QVDBLTFMwdExTMUZUa1FnVUZWQ1RFbERJRXRGV1MwdExTMHRDZz09In19fX0=",
+   "integratedTime": 1792238501,
+   "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+   "logIndex": 3294786059,
+   "verification": {
+    "inclusionProof": {
+     "checkpoint": "rekor.sigstore.dev - 1193050959916656506\n3172881808\nzvcvhl5Uzcq2a3zRwPIlPAgtztpw4vU5r4UcgAbWLY0=\n\n\u2014 rekor.sigstore.dev wNI9ajBFAiBYJFazhVLBULXj84rtuBIJnaRPa3uEqtJdDy4zsGL31QIhAOo1cRt0BQjF8JHcD2fvtbVcjFZJEe+AcrM21RLYHuZj\n",
+     "hashes": [
+      "b9ed5a164347d78241a8f4da982b4134c38b4d34cc2c0db2e39c24a5b6b46a9a",
+      "ca9a6aada7505155c2ef6fcc6bccd89909da4d82c4d9c6643e8d1a4127e8d2dc",
+      "82bf76199654e3040a10d16ea7437cbaf77e5ea80fde93edd0c4f2d7c4e3b185",
+      "c382eb0cd3d9eb7c568dcc683a06ee52faa7b544b9a811d21b7c6fd30c87397e",
+      "0bc3e12d1749ccf8f86f2890ed3000f533bd8f77239a5d8eee39464c66c95410",
+      "26e68f60785773a323d63cc70254925d319513afe2d4b5679a08f45a813d2586",
+      "fdd453468c20251df2b64a7df4528321f1cea70fab39212030def282c83b22fd",
+      "1a966777a4c499f4f1129c571a8161b58088b99eb02eda91cd9cc9eb0193debe",
+      "58a91f0067c61973707cffe846dae3422ff490ab70f46a6b54587aebd0beefa5",
+      "fdd742efd52666e12a68c7a672c06935e6948f6d7caca13ee0369c3cef9c4241",
+      "971bd64993ba6c834b89f101f34ef308e615e041fc408da3cee6d66329a9eafc",
+      "92f418ced7f83294da48463ac782170ee32b9174ae1b04680fff9278f7b42f0a",
+      "f5c53b0adb1b27ad4d25ddec1dc7422645147f6b2c099d0ed8b46c84ad8ec9a2",
+      "c3b39d3e5cf2ee69ebb4bbd4bf7b8f328154c576417817f3e0a9d798d7b3a4ea",
+      "aa54d6343cc44674c14157071d75d53e38943f44ac8a41b17dcc55960a95143a",
+      "820f46340a4d91edfeccd865e2db16b6623270216b38c081de5cace97b9240d4",
+      "36539c96576628f035b4c288b24a87030b900d81e9df5630a4af8e38cacc71c7",
+      "ab1cc76a7033cf9ed20dd9897b407b6c92bbd8d4c805bc043060412af0ce44ec",
+      "c47fc30ac78b1ebf5e2a8613f2ab0e4592bbcd5744198587b95b6c56b0fde706"
+     ],
+     "logIndex": 3172881797,
+     "rootHash": "cef72f865e54cdcab66b7cd1c0f2253c082dceda70e2f539af851c8006d62d8d",
+     "treeSize": 3172881808
+    },
+    "signedEntryTimestamp": "MEUCIQC5BkKRBC0RIIUko+d24wYnxiDI/Sj0wIuIeQp8QHbMxAIgMYq8d4mq2MIgEahjy1barN5bQ+9bRk4qACCsiMua5WM="
+   }
+  },
+  "integratedTime": 1792238501,
+  "integrated_utc": "2026-10-17T12:01:41Z",
+  "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+  "logIndex": 3294786059,
+  "server": "https://rekor.sigstore.dev",
+  "uuid": "108e9186e8c5677abef9430c9f7285936b70e1e3179ce8bd529f880958cc3dda0053850ed12e5d4e"
+ },
+ "seq": 1380,
+ "signature_b64": "MEUCIAuqACuuhoSg46DVExfTmCqj4ScU6yoX+L7KiOTKZxFfAiEA0liOpOYqgdDtx8ikS7VaqH8fiq+Me5TkgiPwI3qnrFo=",
+ "statement_sha256": "95e86bba49337002b95847af8109010cb69805dc89c302afed84c36a63a63be4",
+ "type": "reveal"
+}
