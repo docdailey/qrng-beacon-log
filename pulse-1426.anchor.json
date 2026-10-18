@@ -1,0 +1,63 @@
+{
+ "anchor": "qrng-beacon-log/anchor/1",
+ "anchor_key_file": "keys/anchor.pub",
+ "anchor_key_id": "0ba35c3f423663b799dd6ba6d24d8ff89f8cf799ccf664fdf2fb9ef81364ab20",
+ "anchored_by": {
+  "main_commit": "dee158233ee5c87b90d05c652788673ac324eb84",
+  "run_url": "https://github.com/docdailey/qrng-beacon-log/actions/runs/39121559343",
+  "utc": "2026-10-18T11:01:41Z"
+ },
+ "ots": {
+  "file": "pulse-1426.stmt.json.ots",
+  "status": "pending"
+ },
+ "pulse_hash": "9617ddecfadc5adc89633b5d64bdf48301bab27dce5cd64a3129d08891304326",
+ "rekor": {
+  "entry": {
+   "body": "eyJhcGlWZXJzaW9uIjoiMC4wLjEiLCJraW5kIjoiaGFzaGVkcmVrb3JkIiwic3BlYyI6eyJkYXRhIjp7Imhhc2giOnsiYWxnb3JpdGhtIjoic2hhMjU2IiwidmFsdWUiOiJiMTcyMzg1YTBiOWU4YTUzZmI0MTAxODUwZDI5OTgxYmUzMzU0YmNhZTQ1ZjQ0ZjAyYzg1NTNkYTU0NTcwZTgzIn19LCJzaWduYXR1cmUiOnsiY29udGVudCI6Ik1FWUNJUURxTlo3cnN1OXVSRWRHRTE1Mnd3dlk4d0Nqb3hCLzJLOVBSSTdsN1lLZTBBSWhBSVd3QmJ6OFBZYWlKZ2dEcDlHY3NxbDNDZ2FxaWp2SnlPN3VVYmhxd1BLMiIsInB1YmxpY0tleSI6eyJjb250ZW50IjoiTFMwdExTMUNSVWRKVGlCUVZVSk1TVU1nUzBWWkxTMHRMUzBLVFVacmQwVjNXVWhMYjFwSmVtb3dRMEZSV1VsTGIxcEplbW93UkVGUlkwUlJaMEZGTVc5RVJsaDVhek5yTVVnMmNHeHdWV2M0WVVadVMyRjZWVzVvV0FwdU5XTnBhR1pVTUVkNFdsaHFRbUpIZFhVeVp6VnVaV3BNY3pZeWVGQkphMFF2WkZReWJqbGhPRkZWVUM5ck5UVm9WekZsUTBaeE5FVm5QVDBLTFMwdExTMUZUa1FnVUZWQ1RFbERJRXRGV1MwdExTMHRDZz09In19fX0=",
+   "integratedTime": 1792321301,
+   "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+   "logIndex": 3310194557,
+   "verification": {
+    "inclusionProof": {
+     "checkpoint": "rekor.sigstore.dev - 1193050959916656506\n3188290296\nh7LEYye8jyJLo4orVJKh2Q1uEMqkXvsmeQYDaaMjCCc=\n\n\u2014 rekor.sigstore.dev wNI9ajBGAiEA5D1X/6JLx9re1wAFU4q6jZBQlb56UZp3YR7tyEjOmjwCIQCx4Aq+Ba8v3AsheUlEbJmHoOf+zyErex2G51B/qiZxOA==\n",
+     "hashes": [
+      "0e819f4e73bb7d71d7c4924c51826aa6d10871ae82b6da82a7f96640e51cf961",
+      "145a7595ffa22f093c079a98e26de5103440e3c9995f1aa972e19ab2d23a209b",
+      "53d70b3fed841a0859917fa1189b414061583fb48062e770a9655a6bbffb3414",
+      "2216fd0afd7c1b0c785743d30db23a527603804c3111db39109dc6ab6f2709e5",
+      "67f4aaacdf8c6691e40f5709df9d7de5e6f6003673c51ac080ef94babb8c8eaa",
+      "3d888f2e3f03b443d388db942cbd42ee05bc78a5fa61b1abdcb639610271adcf",
+      "a16079eab2af487197be4dcb9f061dfd05d30c19b2ccd34f2c8739672f827c1c",
+      "9962083c0775b07e36129fd73d1cf7e7f6a553550ea673898abee1eecaf9f9ac",
+      "412b23a156f6c4da3b0a3506d27fb2d8ce849193127f4729839ca7713c1a3b91",
+      "88ce6602c82e07264807c08245445e39752b60ce9f8a95ea3374e470badaafdf",
+      "54778dd9a939144ae2c7af5316b1ae4c2590397215931b24950a89043de30406",
+      "62d1b893750c4108779aa93b540f9e0e9dfbd662f1911837db5168070c7ac05b",
+      "ac258b813e679387e34ca63e7b8038518c898831e42819640f6bd41bea5f6525",
+      "1be9e4ee6804e61e9d526bf6518ecd0c9ad8dd6beb658df5ada68ed40113b7ea",
+      "aa54d6343cc44674c14157071d75d53e38943f44ac8a41b17dcc55960a95143a",
+      "820f46340a4d91edfeccd865e2db16b6623270216b38c081de5cace97b9240d4",
+      "36539c96576628f035b4c288b24a87030b900d81e9df5630a4af8e38cacc71c7",
+      "ab1cc76a7033cf9ed20dd9897b407b6c92bbd8d4c805bc043060412af0ce44ec",
+      "c47fc30ac78b1ebf5e2a8613f2ab0e4592bbcd5744198587b95b6c56b0fde706"
+     ],
+     "logIndex": 3188290295,
+     "rootHash": "87b2c46327bc8f224ba38a2b5492a1d90d6e10caa45efb2679060369a3230827",
+     "treeSize": 3188290296
+    },
+    "signedEntryTimestamp": "MEQCIF6f6ZPHJliqR++yZ5eWKiVfDo97q0SEwovpIqSFTB4rAiAjQkxcn5TSoR8t4qwDmxqMMcpMpK3q0+/Mk7qN/gP7hQ=="
+   }
+  },
+  "integratedTime": 1792321301,
+  "integrated_utc": "2026-10-18T11:01:41Z",
+  "logID": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d",
+  "logIndex": 3310194557,
+  "server": "https://rekor.sigstore.dev",
+  "uuid": "108e9186e8c5677ab64b089a9c6f0e13b873e1bdae19ad6c59fa064d49724ce7f31639663fe9fc30"
+ },
+ "seq": 1426,
+ "signature_b64": "MEYCIQDqNZ7rsu9uREdGE152wwvY8wCjoxB/2K9PRI7l7YKe0AIhAIWwBbz8PYaiJggDp9Gcsql3CgaqijvJyO7uUbhqwPK2",
+ "statement_sha256": "b172385a0b9e8a53fb4101850d29981be3354bcae45f44f02c8553da54570e83",
+ "type": "reveal"
+}
